@@ -1,0 +1,47 @@
+<h2>Should the vibrant style adapt to the site's light/dark toggle, or stay dark always?</h2>
+<p class="subtitle">The rest of the app has a 🌙 light/dark toggle. Here's the same stat tile in both modes if we keep the gradient treatment adapting to it.</p>
+
+<div class="options">
+  <div class="option" data-choice="adaptive" onclick="toggleSelect(this)">
+    <div class="content">
+      <h3>Adapts to the toggle (recommended)</h3>
+      <div class="split" style="margin-top:12px;">
+        <div class="mockup">
+          <div class="mockup-header">☀️ Light mode</div>
+          <div class="mockup-body" style="background:#F8FAFC; padding:18px;">
+            <div style="background:linear-gradient(135deg, #8B5CF6, #6D28D9); border-radius:14px; padding:18px; box-shadow:0 8px 20px rgba(139,92,246,0.25);">
+              <div style="font-size:11px; color:#EDE9FE; font-weight:600; margin-bottom:6px;">REGISTERED ACCOUNTS</div>
+              <div style="font-size:26px; font-weight:800; color:#fff;">128</div>
+            </div>
+          </div>
+        </div>
+        <div class="mockup">
+          <div class="mockup-header">🌙 Dark mode</div>
+          <div class="mockup-body" style="background:#0F0B1F; padding:18px;">
+            <div style="background:linear-gradient(135deg, #7C3AED, #4C1D95); border-radius:14px; padding:18px; box-shadow:0 8px 24px rgba(124,58,237,0.4);">
+              <div style="font-size:11px; color:#DDD6FE; font-weight:600; margin-bottom:6px;">REGISTERED ACCOUNTS</div>
+              <div style="font-size:26px; font-weight:800; color:#fff;">128</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p style="margin-top:10px;">Same gradient energy in both modes, background/text shift with the toggle like the rest of the app. Consistent with every other page.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="always-dark" onclick="toggleSelect(this)">
+    <div class="content">
+      <h3>Always dark, regardless of toggle</h3>
+      <div class="mockup" style="margin-top:12px;">
+        <div class="mockup-header">Admin dashboard (ignores 🌙 toggle)</div>
+        <div class="mockup-body" style="background:#0F0B1F; padding:18px;">
+          <div style="background:linear-gradient(135deg, #7C3AED, #4C1D95); border-radius:14px; padding:18px; box-shadow:0 8px 24px rgba(124,58,237,0.4);">
+            <div style="font-size:11px; color:#DDD6FE; font-weight:600; margin-bottom:6px;">REGISTERED ACCOUNTS</div>
+            <div style="font-size:26px; font-weight:800; color:#fff;">128</div>
+          </div>
+        </div>
+      </div>
+      <p style="margin-top:10px;">The admin dashboard becomes its own permanently-dark "control room" look, like a monitoring/ops tool — inconsistent with the rest of the site's toggle, but a stronger, more distinct identity for this one page.</p>
+    </div>
+  </div>
+</div>

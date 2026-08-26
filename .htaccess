@@ -1,0 +1,21 @@
+# =========================================================================
+# HIRESENSE APACHE SECURITY & PROTECTION (.htaccess)
+# Designed for Apache 2.2 / 2.4 (InfinityFree / XAMPP)
+# =========================================================================
+
+# Block direct web access to configuration, secrets, dependencies, backups & SQL/zip artifacts
+<FilesMatch "^(config\.json|composer\.(json|lock|phar|setup\.php)|schema.*\.sql|\.htaccess|\.git.*|.*\.log|.*\.sql|.*\.zip|.*\.bak|.*\.env.*)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Disable Directory Browsing
+Options -Indexes
+
+# Set UTF-8 Default Charset
+AddDefaultCharset UTF-8
