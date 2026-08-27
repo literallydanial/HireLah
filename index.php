@@ -850,7 +850,7 @@ if (file_exists('db.php')) {
         }
         .energy-headline .accent { color: #0A0A0A; background: #D9FF4F; padding: 0 8px; position: relative; z-index: 1; }
         .energy-subtext { font-size: 16px; color: #555; max-width: 460px; margin: -190px 0 32px; line-height: 1.5; position: relative; z-index: 1; }
-        .energy-cta-row { display: flex; align-items: center; gap: 14px; margin-bottom: 40px; flex-wrap: wrap; }
+        .energy-cta-row { display: flex; align-items: center; gap: 14px; margin-bottom: 40px; flex-wrap: wrap; position: relative; z-index: 1; }
         .btn-lime {
             display: inline-flex; align-items: center; gap: 8px;
             background: #D9FF4F; color: #0A0A0A;
