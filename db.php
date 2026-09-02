@@ -7,8 +7,8 @@
 // -------------------------------------------------------------------------
 define('DB_HOST', 'localhost');          // e.g., 'sql123.infinityfree.com'
 define('DB_NAME', 'hirelah');            // e.g., 'if0_12345678_hirelah'
-define('DB_USER', 'hirelah_user');               // e.g., 'if0_12345678'
-define('DB_PASS', 'Hiresense2026');                   // e.g., 'YourInfinityFreevPanelPassword'
+define('DB_USER', 'root');               // e.g., 'if0_12345678'
+define('DB_PASS', '');                   // e.g., 'YourInfinityFreevPanelPassword'
 // =========================================================================
 
 // Production Error Handling Settings (Prevents leaking DB credentials or sensitive paths)
