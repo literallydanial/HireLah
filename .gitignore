@@ -12,3 +12,7 @@ error_log
 
 # Local backup copies
 *.backup
+
+# User-uploaded content (candidate resumes, company logos/media) — not source code, may contain PII
+uploads/*
+!uploads/.gitkeep

@@ -11,7 +11,7 @@ $search = $_GET['search'] ?? '';
 $filter_type = $_GET['type'] ?? '';
 $filter_mode = $_GET['mode'] ?? '';
 
-$sql = "SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name FROM jobs j LEFT JOIN users u ON j.employer_id = u.id WHERE j.status = 'Active'";
+$sql = "SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name, u.company_logo FROM jobs j LEFT JOIN users u ON j.employer_id = u.id WHERE j.status = 'Active'";
 $params = [];
 
 if ($search !== '') {
@@ -32,6 +32,26 @@ $sql .= " ORDER BY j.created_at DESC";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $jobs = $stmt->fetchAll();
+
+// Fetch each employer's company gallery media (images/videos) and attach it to their jobs
+$mediaByEmployer = [];
+$employerIds = array_values(array_unique(array_filter(array_column($jobs, 'employer_id'))));
+if (!empty($employerIds)) {
+    try {
+        $placeholders = implode(',', array_fill(0, count($employerIds), '?'));
+        $media_stmt = $pdo->prepare("SELECT * FROM company_media WHERE user_id IN ($placeholders) ORDER BY sort_order ASC, id ASC");
+        $media_stmt->execute($employerIds);
+        foreach ($media_stmt->fetchAll() as $m) {
+            $mediaByEmployer[$m['user_id']][] = ['media_type' => $m['media_type'], 'file_path' => $m['file_path']];
+        }
+    } catch (\Throwable $e) {
+        $mediaByEmployer = [];
+    }
+}
+foreach ($jobs as &$j) {
+    $j['company_media'] = $mediaByEmployer[$j['employer_id']] ?? [];
+}
+unset($j);
 
 // Fetch set of job IDs & AI scores that the logged-in candidate has applied to
 $applied_job_ids = [];
@@ -171,6 +191,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 <a href="jobs.php" class="active">📋 Job Board</a>
                 <?php if(isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'candidate'): ?>
                     <a href="candidate_dashboard.php">👤 My Applications</a>
+                    <a href="resume_builder.php">🪄 Resume Builder</a>
                     <a href="profile.php">⚙️ Profile Settings</a>
                 <?php elseif(isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'employer'): ?>
                     <a href="employer_dashboard.php">👥 Applications & Stats</a>
@@ -301,26 +322,33 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                         $score_color = $score_num >= 75 ? '#00E87A' : ($score_num >= 50 ? '#F59E0B' : '#FF4D6A');
                     ?>
                         <div class="job-card-item <?= $index === 0 ? 'selected-card' : '' ?>" id="card_<?= $j['id'] ?>" onclick="selectJob(<?= $j['id'] ?>)">
-                            <div style="font-size:16px; font-weight:800; color:var(--txt); margin-bottom:4px;"><?= htmlspecialchars($j['job_title']) ?></div>
-                            <div style="font-size:12px; color:var(--mut); margin-bottom:10px;">
-                                🏢 <strong><?= htmlspecialchars($j['employer_name'] ?? 'HireLah') ?></strong> &bull; 📍 <?= htmlspecialchars($j['department'] ?: 'General') ?>
-                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                                <div style="flex:1; min-width:0;">
+                                    <div style="font-size:16px; font-weight:800; color:var(--txt); margin-bottom:4px;"><?= htmlspecialchars($j['job_title']) ?></div>
+                                    <div style="font-size:12px; color:var(--mut); margin-bottom:10px;">
+                                        <strong><?= htmlspecialchars($j['employer_name'] ?? 'HireLah') ?></strong> &bull; 📍 <?= htmlspecialchars($j['department'] ?: 'General') ?>
+                                    </div>
 
-                            <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;">
-                                <span class="chip" style="font-size:10px; background:var(--dim); color:var(--txt); border-color:var(--bdr);"><?= htmlspecialchars($j['employment_type']) ?></span>
-                                <span class="chip" style="font-size:10px; background:var(--dim); color:var(--txt); border-color:var(--bdr);"><?= htmlspecialchars($j['work_mode']) ?></span>
-                            </div>
+                                    <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;">
+                                        <span class="chip" style="font-size:10px; background:var(--dim); color:var(--txt); border-color:var(--bdr);"><?= htmlspecialchars($j['employment_type']) ?></span>
+                                        <span class="chip" style="font-size:10px; background:var(--dim); color:var(--txt); border-color:var(--bdr);"><?= htmlspecialchars($j['work_mode']) ?></span>
+                                    </div>
 
-                            <?php if($has_score): ?>
-                                <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.03); border:1px solid var(--bdr); border-radius:8px; padding:6px 10px; margin-top:8px;">
-                                    <span style="font-size:10px; font-weight:700; color:var(--mut);">🤖 AI MATCH SCORE:</span>
-                                    <span style="font-size:13px; font-weight:800; color:<?= $score_color ?>;"><?= $score_num ?>%</span>
+                                    <?php if($has_score): ?>
+                                        <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(255,255,255,0.03); border:1px solid var(--bdr); border-radius:8px; padding:6px 10px; margin-top:8px;">
+                                            <span style="font-size:10px; font-weight:700; color:var(--mut);">🤖 AI MATCH SCORE:</span>
+                                            <span style="font-size:13px; font-weight:800; color:<?= $score_color ?>;"><?= $score_num ?>%</span>
+                                        </div>
+                                    <?php endif; ?>
+
+                                    <?php if($is_applied): ?>
+                                        <div style="font-size:11px; font-weight:700; color:var(--grn); margin-top:8px;">✓ Applied</div>
+                                    <?php endif; ?>
                                 </div>
-                            <?php endif; ?>
-
-                            <?php if($is_applied): ?>
-                                <div style="font-size:11px; font-weight:700; color:var(--grn); margin-top:8px;">✓ Applied</div>
-                            <?php endif; ?>
+                                <?php if(!empty($j['company_logo'])): ?>
+                                    <img src="<?= htmlspecialchars($j['company_logo']) ?>" alt="" style="width:40px; height:40px; object-fit:contain; border-radius:8px; flex-shrink:0;">
+                                <?php endif; ?>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
@@ -393,13 +421,36 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 `;
             }
 
+            let galleryHtml = '';
+            if (job.company_media && job.company_media.length > 0) {
+                const tiles = job.company_media.map((m, idx) => {
+                    const spanStyle = idx === 0 ? 'grid-column:span 2; grid-row:span 2;' : '';
+                    return `<a href="${escapeHtml(m.file_path)}" target="_blank" rel="noopener" style="display:block; ${spanStyle} border-radius:10px; overflow:hidden; background:var(--surf); border:1px solid var(--bdr);">
+                        <img src="${escapeHtml(m.file_path)}" alt="" style="width:100%; height:100%; object-fit:cover;">
+                    </a>`;
+                }).join('');
+                galleryHtml = `
+                    <div style="margin-bottom:20px;">
+                        <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:10px;">Company Gallery</h3>
+                        <div style="display:grid; grid-template-columns:repeat(3, 1fr); grid-auto-rows:110px; gap:10px;">
+                            ${tiles}
+                        </div>
+                    </div>
+                `;
+            }
+
             const detailHtml = `
                 <div style="border-bottom:1px solid var(--bdr); padding-bottom:20px; margin-bottom:20px;">
-                    <h2 style="font-size:22px; font-weight:800; color:var(--txt); margin:0 0 8px 0;">${escapeHtml(job.job_title)}</h2>
-                    <div style="font-size:13px; color:var(--mut); margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                        <span>🏢 <strong>${escapeHtml(job.employer_name || 'HireLah')}</strong></span>
-                        <span>&bull;</span>
-                        <span>📍 ${escapeHtml(job.department || 'General')}</span>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                        <div style="flex:1; min-width:0;">
+                            <h2 style="font-size:22px; font-weight:800; color:var(--txt); margin:0 0 8px 0;">${escapeHtml(job.job_title)}</h2>
+                            <div style="font-size:13px; color:var(--mut); margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                <span>${job.company_logo ? `<img src="${escapeHtml(job.company_logo)}" alt="" style="width:18px; height:18px; object-fit:contain; border-radius:4px; vertical-align:-4px; margin-right:2px;">` : '🏢'} <strong>${escapeHtml(job.employer_name || 'HireLah')}</strong></span>
+                                <span>&bull;</span>
+                                <span>📍 ${escapeHtml(job.department || 'General')}</span>
+                            </div>
+                        </div>
+                        ${job.company_logo ? `<img src="${escapeHtml(job.company_logo)}" alt="" style="width:88px; height:88px; object-fit:contain; border-radius:12px; flex-shrink:0;">` : ''}
                     </div>
                     <div style="display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;">
                         <span class="chip" style="font-size:11px; background:var(--dim); color:var(--txt); border-color:var(--bdr);">${escapeHtml(job.employment_type || 'Full-time')}</span>
@@ -411,6 +462,8 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 </div>
 
                 ${aiScoreHtml}
+
+                ${galleryHtml}
 
                 <div style="margin-bottom:20px;">
                     <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:10px;">Position Details</h3>

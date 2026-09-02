@@ -987,6 +987,7 @@ if (file_exists('db.php')) {
         <nav class="energy-nav">
             <a href="#features" class="energy-nav-link">How it works</a>
             <a href="jobs.php" class="energy-nav-link">Find Jobs</a>
+            <a href="resume_builder.php" class="energy-nav-link">Resume Builder</a>
             <a href="register.php" class="energy-nav-link">Join HireLah</a>
             <?php if(isset($_SESSION['user_id'])): ?>
                 <span class="energy-nav-link" style="font-weight:600;">Hi, <?= htmlspecialchars($_SESSION['user_name']) ?></span>
@@ -1027,7 +1028,7 @@ if (file_exists('db.php')) {
                         Search Jobs
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
                     </a>
-                    <a href="apply.php" class="btn-outline-dark">
+                    <a href="resume_check.php" class="btn-outline-dark">
                         Upload Resume
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 8 5-5 5 5"></path><path d="M5 21h14"></path></svg>
                     </a>

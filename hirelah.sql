@@ -119,6 +119,21 @@ INSERT INTO `candidates` (`id`, `job_id`, `name`, `email`, `phone`, `filename`, 
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `company_media`
+--
+
+CREATE TABLE `company_media` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `media_type` enum('image','video') NOT NULL DEFAULT 'image',
+  `file_path` varchar(255) DEFAULT NULL,
+  `sort_order` int(11) DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `jobs`
 --
 
@@ -281,6 +296,43 @@ INSERT INTO `questionnaire_requests` (`id`, `candidate_id`, `questionnaire_id`, 
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `resume_builds`
+--
+
+CREATE TABLE `resume_builds` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `target_title` varchar(255) DEFAULT NULL,
+  `raw_input` longtext DEFAULT NULL,
+  `generated_content` longtext DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `resume_reviews`
+--
+
+CREATE TABLE `resume_reviews` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `filename` varchar(255) DEFAULT NULL,
+  `full_text` longtext DEFAULT NULL,
+  `stripped_text` longtext DEFAULT NULL,
+  `overall_score` int(11) DEFAULT 0,
+  `rating_label` varchar(50) DEFAULT NULL,
+  `summary` text DEFAULT NULL,
+  `strengths` text DEFAULT NULL,
+  `improvements` text DEFAULT NULL,
+  `formatting_notes` text DEFAULT NULL,
+  `ats_tips` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `users`
 --
 
@@ -351,6 +403,13 @@ ALTER TABLE `candidates`
   ADD KEY `fk_candidate_user` (`user_id`);
 
 --
+-- Indexes for table `company_media`
+--
+ALTER TABLE `company_media`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fk_companymedia_user` (`user_id`);
+
+--
 -- Indexes for table `jobs`
 --
 ALTER TABLE `jobs`
@@ -385,6 +444,20 @@ ALTER TABLE `questionnaire_requests`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `resume_builds`
+--
+ALTER TABLE `resume_builds`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fk_resumebuild_user` (`user_id`);
+
+--
+-- Indexes for table `resume_reviews`
+--
+ALTER TABLE `resume_reviews`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fk_resumereview_user` (`user_id`);
+
+--
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
@@ -400,6 +473,12 @@ ALTER TABLE `users`
 --
 ALTER TABLE `admin_logs`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
+--
+-- AUTO_INCREMENT for table `company_media`
+--
+ALTER TABLE `company_media`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `jobs`
@@ -426,6 +505,18 @@ ALTER TABLE `questionnaires`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
+-- AUTO_INCREMENT for table `resume_builds`
+--
+ALTER TABLE `resume_builds`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `resume_reviews`
+--
+ALTER TABLE `resume_reviews`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
@@ -443,10 +534,28 @@ ALTER TABLE `candidates`
   ADD CONSTRAINT `fk_candidate_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 
 --
+-- Constraints for table `company_media`
+--
+ALTER TABLE `company_media`
+  ADD CONSTRAINT `fk_companymedia_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
 -- Constraints for table `jobs`
 --
 ALTER TABLE `jobs`
   ADD CONSTRAINT `fk_employer` FOREIGN KEY (`employer_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `resume_builds`
+--
+ALTER TABLE `resume_builds`
+  ADD CONSTRAINT `fk_resumebuild_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Constraints for table `resume_reviews`
+--
+ALTER TABLE `resume_reviews`
+  ADD CONSTRAINT `fk_resumereview_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

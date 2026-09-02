@@ -215,6 +215,96 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: profile.php");
         exit;
     }
+    elseif ($action === 'upload_company_media') {
+        if ($user['role'] !== 'employer') {
+            $_SESSION['error'] = "Access denied. Only employer accounts can update company settings.";
+            header("Location: profile.php");
+            exit;
+        }
+
+        try {
+            $max_total = 6;
+            $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM company_media WHERE user_id = ?");
+            $count_stmt->execute([$user_id]);
+            $existing_count = (int)$count_stmt->fetchColumn();
+
+            $image_exts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+            $files = $_FILES['company_media'] ?? null;
+            $uploaded = 0;
+            $skipped = 0;
+
+            if ($files && !empty($files['name'][0])) {
+                $upload_dir = 'uploads/company_media/';
+                if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
+
+                for ($i = 0; $i < count($files['name']); $i++) {
+                    if ($existing_count + $uploaded >= $max_total) { $skipped++; continue; }
+                    if ($files['error'][$i] !== UPLOAD_ERR_OK) { $skipped++; continue; }
+
+                    $ext = strtolower(pathinfo($files['name'][$i], PATHINFO_EXTENSION));
+                    if (!in_array($ext, $image_exts)) { $skipped++; continue; }
+
+                    $max_size = 5 * 1024 * 1024;
+                    if ($files['size'][$i] > $max_size) { $skipped++; continue; }
+
+                    if (!is_dir($upload_dir) || !is_writable($upload_dir)) {
+                        $_SESSION['error'] = "Directory 'uploads/company_media/' is not writable. Please check FTP permissions.";
+                        break;
+                    }
+
+                    $path = $upload_dir . uniqid() . '.' . $ext;
+                    if (move_uploaded_file($files['tmp_name'][$i], $path)) {
+                        $ins = $pdo->prepare("INSERT INTO company_media (user_id, media_type, file_path, sort_order) VALUES (?, ?, ?, ?)");
+                        $ins->execute([$user_id, 'image', $path, $existing_count + $uploaded]);
+                        $uploaded++;
+                    } else {
+                        $skipped++;
+                    }
+                }
+            }
+
+            if ($uploaded > 0) {
+                $_SESSION['toast'] = "Added $uploaded item(s) to your company gallery." . ($skipped > 0 ? " $skipped file(s) were skipped (gallery limit of $max_total, unsupported format, or too large)." : "");
+            } elseif (!isset($_SESSION['error'])) {
+                $_SESSION['error'] = "No files were added. Check the file type, size (up to 5MB per image), and the 6-item gallery limit.";
+            }
+        } catch (\PDOException $e) {
+            error_log("upload_company_media DB error: " . $e->getMessage());
+            if (strpos($e->getMessage(), "doesn't exist") !== false || $e->getCode() === '42S02') {
+                $_SESSION['error'] = "The company_media table hasn't been created yet. Please run add_company_media.sql in phpMyAdmin, then try again.";
+            } else {
+                $_SESSION['error'] = "Something went wrong saving your gallery images. Please try again.";
+            }
+        }
+        header("Location: profile.php");
+        exit;
+    }
+    elseif ($action === 'delete_company_media') {
+        if ($user['role'] !== 'employer') {
+            $_SESSION['error'] = "Access denied. Only employer accounts can update company settings.";
+            header("Location: profile.php");
+            exit;
+        }
+        try {
+            $media_id = (int)($_POST['media_id'] ?? 0);
+            $stmt = $pdo->prepare("SELECT * FROM company_media WHERE id = ? AND user_id = ?");
+            $stmt->execute([$media_id, $user_id]);
+            $media = $stmt->fetch();
+            if ($media) {
+                if (!empty($media['file_path']) && file_exists($media['file_path'])) {
+                    @unlink($media['file_path']);
+                }
+                $del = $pdo->prepare("DELETE FROM company_media WHERE id = ? AND user_id = ?");
+                $del->execute([$media_id, $user_id]);
+                $_SESSION['toast'] = "Gallery item removed.";
+            }
+        } catch (\PDOException $e) {
+            error_log("delete_company_media DB error: " . $e->getMessage());
+            $_SESSION['error'] = "Something went wrong removing that item. Please try again.";
+        }
+        header("Location: profile.php");
+        exit;
+    }
     elseif ($action === 'upload_resume') {
         $file = $_FILES['default_resume'] ?? null;
         if (!$file || $file['error'] === UPLOAD_ERR_INI_SIZE || ($file['size'] ?? 0) > 10 * 1024 * 1024) {
@@ -275,6 +365,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: profile.php");
             exit;
         }
+    }
+}
+
+$company_media = [];
+if ($user['role'] === 'employer') {
+    try {
+        $cm_stmt = $pdo->prepare("SELECT * FROM company_media WHERE user_id = ? ORDER BY sort_order ASC, id ASC");
+        $cm_stmt->execute([$user_id]);
+        $company_media = $cm_stmt->fetchAll();
+    } catch (\Throwable $e) {
+        $company_media = [];
     }
 }
 
@@ -526,6 +627,40 @@ if ($user['role'] === 'candidate') {
                             </div>
                             <div style="font-size:11px; color:var(--mut);">PNG, JPG, SVG, WebP or GIF &middot; up to 2MB</div>
                         </form>
+                    </div>
+
+                    <div style="border-top:1px dashed var(--bdr); margin-top:20px; padding-top:16px;">
+                        <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:4px;">Company Gallery</label>
+                        <p style="font-size:12px; color:var(--mut); margin:0 0 12px 0;">Show candidates what it's like to work at your company &mdash; up to 6 photos.</p>
+
+                        <?php if(!empty($company_media)): ?>
+                            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(90px, 1fr)); gap:10px; margin-bottom:16px; max-width:500px;">
+                                <?php foreach($company_media as $m): ?>
+                                    <div style="position:relative; width:100%; aspect-ratio:1/1; border-radius:10px; overflow:hidden; background:var(--surf); border:1px solid var(--bdr);">
+                                        <img src="<?= htmlspecialchars($m['file_path']) ?>" alt="" style="width:100%; height:100%; object-fit:cover;">
+                                        <form method="POST" onsubmit="return confirm('Remove this item from your gallery?');" style="position:absolute; top:4px; right:4px;">
+                                            <input type="hidden" name="action" value="delete_company_media">
+                                            <input type="hidden" name="media_id" value="<?= (int)$m['id'] ?>">
+                                            <button type="submit" title="Remove" style="width:20px; height:20px; border-radius:50%; border:none; background:rgba(0,0,0,0.6); color:#fff; font-size:11px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0;">&times;</button>
+                                        </form>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php $media_remaining = 6 - count($company_media); ?>
+                        <?php if($media_remaining > 0): ?>
+                            <form method="POST" enctype="multipart/form-data" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                                <input type="hidden" name="action" value="upload_company_media">
+                                <div>
+                                    <input type="file" name="company_media[]" accept=".png,.jpg,.jpeg,.webp,.gif" multiple required style="margin-bottom:6px;">
+                                    <button type="submit" class="btn-secondary" style="padding:8px 16px; font-size:12px; display:block;">Add to gallery</button>
+                                </div>
+                                <div style="font-size:11px; color:var(--mut);">PNG, JPG, WebP or GIF &middot; up to 5MB each &middot; <?= $media_remaining ?> slot<?= $media_remaining === 1 ? '' : 's' ?> left</div>
+                            </form>
+                        <?php else: ?>
+                            <div style="font-size:12px; color:var(--mut);">Gallery is full (6/6). Remove an item above to add a new one.</div>
+                        <?php endif; ?>
                     </div>
                 </div>
             <?php endif; ?>

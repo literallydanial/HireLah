@@ -364,3 +364,271 @@ PROMPT;
     return generate_fallback_snapshot($stripped_text, $role_description);
 }
 
+function generate_fallback_resume_review($stripped_text) {
+    // Reuse the same "is this actually a resume" validity heuristic as the ATS screener.
+    $resume_indicators = ['experience', 'education', 'skills', 'work', 'project', 'university', 'college', 'school', 'history', 'role', 'developer', 'engineer', 'manager', 'specialist', 'assistant', 'resume', 'cv', 'employment', 'responsibilities', 'achievements'];
+    $indicator_count = 0;
+    foreach ($resume_indicators as $ind) {
+        if (stripos($stripped_text, $ind) !== false) {
+            $indicator_count++;
+        }
+    }
+
+    if (strlen(trim($stripped_text)) < 80 || $indicator_count < 3) {
+        return [
+            'rating_label' => 'Not a Resume',
+            'overall_score' => 0,
+            'summary' => 'The uploaded file does not appear to contain a standard resume/CV structure (work experience, education, or skills). Please upload a genuine resume in PDF format.',
+            'strengths' => [],
+            'improvements' => ['Upload a proper resume/CV document with your work experience, education, and skills clearly listed.'],
+            'formatting_notes' => 'Unable to assess formatting — the document does not appear to be a resume.',
+            'ats_tips' => []
+        ];
+    }
+
+    $has_summary = (stripos($stripped_text, 'summary') !== false || stripos($stripped_text, 'objective') !== false || stripos($stripped_text, 'profile') !== false);
+    $has_metrics = (bool) preg_match('/\d+%|\$\d|\d+\s*(users|clients|customers|projects|years)/i', $stripped_text);
+    $has_contact_section = (stripos($stripped_text, '[REDACTED EMAIL]') !== false || stripos($stripped_text, '[REDACTED PHONE]') !== false);
+    $word_count = str_word_count($stripped_text);
+
+    $strengths = [];
+    $improvements = [];
+
+    if ($has_contact_section) { $strengths[] = "Contact details are present and easy to find."; }
+    else { $improvements[] = "Add clear contact information (email and phone number) near the top of the resume."; }
+
+    if ($has_summary) { $strengths[] = "Includes a summary/profile section that frames your experience up front."; }
+    else { $improvements[] = "Add a short 2-3 line summary at the top stating your role, years of experience, and key strengths."; }
+
+    if ($has_metrics) { $strengths[] = "Uses numbers and measurable results to back up claims, which stands out to recruiters."; }
+    else { $improvements[] = "Add measurable achievements where possible (e.g. 'reduced processing time by 20%' instead of just listing duties)."; }
+
+    if ($word_count > 200) { $strengths[] = "Resume has enough detail to give a recruiter a real sense of your background."; }
+    else { $improvements[] = "Resume looks quite short — consider expanding on your responsibilities and achievements in each role."; }
+
+    if (empty($strengths)) { $strengths[] = "Resume contains recognizable resume sections (experience, education, or skills)."; }
+
+    $score = 50 + (count($strengths) * 8) - (count($improvements) * 3);
+    $score = max(35, min(85, $score));
+    $label = $score >= 75 ? 'Good' : ($score >= 55 ? 'Needs Some Work' : 'Needs Work');
+
+    return [
+        'rating_label' => $label,
+        'overall_score' => $score,
+        'summary' => "Automated check (AI screening not configured): this resume contains standard sections and " . $word_count . " words. " . (count($improvements) > 0 ? "A few areas below would make it stronger." : "It reads as reasonably complete."),
+        'strengths' => $strengths,
+        'improvements' => $improvements,
+        'formatting_notes' => 'Automated check only — for detailed formatting feedback (layout, spacing, section order), AI screening needs to be configured by an administrator.',
+        'ats_tips' => [
+            'Use standard section headings like "Experience", "Education", and "Skills" so ATS software can parse them correctly.',
+            'Avoid tables, columns, or text boxes for key content — some ATS parsers cannot read them.',
+            'Save and submit as a text-based PDF, not a scanned image.'
+        ]
+    ];
+}
+
+function generate_resume_review($api_key, $stripped_text) {
+    if (!empty($api_key)) {
+        try {
+            $prompt = <<<PROMPT
+You are a friendly but expert professional resume coach and ATS (Applicant Tracking System) specialist. A candidate has uploaded their resume and wants honest, constructive feedback to help them improve it — this is NOT being matched against any specific job, so give general resume-quality feedback.
+
+CRITICAL RESUME VALIDITY CHECK:
+- First, check if the uploaded document is actually a legitimate resume/CV (containing work experience, education, or professional skills).
+- IF THE FILE IS NOT A RESUME (e.g. random text, an essay, invoice, blank/corrupted file):
+  - Set "rating_label" to "Not a Resume".
+  - Set "overall_score" to 0.
+  - Set "summary" to explain the file does not appear to be a resume.
+  - Set "strengths" to an empty array, "improvements" to ["Upload a proper resume/CV document."], "ats_tips" to an empty array.
+
+IF IT IS A VALID RESUME, evaluate it on:
+1. Overall clarity and structure (is it easy to scan, are sections clearly labeled?)
+2. Impact — does it use measurable, quantified achievements instead of vague duty descriptions?
+3. Completeness — contact info, summary, experience, education, skills all present?
+4. ATS-friendliness — standard section headers, no tables/columns/graphics that break parsing, plain readable format
+5. Professional tone and consistency (tense, formatting, spacing)
+
+CANDIDATE RESUME (PII already redacted):
+{$stripped_text}
+
+OUTPUT REQUIREMENTS:
+Output strictly a JSON object, no text outside the JSON:
+{
+    "rating_label": "Excellent" | "Strong" | "Good" | "Needs Work" | "Poor" | "Not a Resume",
+    "overall_score": 0-100 integer (overall resume quality/polish, NOT a job-match score),
+    "summary": "3-4 sentence honest overall impression of the resume as a candidate-facing coach.",
+    "strengths": ["Short natural-language strength sentence", "..."],
+    "improvements": ["Short, specific, actionable improvement sentence", "..."],
+    "formatting_notes": "1-2 sentences on layout/formatting/structure specifically.",
+    "ats_tips": ["Short actionable ATS-compatibility tip", "..."]
+}
+
+Tone: Encouraging but honest, like a career coach giving real feedback — not generic praise. Be specific to what's actually in the resume.
+PROMPT;
+
+            $response = call_anthropic_claude($api_key, $prompt);
+
+            $data = null;
+            if (preg_match('/\{[\s\S]*\}/', $response, $matches)) {
+                $data = json_decode($matches[0], true);
+            }
+            if (!is_array($data)) {
+                $clean_json = preg_replace('/^```json\s*|\s*```$/i', '', trim($response));
+                $data = json_decode($clean_json, true);
+            }
+            if (is_array($data) && !empty($data['summary'])) {
+                return $data;
+            }
+        } catch (Exception $e) {
+            error_log("Claude Resume Review Error: " . $e->getMessage());
+        }
+    }
+
+    return generate_fallback_resume_review($stripped_text);
+}
+
+// =========================================================================
+// AI RESUME BUILDER — builds a polished resume from candidate-entered
+// (or AI-chat-collected) raw notes, rather than reviewing an uploaded file.
+// =========================================================================
+
+function generate_fallback_resume_document($input) {
+    // Basic non-AI templating: lightly clean up whatever the candidate typed
+    // so the feature still works end-to-end without an API key configured.
+    $clean_bullets = function($notes) {
+        if (empty(trim($notes))) return [];
+        $parts = preg_split('/\r\n|\n|(?<=[.;])\s+(?=[A-Z])/', trim($notes));
+        $bullets = [];
+        foreach ($parts as $p) {
+            $p = trim($p, " \t\n\r\0\x0B-•");
+            if ($p === '') continue;
+            $p = ucfirst($p);
+            if (!preg_match('/[.!]$/', $p)) $p .= '.';
+            $bullets[] = $p;
+        }
+        return array_slice($bullets, 0, 6);
+    };
+
+    $experience = [];
+    foreach ($input['experience'] ?? [] as $exp) {
+        if (empty($exp['company']) && empty($exp['role'])) continue;
+        $experience[] = [
+            'company' => $exp['company'] ?? '',
+            'role' => $exp['role'] ?? '',
+            'duration' => $exp['duration'] ?? '',
+            'bullets' => $clean_bullets($exp['notes'] ?? '')
+        ];
+    }
+
+    $education = [];
+    foreach ($input['education'] ?? [] as $edu) {
+        if (empty($edu['school']) && empty($edu['degree'])) continue;
+        $education[] = [
+            'degree' => $edu['degree'] ?? '',
+            'school' => $edu['school'] ?? '',
+            'year' => $edu['year'] ?? ''
+        ];
+    }
+
+    $skills = array_values(array_filter(array_map('trim', explode(',', $input['skills'] ?? ''))));
+    $target_title = $input['target_title'] ?? 'Professional';
+
+    return [
+        'summary' => "Motivated " . $target_title . " with hands-on experience across " . (count($experience) > 0 ? "roles including " . ($experience[0]['role'] ?: 'recent positions') : "prior positions") . ". Automated draft (AI not configured) — consider refining this summary further.",
+        'experience' => $experience,
+        'education' => $education,
+        'skills' => $skills
+    ];
+}
+
+function generate_resume_document($api_key, $input) {
+    if (!empty($api_key)) {
+        try {
+            $input_json = json_encode($input, JSON_PRETTY_PRINT);
+            $prompt = <<<PROMPT
+You are an expert resume writer helping a candidate build a professional resume from their own rough notes. Turn the raw input below into polished, professional resume content — proper grammar, active verbs, concise impact-focused bullet points. Do NOT invent facts, companies, numbers, or achievements that are not implied by the candidate's notes — only rephrase and structure what they gave you.
+
+CANDIDATE'S TARGET ROLE AND RAW NOTES (JSON):
+{$input_json}
+
+OUTPUT REQUIREMENTS:
+Output strictly a JSON object, no text outside the JSON:
+{
+    "summary": "2-3 sentence professional summary tailored to their target role, based only on the info given.",
+    "experience": [
+        {
+            "company": "as given",
+            "role": "as given",
+            "duration": "as given",
+            "bullets": ["Polished, professional bullet point rewritten from their rough notes", "..."]
+        }
+    ],
+    "education": [
+        {"degree": "as given", "school": "as given", "year": "as given"}
+    ],
+    "skills": ["cleaned up skill", "..."]
+}
+
+Keep the same number of experience/education entries as given in the input, in the same order. Each experience entry should have 2-4 bullet points.
+PROMPT;
+
+            $response = call_anthropic_claude($api_key, $prompt);
+
+            $data = null;
+            if (preg_match('/\{[\s\S]*\}/', $response, $matches)) {
+                $data = json_decode($matches[0], true);
+            }
+            if (!is_array($data)) {
+                $clean_json = preg_replace('/^```json\s*|\s*```$/i', '', trim($response));
+                $data = json_decode($clean_json, true);
+            }
+            if (is_array($data) && !empty($data['summary'])) {
+                return $data;
+            }
+        } catch (Exception $e) {
+            error_log("Claude Resume Builder Error: " . $e->getMessage());
+        }
+    }
+
+    return generate_fallback_resume_document($input);
+}
+
+function ai_resume_assist_bullets($api_key, $role, $company, $rough_notes) {
+    // Lightweight "help me word this" assist used by the AI chat-assist button
+    // on an individual experience block. Returns a short list of suggested
+    // bullet points the candidate can insert into their notes.
+    if (!empty($api_key) && trim($rough_notes) !== '') {
+        try {
+            $prompt = <<<PROMPT
+A candidate is writing their resume and typed these rough notes about their role as "{$role}" at "{$company}":
+
+"{$rough_notes}"
+
+Rewrite this into 3 short, professional resume bullet points (active verbs, concise, no invented facts/numbers beyond what's stated). Output strictly a JSON array of strings, nothing else, e.g. ["...", "...", "..."]
+PROMPT;
+            $response = call_anthropic_claude($api_key, $prompt);
+            $data = null;
+            if (preg_match('/\[[\s\S]*\]/', $response, $matches)) {
+                $data = json_decode($matches[0], true);
+            }
+            if (is_array($data) && !empty($data)) {
+                return array_slice(array_values($data), 0, 4);
+            }
+        } catch (Exception $e) {
+            error_log("Claude Resume Assist Error: " . $e->getMessage());
+        }
+    }
+
+    // Fallback: just split rough notes into cleaned-up sentences.
+    $parts = preg_split('/\r\n|\n|,|;/', trim($rough_notes));
+    $bullets = [];
+    foreach ($parts as $p) {
+        $p = trim($p);
+        if ($p === '') continue;
+        $p = ucfirst($p);
+        if (!preg_match('/[.!]$/', $p)) $p .= '.';
+        $bullets[] = $p;
+    }
+    return array_slice($bullets, 0, 4);
+}
+?>
