@@ -339,6 +339,15 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
                                     <div style="font-size:9px; font-weight:700; color:var(--mut); text-transform:uppercase; margin-top:2px;">AI Match</div>
                                 </div>
 
+                                <?php 
+                                    $app_resume = !empty($app['filename']) ? ('uploads/resumes/' . $app['filename']) : '';
+                                ?>
+                                <?php if(!empty($app_resume)): ?>
+                                    <button type="button" class="btn-secondary" style="padding:8px 14px; font-size:12px; font-weight:700;" onclick="openResumeModal('<?= htmlspecialchars($app_resume) ?>', '<?= htmlspecialchars($app['job_title']) ?> Resume')">
+                                        👁️ Preview Resume
+                                    </button>
+                                <?php endif; ?>
+
                                 <button type="button" class="btn-secondary" style="padding:8px 14px; font-size:12px; font-weight:700;" onclick="toggleDrawer('drawer_<?= $app['id'] ?>')">
                                     🔍 AI Match Breakdown
                                 </button>
@@ -414,7 +423,68 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
         <?php endif; ?>
     </main>
 
+    <!-- Resume PDF Preview Popup Modal Overlay -->
+    <div id="resumePreviewModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); backdrop-filter:blur(10px); z-index:9000; align-items:center; justify-content:center; padding:20px;">
+        <div class="panel" style="max-width:920px; width:100%; max-height:92vh; display:flex; flex-direction:column; padding:0; border-radius:18px; overflow:hidden; box-shadow:var(--shadow-lg); border:1px solid var(--bdr); animation:modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
+            
+            <!-- Modal Header -->
+            <div style="padding:16px 24px; background:var(--surf); border-bottom:1px solid var(--bdr); display:flex; justify-content:space-between; align-items:center; gap:16px;">
+                <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+                    <div style="font-size:24px;">📄</div>
+                    <div style="min-width:0;">
+                        <div id="resumeModalTitle" style="font-size:15px; font-weight:800; color:var(--txt); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Candidate Resume Preview</div>
+                        <div id="resumeModalFilename" style="font-size:11.5px; color:var(--mut); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">PDF Document</div>
+                    </div>
+                </div>
+                
+                <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
+                    <a id="resumeModalDownloadBtn" href="#" download class="btn-primary" style="padding:8px 16px; font-size:12px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:6px; border-radius:8px; width:auto;">
+                        📥 Download PDF
+                    </a>
+                    <button type="button" onclick="closeResumeModal()" style="background:none; border:none; color:var(--mut); font-size:24px; cursor:pointer; line-height:1; padding:4px 8px;" title="Close Modal">✕</button>
+                </div>
+            </div>
+
+            <!-- Modal PDF Viewer Iframe Body -->
+            <div style="flex:1; background:#181825; position:relative; min-height:580px; display:flex; align-items:center; justify-content:center;">
+                <iframe id="resumeModalIframe" src="" style="width:100%; height:100%; min-height:580px; border:none;"></iframe>
+            </div>
+        </div>
+    </div>
+
     <script>
+        function openResumeModal(pdfUrl, title) {
+            const modal = document.getElementById('resumePreviewModal');
+            const iframe = document.getElementById('resumeModalIframe');
+            const titleEl = document.getElementById('resumeModalTitle');
+            const fileEl = document.getElementById('resumeModalFilename');
+            const downloadBtn = document.getElementById('resumeModalDownloadBtn');
+
+            if (!modal || !iframe) return;
+
+            titleEl.textContent = title ? ('📄 ' + title) : '📄 Candidate Resume Preview';
+            fileEl.textContent = pdfUrl;
+            downloadBtn.href = pdfUrl;
+            iframe.src = pdfUrl;
+
+            modal.style.display = 'flex';
+        }
+
+        function closeResumeModal() {
+            const modal = document.getElementById('resumePreviewModal');
+            const iframe = document.getElementById('resumeModalIframe');
+            if (modal) modal.style.display = 'none';
+            if (iframe) iframe.src = '';
+        }
+
+        window.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeResumeModal();
+        });
+
+        document.getElementById('resumePreviewModal')?.addEventListener('click', function(e) {
+            if (e.target === this) closeResumeModal();
+        });
+
         function toggleDrawer(id) {
             const drawer = document.getElementById(id);
             if (drawer) {

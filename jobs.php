@@ -7,15 +7,25 @@ $userNotifs = (isset($_SESSION['user_id']) && isset($_SESSION['user_role']) && $
 $notifItems = $userNotifs['items'];
 $unreadCount = $userNotifs['unread_count'];
 
-$search = $_GET['search'] ?? '';
-$filter_type = $_GET['type'] ?? '';
-$filter_mode = $_GET['mode'] ?? '';
+$search = trim($_GET['search'] ?? '');
+$filter_type = trim($_GET['type'] ?? '');
+$filter_mode = trim($_GET['mode'] ?? '');
+$filter_location = trim($_GET['location'] ?? '');
+$filter_min_salary = !empty($_GET['min_salary']) ? (int)$_GET['min_salary'] : null;
+$filter_max_salary = !empty($_GET['max_salary']) ? (int)$_GET['max_salary'] : null;
+$sort_by = trim($_GET['sort'] ?? 'newest');
 
-$sql = "SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name, u.company_logo FROM jobs j LEFT JOIN users u ON j.employer_id = u.id WHERE j.status = 'Active'";
+$sql = "SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name, u.company_logo 
+        FROM jobs j 
+        LEFT JOIN users u ON j.employer_id = u.id 
+        WHERE j.status = 'Active'";
 $params = [];
 
 if ($search !== '') {
-    $sql .= " AND (j.job_title LIKE ? OR j.department LIKE ?)";
+    $sql .= " AND (j.job_title LIKE ? OR j.department LIKE ? OR j.location LIKE ? OR j.description LIKE ? OR u.company_name LIKE ?)";
+    $params[] = "%$search%";
+    $params[] = "%$search%";
+    $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
 }
@@ -27,8 +37,28 @@ if ($filter_mode !== '') {
     $sql .= " AND j.work_mode = ?";
     $params[] = $filter_mode;
 }
+if ($filter_location !== '') {
+    $sql .= " AND (j.location LIKE ? OR j.department LIKE ?)";
+    $params[] = "%$filter_location%";
+    $params[] = "%$filter_location%";
+}
+if ($filter_min_salary !== null) {
+    $sql .= " AND (COALESCE(j.salary_max, j.salary_min, 5000) >= ?)";
+    $params[] = $filter_min_salary;
+}
+if ($filter_max_salary !== null) {
+    $sql .= " AND (COALESCE(j.salary_min, j.salary_max, 3000) <= ?)";
+    $params[] = $filter_max_salary;
+}
 
-$sql .= " ORDER BY j.created_at DESC";
+if ($sort_by === 'salary_high') {
+    $sql .= " ORDER BY COALESCE(j.salary_max, j.salary_min, 5000) DESC, j.created_at DESC";
+} elseif ($sort_by === 'salary_low') {
+    $sql .= " ORDER BY COALESCE(j.salary_min, j.salary_max, 3000) ASC, j.created_at DESC";
+} else {
+    $sql .= " ORDER BY j.created_at DESC";
+}
+
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $jobs = $stmt->fetchAll();
@@ -283,14 +313,23 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             </div>
         <?php endif; ?>
 
-        <!-- Centered Indeed-Style Search Header Panel with Quick Filters -->
-        <form method="GET" class="search-bar-panel">
-            <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                <div style="flex:2; min-width:240px;">
-                    <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="🔍 Job title, keywords, or department..." style="margin:0; padding:11px 16px; font-size:13px; border-radius:10px;">
+        <!-- Detailed Search & Filter Panel -->
+        <form method="GET" class="search-bar-panel" style="padding:20px; border-radius:18px;">
+            <!-- Primary Search Row -->
+            <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
+                <div style="flex:2; min-width:260px;">
+                    <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="🔍 Job title, department, company, or skills..." style="margin:0; padding:12px 16px; font-size:13.5px; border-radius:10px;">
                 </div>
-                <div style="flex:1; min-width:140px;">
-                    <select name="type" style="margin:0; padding:11px 12px; font-size:13px; border-radius:10px;">
+                <div style="flex:1.2; min-width:180px;">
+                    <input type="text" name="location" value="<?= htmlspecialchars($filter_location) ?>" placeholder="📍 Location or City (e.g. KL)..." style="margin:0; padding:12px 16px; font-size:13.5px; border-radius:10px;">
+                </div>
+                <button type="submit" class="btn-primary" style="padding:12px 28px; font-size:13.5px; font-weight:800; width:auto; margin:0; border-radius:10px; flex-shrink:0;">Find Jobs 🔍</button>
+            </div>
+
+            <!-- Secondary Detailed Filter Controls Row -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; align-items:center;">
+                <div>
+                    <select name="type" style="margin:0; padding:10px 12px; font-size:12.5px; border-radius:10px;" onchange="this.form.submit()">
                         <option value="">All Job Types</option>
                         <option value="Full-time" <?= $filter_type == 'Full-time' ? 'selected' : '' ?>>Full-time</option>
                         <option value="Part-time" <?= $filter_type == 'Part-time' ? 'selected' : '' ?>>Part-time</option>
@@ -298,27 +337,45 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                         <option value="Internship" <?= $filter_type == 'Internship' ? 'selected' : '' ?>>Internship</option>
                     </select>
                 </div>
-                <div style="flex:1; min-width:140px;">
-                    <select name="mode" style="margin:0; padding:11px 12px; font-size:13px; border-radius:10px;">
+                <div>
+                    <select name="mode" style="margin:0; padding:10px 12px; font-size:12.5px; border-radius:10px;" onchange="this.form.submit()">
                         <option value="">All Work Modes</option>
                         <option value="Remote" <?= $filter_mode == 'Remote' ? 'selected' : '' ?>>Remote</option>
                         <option value="On-site" <?= $filter_mode == 'On-site' ? 'selected' : '' ?>>On-site</option>
                         <option value="Hybrid" <?= $filter_mode == 'Hybrid' ? 'selected' : '' ?>>Hybrid</option>
                     </select>
                 </div>
-                <button type="submit" class="btn-primary" style="padding:11px 24px; font-size:13px; font-weight:800; width:auto; margin:0; border-radius:10px;">Find Jobs</button>
-                <?php if($search || $filter_type || $filter_mode): ?>
-                    <a href="jobs.php" class="btn-secondary" style="padding:11px 18px; font-size:13px; text-decoration:none; border-radius:10px;">Clear</a>
+                <div>
+                    <select name="min_salary" style="margin:0; padding:10px 12px; font-size:12.5px; border-radius:10px;" onchange="this.form.submit()">
+                        <option value="">Any Salary Range</option>
+                        <option value="3000" <?= $filter_min_salary == 3000 ? 'selected' : '' ?>>RM 3,000+ / mo</option>
+                        <option value="5000" <?= $filter_min_salary == 5000 ? 'selected' : '' ?>>RM 5,000+ / mo</option>
+                        <option value="8000" <?= $filter_min_salary == 8000 ? 'selected' : '' ?>>RM 8,000+ / mo</option>
+                        <option value="12000" <?= $filter_min_salary == 12000 ? 'selected' : '' ?>>RM 12,000+ / mo</option>
+                    </select>
+                </div>
+                <div>
+                    <select name="sort" style="margin:0; padding:10px 12px; font-size:12.5px; border-radius:10px;" onchange="this.form.submit()">
+                        <option value="newest" <?= $sort_by == 'newest' ? 'selected' : '' ?>>🆕 Newest First</option>
+                        <option value="salary_high" <?= $sort_by == 'salary_high' ? 'selected' : '' ?>>💰 Highest Salary</option>
+                        <option value="salary_low" <?= $sort_by == 'salary_low' ? 'selected' : '' ?>>💵 Lowest Salary</option>
+                    </select>
+                </div>
+                <?php if($search || $filter_type || $filter_mode || $filter_location || $filter_min_salary || $sort_by !== 'newest'): ?>
+                    <div>
+                        <a href="jobs.php" class="btn-secondary" style="display:block; padding:10px 14px; font-size:12.5px; text-decoration:none; text-align:center; border-radius:10px; font-weight:600;">Reset Filters ✕</a>
+                    </div>
                 <?php endif; ?>
             </div>
 
-            <!-- Quick Filter Chips -->
-            <div class="quick-filter-bar">
-                <a href="jobs.php" class="quick-filter-chip <?= (!$filter_mode && !$filter_type && !$search) ? 'active' : '' ?>">All Positions</a>
+            <!-- Quick Filter Chips Row -->
+            <div class="quick-filter-bar" style="margin-top:16px; border-top:1px solid var(--bdr); padding-top:12px;">
+                <a href="jobs.php" class="quick-filter-chip <?= (!$filter_mode && !$filter_type && !$search && !$filter_location && !$filter_min_salary) ? 'active' : '' ?>">All Positions</a>
                 <a href="jobs.php?mode=Remote" class="quick-filter-chip <?= $filter_mode === 'Remote' ? 'active' : '' ?>">⚡ Remote Only</a>
                 <a href="jobs.php?search=Junior" class="quick-filter-chip <?= str_contains(strtolower($search), 'junior') ? 'active' : '' ?>">🎓 Fresh Grad Friendly</a>
-                <a href="jobs.php?search=Senior" class="quick-filter-chip <?= str_contains(strtolower($search), 'senior') ? 'active' : '' ?>">💰 High Salary (RM 5k+)</a>
+                <a href="jobs.php?min_salary=5000" class="quick-filter-chip <?= $filter_min_salary == 5000 ? 'active' : '' ?>">💰 High Salary (RM 5k+)</a>
                 <a href="jobs.php?mode=Hybrid" class="quick-filter-chip <?= $filter_mode === 'Hybrid' ? 'active' : '' ?>">🏢 Hybrid Work</a>
+                <a href="jobs.php?location=Kuala+Lumpur" class="quick-filter-chip <?= str_contains(strtolower($filter_location), 'kuala') ? 'active' : '' ?>">📍 Kuala Lumpur</a>
             </div>
         </form>
 
