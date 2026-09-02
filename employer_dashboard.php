@@ -264,8 +264,10 @@ foreach ($jobs as $j) {
     
     <main>
         <?php if(isset($_SESSION['toast'])): ?>
-            <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:var(--grn); font-size:13px; font-weight:700;">
-                <?= htmlspecialchars($_SESSION['toast']) ?>
+            <div class="toast-notification">
+                <span class="toast-icon-badge">🌿</span>
+                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
+                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
                 <?php unset($_SESSION['toast']); ?>
             </div>
         <?php endif; ?>
@@ -529,7 +531,7 @@ foreach ($jobs as $j) {
                 <div class="tr th">
                     <div>Rank</div><div>👤 Candidate</div><div>🔧 Top Skills</div>
                     <div style="text-align:center">📊 Score</div>
-                    <div>🤖 Claude Verdict</div><div>📋 HR Status</div>
+                    <div>🤖 Gemini Verdict</div><div>📋 HR Status</div>
                     <div>📅 Applied</div><div style="text-align:center">⚙ Actions</div>
                 </div>
                 

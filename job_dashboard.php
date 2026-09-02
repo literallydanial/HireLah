@@ -7,20 +7,83 @@ $empNotifs = getEmployerNotifications($pdo, $_SESSION['user_id']);
 $notifItems = $empNotifs['items'];
 $unreadCount = $empNotifs['unread_count'];
 
+// Auto-migrate schema columns on jobs table if missing
+try { $pdo->exec("ALTER TABLE jobs ADD COLUMN location VARCHAR(255) NULL AFTER work_mode"); } catch (\Throwable $e) {}
+try { $pdo->exec("ALTER TABLE jobs ADD COLUMN salary_min INT NULL AFTER location"); } catch (\Throwable $e) {}
+try { $pdo->exec("ALTER TABLE jobs ADD COLUMN salary_max INT NULL AFTER salary_min"); } catch (\Throwable $e) {}
+try { $pdo->exec("ALTER TABLE jobs ADD COLUMN salary_text VARCHAR(255) NULL AFTER salary_max"); } catch (\Throwable $e) {}
+try { $pdo->exec("ALTER TABLE jobs ADD COLUMN responsibilities TEXT NULL AFTER description"); } catch (\Throwable $e) {}
+try { $pdo->exec("ALTER TABLE jobs ADD COLUMN requirements TEXT NULL AFTER responsibilities"); } catch (\Throwable $e) {}
+try { $pdo->exec("ALTER TABLE jobs ADD COLUMN perks TEXT NULL AFTER requirements"); } catch (\Throwable $e) {}
+
 // Handle creation of a new job posting via popup modal
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'post_job') {
-    $title = trim($_POST['job_title']);
-    $dept = trim($_POST['department']);
-    $type = trim($_POST['employment_type']);
-    $mode = trim($_POST['work_mode']);
+    $title = trim($_POST['job_title'] ?? '');
+    $dept = trim($_POST['department'] ?? '');
+    $type = trim($_POST['employment_type'] ?? 'Full-time');
+    $mode = trim($_POST['work_mode'] ?? 'Hybrid');
+    $location = trim($_POST['location'] ?? '');
+    $salary_min = !empty($_POST['salary_min']) ? (int)$_POST['salary_min'] : null;
+    $salary_max = !empty($_POST['salary_max']) ? (int)$_POST['salary_max'] : null;
+    $salary_text = trim($_POST['salary_text'] ?? '');
     $require_video = isset($_POST['require_video']) ? 1 : 0;
-    $desc = trim($_POST['description']);
+    $desc = trim($_POST['description'] ?? '');
+    $responsibilities = trim($_POST['responsibilities'] ?? '');
+    $requirements = trim($_POST['requirements'] ?? '');
+    $perks = trim($_POST['perks'] ?? '');
     $employer_id = $_SESSION['user_id'];
 
     if (!empty($title) && !empty($desc)) {
-        $stmt = $pdo->prepare("INSERT INTO jobs (employer_id, job_title, department, employment_type, work_mode, require_video, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'Active')");
-        if ($stmt->execute([$employer_id, $title, $dept, $type, $mode, $require_video, $desc])) {
+        $stmt = $pdo->prepare("INSERT INTO jobs (
+            employer_id, job_title, department, employment_type, work_mode, 
+            location, salary_min, salary_max, salary_text, require_video, 
+            description, responsibilities, requirements, perks, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
+        if ($stmt->execute([
+            $employer_id, $title, $dept, $type, $mode, 
+            $location, $salary_min, $salary_max, $salary_text, $require_video, 
+            $desc, $responsibilities, $requirements, $perks
+        ])) {
             $_SESSION['toast'] = "Job position published successfully!";
+            header("Location: job_dashboard.php");
+            exit;
+        }
+    }
+}
+
+// Handle editing of an existing job posting via popup modal
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'edit_job') {
+    $job_id = (int)($_POST['job_id'] ?? 0);
+    $title = trim($_POST['job_title'] ?? '');
+    $dept = trim($_POST['department'] ?? '');
+    $type = trim($_POST['employment_type'] ?? 'Full-time');
+    $mode = trim($_POST['work_mode'] ?? 'Hybrid');
+    $location = trim($_POST['location'] ?? '');
+    $salary_min = !empty($_POST['salary_min']) ? (int)$_POST['salary_min'] : null;
+    $salary_max = !empty($_POST['salary_max']) ? (int)$_POST['salary_max'] : null;
+    $salary_text = trim($_POST['salary_text'] ?? '');
+    $require_video = isset($_POST['require_video']) ? 1 : 0;
+    $desc = trim($_POST['description'] ?? '');
+    $responsibilities = trim($_POST['responsibilities'] ?? '');
+    $requirements = trim($_POST['requirements'] ?? '');
+    $perks = trim($_POST['perks'] ?? '');
+    $status = trim($_POST['status'] ?? 'Active');
+
+    if ($job_id > 0 && !empty($title)) {
+        $stmt = $pdo->prepare("UPDATE jobs SET 
+            job_title = ?, department = ?, employment_type = ?, work_mode = ?, 
+            location = ?, salary_min = ?, salary_max = ?, salary_text = ?, 
+            require_video = ?, description = ?, responsibilities = ?, 
+            requirements = ?, perks = ?, status = ? 
+            WHERE id = ? AND (employer_id = ? OR employer_id IS NULL)");
+        if ($stmt->execute([
+            $title, $dept, $type, $mode, 
+            $location, $salary_min, $salary_max, $salary_text, 
+            $require_video, $desc, $responsibilities, 
+            $requirements, $perks, $status,
+            $job_id, $_SESSION['user_id']
+        ])) {
+            $_SESSION['toast'] = "Job position updated successfully!";
             header("Location: job_dashboard.php");
             exit;
         }
@@ -182,9 +245,9 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
             letter-spacing: 0.5px;
         }
         .status-active {
-            background: rgba(0, 232, 122, 0.12);
-            color: var(--grn);
-            border: 1px solid rgba(0, 232, 122, 0.3);
+            background: var(--toast-icon-bg);
+            color: var(--toast-icon-color);
+            border: 1px solid var(--toast-bdr);
         }
         .status-closed {
             background: rgba(255, 77, 106, 0.12);
@@ -269,8 +332,10 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
 
     <main style="max-width:1300px;">
         <?php if(isset($_SESSION['toast'])): ?>
-            <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:var(--grn); font-size:13px; font-weight:700;">
-                <?= htmlspecialchars($_SESSION['toast']) ?>
+            <div class="toast-notification">
+                <span class="toast-icon-badge">🌿</span>
+                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
+                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
                 <?php unset($_SESSION['toast']); ?>
             </div>
         <?php endif; ?>
@@ -395,14 +460,14 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
 
     <!-- Post a Job Popup Modal Overlay -->
     <div id="postJobModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:4000; align-items:center; justify-content:center; padding:20px;">
-        <div class="panel" style="max-width:680px; width:100%; max-height:90vh; overflow-y:auto; position:relative; border-radius:18px; box-shadow:var(--shadow-lg); animation:modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
+        <div class="panel" style="max-width:740px; width:100%; max-height:90vh; overflow-y:auto; position:relative; border-radius:18px; box-shadow:var(--shadow-lg); animation:modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
             <button onclick="closePostJobModal()" style="position:absolute; top:20px; right:20px; background:none; border:none; color:var(--mut); font-size:22px; cursor:pointer; line-height:1;">✕</button>
             
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
                 <div style="font-size:22px;">✨</div>
                 <div style="font-size:22px; font-weight:800; color:var(--txt);">Post a New Job Opening</div>
             </div>
-            <p style="font-size:13px; color:var(--mut); margin-bottom:24px;">Create a new role for candidates to apply to and enable automated Claude AI resume screening.</p>
+            <p style="font-size:13px; color:var(--mut); margin-bottom:24px;">Create a new role for candidates to apply to with customized salary range, location, responsibilities, and perks.</p>
 
             <form method="POST">
                 <input type="hidden" name="action" value="post_job">
@@ -436,6 +501,26 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                     </div>
                 </div>
 
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:16px;">
+                    <div>
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Office Location</label>
+                        <input type="text" name="location" placeholder="e.g. Kuala Lumpur, MY" style="padding:9px 12px; font-size:13px;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Min Salary (RM)</label>
+                        <input type="number" name="salary_min" placeholder="e.g. 4500" style="padding:9px 12px; font-size:13px;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Max Salary (RM)</label>
+                        <input type="number" name="salary_max" placeholder="e.g. 7500" style="padding:9px 12px; font-size:13px;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Salary Display Label (Optional)</label>
+                    <input type="text" name="salary_text" placeholder="e.g. RM 4,500 – RM 7,500 / month" style="padding:9px 12px; font-size:13px;">
+                </div>
+
                 <div style="margin-bottom:18px; padding:12px 16px; background:var(--surf); border:1px solid var(--bdr); border-radius:10px; display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" name="require_video" id="modal_require_video" value="1" style="width:18px; height:18px; cursor:pointer;">
                     <label for="modal_require_video" style="font-size:13px; font-weight:600; color:var(--txt); cursor:pointer;">
@@ -443,9 +528,24 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                     </label>
                 </div>
 
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">About the Role (Description)</label>
+                    <textarea name="description" rows="4" placeholder="Enter role summary & mission..." required style="resize:vertical; padding:12px; font-size:13px;"></textarea>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Key Responsibilities</label>
+                    <textarea name="responsibilities" rows="3" placeholder="List core daily duties..." style="resize:vertical; padding:12px; font-size:13px;"></textarea>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Requirements & Qualifications</label>
+                    <textarea name="requirements" rows="3" placeholder="List required skills, education, and years of experience..." style="resize:vertical; padding:12px; font-size:13px;"></textarea>
+                </div>
+
                 <div style="margin-bottom:24px;">
-                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Job Description & Candidate Requirements</label>
-                    <textarea name="description" rows="7" placeholder="Paste full job description, qualifications, and core requirements here..." required style="resize:vertical; padding:12px; font-size:13px;"></textarea>
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company Perks & Benefits</label>
+                    <textarea name="perks" rows="3" placeholder="e.g. Flexible Hours, Remote Allowance, Health Insurance..." style="resize:vertical; padding:12px; font-size:13px;"></textarea>
                 </div>
                 
                 <div style="display:flex; justify-content:flex-end; gap:12px;">

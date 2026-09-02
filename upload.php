@@ -116,8 +116,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="header-inner">
             <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
             <nav style="display:flex; gap:4px; margin-left:24px">
-                <a href="index.php">👥 Candidates Dashboard</a>
+                <a href="employer_dashboard.php">👥 Applications & Stats</a>
                 <a href="upload.php" class="active">📤 Upload Resumes</a>
+                <a href="profile.php">⚙️ Settings</a>
             </nav>
             
             <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
@@ -144,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 <?php if(!get_api_key()): ?>
                     <div style="background:rgba(255, 140, 66, 0.1); border:1px solid rgba(255, 140, 66, 0.3); border-radius:10px; padding:12px 16px; color:var(--org); font-size:12px; margin-bottom:16px;">
-                        <strong>Warning:</strong> AI screening is not yet configured. Resumes will be uploaded and text extracted, but AI screening will be skipped. Please contact your administrator to set up the Anthropic API key.
+                        <strong>Warning:</strong> AI screening is not yet configured. Resumes will be uploaded and text extracted, but AI screening will be skipped. Please contact your administrator to set up the Google Gemini API key.
                     </div>
                 <?php endif; ?>
 
@@ -183,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <span style="color:var(--acc); font-weight:700; flex-shrink:0; min-width:14px;">3.</span> PII (Phone/Email/IC) is stripped out locally
                 </div>
                 <div style="display:flex; gap:9px; margin-bottom:7px; font-size:12px; color:var(--txt); align-items:flex-start;">
-                    <span style="color:var(--acc); font-weight:700; flex-shrink:0; min-width:14px;">4.</span> Cleaned resume is evaluated by Anthropic Claude
+                    <span style="color:var(--acc); font-weight:700; flex-shrink:0; min-width:14px;">4.</span> Cleaned resume is evaluated by Google Gemini AI
                 </div>
                 <div style="display:flex; gap:9px; margin-bottom:7px; font-size:12px; color:var(--txt); align-items:flex-start;">
                     <span style="color:var(--acc); font-weight:700; flex-shrink:0; min-width:14px;">5.</span> Senior Recruiter evaluation report & match scores are generated

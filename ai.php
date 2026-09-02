@@ -19,7 +19,7 @@ function get_api_key() {
     return null;
 }
 
-function save_api_config($key, $model = 'claude-sonnet-5') {
+function save_api_config($key, $model = 'gemini-3.6-flash') {
     $_SESSION['api_key'] = $key;
     $_SESSION['ai_model'] = $model;
     $config_file = __DIR__ . '/config.json';
@@ -29,32 +29,35 @@ function save_api_config($key, $model = 'claude-sonnet-5') {
     ], JSON_PRETTY_PRINT));
 }
 
-function call_anthropic_claude($api_key, $prompt) {
-    $url = 'https://api.anthropic.com/v1/messages';
-    
-    $selected_model = $_SESSION['ai_model'] ?? 'claude-sonnet-5';
+function call_gemini_api($api_key, $prompt) {
+    $selected_model = $_SESSION['ai_model'] ?? 'gemini-3.6-flash';
     $models_to_try = array_unique([
         $selected_model,
-        'claude-sonnet-5',
-        'claude-haiku-4-5-20251001'
+        'gemini-3.6-flash',
+        'gemini-3.5-flash',
+        'gemini-flash-latest',
+        'gemini-3.7-flash'
     ]);
-    
-    $headers = [
-        'Content-Type: application/json',
-        'x-api-key: ' . trim($api_key),
-        'anthropic-version: 2023-06-01'
-    ];
-    
+
     $last_error = null;
     foreach ($models_to_try as $model) {
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . urlencode($model) . ':generateContent?key=' . trim($api_key);
+        
         $payload = [
-            'model' => $model,
-            'max_tokens' => 2500,
-            'messages' => [
-                ['role' => 'user', 'content' => $prompt]
+            'contents' => [
+                [
+                    'role' => 'user',
+                    'parts' => [
+                        ['text' => $prompt]
+                    ]
+                ]
+            ],
+            'generationConfig' => [
+                'temperature' => 0.2,
+                'maxOutputTokens' => 4096
             ]
         ];
-        
+
         try {
             $ch = @curl_init($url);
             if ($ch === false) continue;
@@ -62,58 +65,72 @@ function call_anthropic_claude($api_key, $prompt) {
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json'
+            ]);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-            
+            curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+
             $response = curl_exec($ch);
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $curl_err = curl_error($ch);
             curl_close($ch);
-            
+
             if ($http_code === 200 && !empty($response)) {
                 $data = json_decode($response, true);
-                if (!empty($data['content'][0]['text'])) {
-                    return $data['content'][0]['text'];
+                $text_output = '';
+                if (!empty($data['candidates'][0]['content']['parts'])) {
+                    foreach ($data['candidates'][0]['content']['parts'] as $part) {
+                        if (!empty($part['text'])) {
+                            $text_output .= $part['text'];
+                        }
+                    }
+                }
+                if (!empty($text_output)) {
+                    return $text_output;
                 }
             } else {
                 $msg = !empty($curl_err) ? $curl_err : "HTTP $http_code Response";
-                $last_error = "Anthropic API Call Failed ($model): " . $msg;
+                $last_error = "Gemini API Call Failed ($model): " . $msg;
                 error_log($last_error);
             }
         } catch (Throwable $t) {
-            error_log("Anthropic cURL Throwable: " . $t->getMessage());
+            error_log("Gemini cURL Throwable: " . $t->getMessage());
         }
     }
 
     return null;
 }
 
+// Backward-compatibility alias
+function call_anthropic_claude($api_key, $prompt) {
+    return call_gemini_api($api_key, $prompt);
+}
+
 /**
- * Actually tests the configured Anthropic API key/model against the live API
- * (unlike a bare network ping, this catches an invalid key, a disabled
- * organization, or a dead/inaccessible model name — all of which return a
- * normal HTTP response, not a connection failure).
- * @return array ['status' => 'active'|'not_configured'|'invalid_key'|'org_disabled'|'model_not_found'|'unreachable'|'error', 'message' => string]
+ * Actually tests the configured Gemini API key/model against the live API
+ * @return array ['status' => 'active'|'not_configured'|'invalid_key'|'model_not_found'|'unreachable'|'error', 'message' => string]
  */
-function check_api_key_status($api_key, $model = 'claude-sonnet-5') {
+function check_api_key_status($api_key, $model = 'gemini-3.7-flash') {
     if (empty($api_key)) {
-        return ['status' => 'not_configured', 'message' => 'No Anthropic API key has been configured yet.'];
+        return ['status' => 'not_configured', 'message' => 'No Gemini API key has been configured yet.'];
     }
 
-    $ch = curl_init('https://api.anthropic.com/v1/messages');
+    $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . urlencode($model) . ':generateContent?key=' . trim($api_key);
+    $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-        'model' => $model,
-        'max_tokens' => 1,
-        'messages' => [['role' => 'user', 'content' => 'ping']]
+        'contents' => [
+            ['role' => 'user', 'parts' => [['text' => 'ping']]]
+        ],
+        'generationConfig' => [
+            'maxOutputTokens' => 1
+        ]
     ]));
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json',
-        'x-api-key: ' . trim($api_key),
-        'anthropic-version: 2023-06-01'
+        'Content-Type: application/json'
     ]);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
@@ -125,23 +142,23 @@ function check_api_key_status($api_key, $model = 'claude-sonnet-5') {
     curl_close($ch);
 
     if ($http_code === 0) {
-        return ['status' => 'unreachable', 'message' => $curl_err ?: 'Could not reach the Anthropic API.'];
+        return ['status' => 'unreachable', 'message' => $curl_err ?: 'Could not reach the Google Gemini API.'];
     }
     if ($http_code === 200) {
-        return ['status' => 'active', 'message' => 'API key and model are working.'];
+        return ['status' => 'active', 'message' => 'Gemini API key and model are active & working.'];
     }
 
     $data = json_decode($response, true);
     $err_msg = $data['error']['message'] ?? "Unexpected HTTP $http_code response.";
 
-    if ($http_code === 401) {
+    if ($http_code === 400 || $http_code === 403 || $http_code === 401) {
+        if (stripos($err_msg, 'API_KEY_INVALID') !== false || stripos($err_msg, 'API key not valid') !== false || $http_code === 401) {
+            return ['status' => 'invalid_key', 'message' => 'Invalid Gemini API key provided.'];
+        }
         return ['status' => 'invalid_key', 'message' => $err_msg];
     }
     if ($http_code === 404) {
-        return ['status' => 'model_not_found', 'message' => $err_msg];
-    }
-    if ($http_code === 400 && stripos($err_msg, 'disabled') !== false) {
-        return ['status' => 'org_disabled', 'message' => $err_msg];
+        return ['status' => 'model_not_found', 'message' => "Model '{$model}' not available: " . $err_msg];
     }
 
     return ['status' => 'error', 'message' => $err_msg];
@@ -338,7 +355,7 @@ Tone and Constraints:
 - Mark scores critically low (0) if non-resume file is uploaded.
 PROMPT;
 
-            $response = call_anthropic_claude($api_key, $prompt);
+            $response = call_gemini_api($api_key, $prompt);
             
             // Extract JSON object using regex substring match
             $data = null;
@@ -356,7 +373,7 @@ PROMPT;
                 return $data;
             }
         } catch (Exception $e) {
-            error_log("Claude API Error: " . $e->getMessage());
+            error_log("Gemini API Error: " . $e->getMessage());
         }
     }
 
@@ -466,7 +483,7 @@ Output strictly a JSON object, no text outside the JSON:
 Tone: Encouraging but honest, like a career coach giving real feedback — not generic praise. Be specific to what's actually in the resume.
 PROMPT;
 
-            $response = call_anthropic_claude($api_key, $prompt);
+            $response = call_gemini_api($api_key, $prompt);
 
             $data = null;
             if (preg_match('/\{[\s\S]*\}/', $response, $matches)) {
@@ -480,7 +497,7 @@ PROMPT;
                 return $data;
             }
         } catch (Exception $e) {
-            error_log("Claude Resume Review Error: " . $e->getMessage());
+            error_log("Gemini Resume Review Error: " . $e->getMessage());
         }
     }
 
@@ -572,7 +589,7 @@ Output strictly a JSON object, no text outside the JSON:
 Keep the same number of experience/education entries as given in the input, in the same order. Each experience entry should have 2-4 bullet points.
 PROMPT;
 
-            $response = call_anthropic_claude($api_key, $prompt);
+            $response = call_gemini_api($api_key, $prompt);
 
             $data = null;
             if (preg_match('/\{[\s\S]*\}/', $response, $matches)) {
@@ -586,7 +603,7 @@ PROMPT;
                 return $data;
             }
         } catch (Exception $e) {
-            error_log("Claude Resume Builder Error: " . $e->getMessage());
+            error_log("Gemini Resume Builder Error: " . $e->getMessage());
         }
     }
 
@@ -606,16 +623,20 @@ A candidate is writing their resume and typed these rough notes about their role
 
 Rewrite this into 3 short, professional resume bullet points (active verbs, concise, no invented facts/numbers beyond what's stated). Output strictly a JSON array of strings, nothing else, e.g. ["...", "...", "..."]
 PROMPT;
-            $response = call_anthropic_claude($api_key, $prompt);
+            $response = call_gemini_api($api_key, $prompt);
             $data = null;
             if (preg_match('/\[[\s\S]*\]/', $response, $matches)) {
                 $data = json_decode($matches[0], true);
+            }
+            if (!is_array($data)) {
+                $clean_json = preg_replace('/^```json\s*|\s*```$/i', '', trim($response));
+                $data = json_decode($clean_json, true);
             }
             if (is_array($data) && !empty($data)) {
                 return array_slice(array_values($data), 0, 4);
             }
         } catch (Exception $e) {
-            error_log("Claude Resume Assist Error: " . $e->getMessage());
+            error_log("Gemini Resume Assist Error: " . $e->getMessage());
         }
     }
 

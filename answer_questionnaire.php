@@ -82,16 +82,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$submitted) {
         </div>
 
         <?php if(isset($_SESSION['toast'])): ?>
-            <div style="background:rgba(0, 232, 122, 0.15); border:1px solid rgba(0, 232, 122, 0.4); border-radius:10px; padding:14px 18px; color:var(--grn); font-size:13px; font-weight:700; margin-bottom:20px;">
-                🎉 <?= htmlspecialchars($_SESSION['toast']) ?>
+            <div class="toast-notification">
+                <span class="toast-icon-badge">🌿</span>
+                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
+                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
                 <?php unset($_SESSION['toast']); ?>
             </div>
         <?php endif; ?>
 
         <?php if($submitted): ?>
-            <div style="background:rgba(0, 232, 122, 0.08); border:1px solid rgba(0, 232, 122, 0.25); border-radius:12px; padding:20px; margin-bottom:24px;">
-                <div style="font-size:16px; font-weight:800; color:var(--grn); margin-bottom:6px;">✓ Questionnaire Completed</div>
-                <div style="font-size:13px; color:var(--txt);">Your answers were submitted on <?= date('M d, Y H:i', strtotime($request['submitted_at'])) ?>.</div>
+            <div style="background:var(--toast-bg); border:1px solid var(--toast-bdr); border-radius:12px; padding:20px; margin-bottom:24px;">
+                <div style="font-size:16px; font-weight:800; color:var(--toast-txt); margin-bottom:6px;">🌿 Questionnaire Completed</div>
+                <div style="font-size:13px; color:var(--toast-txt); opacity:0.9;">Your answers were submitted on <?= date('M d, Y H:i', strtotime($request['submitted_at'])) ?>.</div>
             </div>
 
             <div style="font-size:15px; font-weight:700; color:var(--txt); margin-bottom:16px;">Your Submitted Answers:</div>

@@ -117,7 +117,7 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
             position: relative;
         }
         .app-card:hover {
-            border-color: rgba(59, 130, 246, 0.4);
+            border-color: rgba(107, 138, 0, 0.35);
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
         }
         .ai-drawer {
@@ -146,6 +146,7 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
             <nav style="display:flex; gap:4px; margin-left:24px">
                 <a href="jobs.php">📋 Job Board</a>
                 <a href="candidate_dashboard.php" class="active">👤 My Applications</a>
+                <a href="resume_builder.php">📝 AI Resume Builder</a>
                 <a href="profile.php">⚙️ Profile Settings</a>
             </nav>
 
@@ -196,8 +197,10 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
     </header>
     <main>
         <?php if(isset($_SESSION['toast'])): ?>
-            <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:var(--grn); font-size:13px; font-weight:700;">
-                <?= htmlspecialchars($_SESSION['toast']) ?>
+            <div class="toast-notification">
+                <span class="toast-icon-badge">🌿</span>
+                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
+                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
                 <?php unset($_SESSION['toast']); ?>
             </div>
         <?php endif; ?>

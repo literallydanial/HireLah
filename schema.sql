@@ -3,11 +3,21 @@ USE hiresense;
 
 CREATE TABLE IF NOT EXISTS jobs (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    employer_id INT NULL,
     job_title VARCHAR(255) NOT NULL,
     department VARCHAR(255),
-    employment_type VARCHAR(100),
+    employment_type VARCHAR(100) DEFAULT 'Full-time',
+    work_mode VARCHAR(100) DEFAULT 'Hybrid',
+    location VARCHAR(255) NULL,
+    salary_min INT NULL,
+    salary_max INT NULL,
+    salary_text VARCHAR(255) NULL,
+    require_video TINYINT(1) DEFAULT 0,
     status VARCHAR(50) DEFAULT 'Active',
     description TEXT,
+    responsibilities TEXT,
+    requirements TEXT,
+    perks TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -103,11 +103,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $api_key = get_api_key();
         if (!$api_key) {
             if (($_SESSION['user_role'] ?? '') === 'admin') {
-                $_SESSION['toast'] = "Please set your Anthropic API Key first!";
+                $_SESSION['toast'] = "Please set your Google Gemini API Key first!";
                 header("Location: set_key.php");
                 exit;
             }
-            $_SESSION['toast'] = "AI screening is not yet configured. Please contact your administrator to set up the Anthropic API key.";
+            $_SESSION['toast'] = "AI screening is not yet configured. Please contact your administrator to set up the Gemini API key.";
             header("Location: candidate.php?id=$id");
             exit;
         }
@@ -145,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $id
                 ]);
 
-                $_SESSION['toast'] = "Claude AI Screening completed successfully!";
+                $_SESSION['toast'] = "Google Gemini AI Screening completed successfully!";
             } catch (Exception $e) {
                 $_SESSION['toast'] = "AI Error: " . $e->getMessage();
             }
@@ -350,8 +350,10 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
     
     <main style="max-width:900px;">
         <?php if(isset($_SESSION['toast'])): ?>
-            <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:var(--grn); font-size:13px; font-weight:700;">
-                <?= htmlspecialchars($_SESSION['toast']) ?>
+            <div class="toast-notification">
+                <span class="toast-icon-badge">🌿</span>
+                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
+                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
                 <?php unset($_SESSION['toast']); ?>
             </div>
         <?php endif; ?>

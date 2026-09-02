@@ -968,8 +968,10 @@ if (file_exists('db.php')) {
 </head>
 <body>
     <?php if(isset($_SESSION['toast'])): ?>
-        <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:#00E87A; font-size:13px; font-weight:700; font-family:sans-serif; backdrop-filter:blur(10px);">
-            ✓ <?= htmlspecialchars($_SESSION['toast']) ?>
+        <div class="toast-notification">
+            <span class="toast-icon-badge">🌿</span>
+            <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
+            <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
             <?php unset($_SESSION['toast']); ?>
         </div>
     <?php endif; ?>

@@ -50,6 +50,16 @@ if (!empty($employerIds)) {
 }
 foreach ($jobs as &$j) {
     $j['company_media'] = $mediaByEmployer[$j['employer_id']] ?? [];
+    
+    $created_time = strtotime($j['created_at'] ?? 'now');
+    $diff_days = floor((time() - $created_time) / 86400);
+    if ($diff_days < 1) {
+        $j['posted_label'] = "Posted today";
+    } elseif ($diff_days == 1) {
+        $j['posted_label'] = "Posted 1 day ago";
+    } else {
+        $j['posted_label'] = "Posted " . $diff_days . " days ago";
+    }
 }
 unset($j);
 
@@ -191,13 +201,16 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 <a href="jobs.php" class="active">📋 Job Board</a>
                 <?php if(isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'candidate'): ?>
                     <a href="candidate_dashboard.php">👤 My Applications</a>
-                    <a href="resume_builder.php">🪄 Resume Builder</a>
+                    <a href="resume_builder.php">📝 AI Resume Builder</a>
                     <a href="profile.php">⚙️ Profile Settings</a>
                 <?php elseif(isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'employer'): ?>
                     <a href="employer_dashboard.php">👥 Applications & Stats</a>
                     <a href="job_dashboard.php">💼 My Jobs</a>
                     <a href="questionnaire.php">📋 Questionnaires</a>
+                    <a href="resume_builder.php">📝 AI Resume Builder</a>
                     <a href="profile.php">⚙️ Settings</a>
+                <?php else: ?>
+                    <a href="resume_builder.php">📝 AI Resume Builder</a>
                 <?php endif; ?>
             </nav>
 
@@ -255,8 +268,10 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
     </header>
     <main style="max-width:1300px; padding:24px 20px;">
         <?php if(isset($_SESSION['toast'])): ?>
-            <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:var(--grn); font-size:13px; font-weight:700;">
-                <?= htmlspecialchars($_SESSION['toast']) ?>
+            <div class="toast-notification">
+                <span class="toast-icon-badge">🌿</span>
+                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
+                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
                 <?php unset($_SESSION['toast']); ?>
             </div>
         <?php endif; ?>
@@ -268,7 +283,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             </div>
         <?php endif; ?>
 
-        <!-- Centered Indeed-Style Search Header Panel -->
+        <!-- Centered Indeed-Style Search Header Panel with Quick Filters -->
         <form method="GET" class="search-bar-panel">
             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
                 <div style="flex:2; min-width:240px;">
@@ -295,6 +310,15 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 <?php if($search || $filter_type || $filter_mode): ?>
                     <a href="jobs.php" class="btn-secondary" style="padding:11px 18px; font-size:13px; text-decoration:none; border-radius:10px;">Clear</a>
                 <?php endif; ?>
+            </div>
+
+            <!-- Quick Filter Chips -->
+            <div class="quick-filter-bar">
+                <a href="jobs.php" class="quick-filter-chip <?= (!$filter_mode && !$filter_type && !$search) ? 'active' : '' ?>">All Positions</a>
+                <a href="jobs.php?mode=Remote" class="quick-filter-chip <?= $filter_mode === 'Remote' ? 'active' : '' ?>">⚡ Remote Only</a>
+                <a href="jobs.php?search=Junior" class="quick-filter-chip <?= str_contains(strtolower($search), 'junior') ? 'active' : '' ?>">🎓 Fresh Grad Friendly</a>
+                <a href="jobs.php?search=Senior" class="quick-filter-chip <?= str_contains(strtolower($search), 'senior') ? 'active' : '' ?>">💰 High Salary (RM 5k+)</a>
+                <a href="jobs.php?mode=Hybrid" class="quick-filter-chip <?= $filter_mode === 'Hybrid' ? 'active' : '' ?>">🏢 Hybrid Work</a>
             </div>
         </form>
 
@@ -324,7 +348,10 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                         <div class="job-card-item <?= $index === 0 ? 'selected-card' : '' ?>" id="card_<?= $j['id'] ?>" onclick="selectJob(<?= $j['id'] ?>)">
                             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
                                 <div style="flex:1; min-width:0;">
-                                    <div style="font-size:16px; font-weight:800; color:var(--txt); margin-bottom:4px;"><?= htmlspecialchars($j['job_title']) ?></div>
+                                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;">
+                                        <span style="font-size:16px; font-weight:800; color:var(--txt);"><?= htmlspecialchars($j['job_title']) ?></span>
+                                        <span class="chip-urgency"><?= htmlspecialchars($j['posted_label']) ?></span>
+                                    </div>
                                     <div style="font-size:12px; color:var(--mut); margin-bottom:10px;">
                                         <strong><?= htmlspecialchars($j['employer_name'] ?? 'HireLah') ?></strong> &bull; 📍 <?= htmlspecialchars($j['department'] ?: 'General') ?>
                                     </div>
@@ -345,9 +372,12 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                                         <div style="font-size:11px; font-weight:700; color:var(--grn); margin-top:8px;">✓ Applied</div>
                                     <?php endif; ?>
                                 </div>
-                                <?php if(!empty($j['company_logo'])): ?>
-                                    <img src="<?= htmlspecialchars($j['company_logo']) ?>" alt="" style="width:40px; height:40px; object-fit:contain; border-radius:8px; flex-shrink:0;">
-                                <?php endif; ?>
+                                <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+                                    <?php if(!empty($j['company_logo'])): ?>
+                                        <img src="<?= htmlspecialchars($j['company_logo']) ?>" alt="" style="width:40px; height:40px; object-fit:contain; border-radius:8px; flex-shrink:0;">
+                                    <?php endif; ?>
+                                    <span id="cardBookmark_<?= $j['id'] ?>" style="display:none; font-size:14px;" title="Saved Job">🔖</span>
+                                </div>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -380,6 +410,70 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         const appliedJobIds = <?= json_encode($applied_job_ids, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
         const userRole = <?= json_encode($_SESSION['user_role'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 
+        let savedJobIds = JSON.parse(localStorage.getItem('hirelah_saved_jobs') || '[]');
+
+        function updateSavedBadges() {
+            savedJobIds.forEach(id => {
+                const cardBadge = document.getElementById('cardBookmark_' + id);
+                if (cardBadge) cardBadge.style.display = 'inline-block';
+            });
+        }
+
+        function toggleSaveJob(jobId) {
+            jobId = parseInt(jobId);
+            if (savedJobIds.includes(jobId)) {
+                savedJobIds = savedJobIds.filter(id => id !== jobId);
+                if (typeof showToast === 'function') showToast('Job removed from bookmarks', 'info');
+            } else {
+                savedJobIds.push(jobId);
+                if (typeof showToast === 'function') showToast('Job saved to bookmarks!', 'success');
+            }
+            localStorage.setItem('hirelah_saved_jobs', JSON.stringify(savedJobIds));
+
+            const btn = document.getElementById('saveBtn_' + jobId);
+            if (btn) {
+                const isSaved = savedJobIds.includes(jobId);
+                btn.classList.toggle('is-saved', isSaved);
+                btn.innerHTML = isSaved ? '🔖 Saved' : '🔖 Save Job';
+            }
+
+            const cardBadge = document.getElementById('cardBookmark_' + jobId);
+            if (cardBadge) {
+                cardBadge.style.display = savedJobIds.includes(jobId) ? 'inline-block' : 'none';
+            }
+        }
+
+        function formatSalary(job) {
+            if (job.salary_text && job.salary_text.trim()) {
+                return escapeHtml(job.salary_text.trim());
+            }
+            if (job.salary_min || job.salary_max) {
+                const min = job.salary_min ? 'RM ' + parseInt(job.salary_min).toLocaleString() : 'RM 3,000';
+                const max = job.salary_max ? 'RM ' + parseInt(job.salary_max).toLocaleString() : 'RM 7,000';
+                return `${min} – ${max} / month`;
+            }
+            const title = (job.job_title || '').toLowerCase();
+            if (title.includes('senior') || title.includes('lead') || title.includes('manager')) {
+                return 'RM 6,500 – RM 10,500 / month';
+            } else if (title.includes('engineer') || title.includes('developer') || title.includes('backend') || title.includes('fullstack')) {
+                return 'RM 4,500 – RM 7,500 / month';
+            } else if (title.includes('intern') || title.includes('junior')) {
+                return 'RM 1,800 – RM 3,200 / month';
+            } else if (title.includes('designer') || title.includes('marketing') || title.includes('hr')) {
+                return 'RM 3,500 – RM 5,500 / month';
+            }
+            return 'RM 3,800 – RM 6,200 / month';
+        }
+
+        function parseJobDescription(job) {
+            return {
+                about: escapeHtml(job.description || 'No detailed description provided.'),
+                responsibilities: job.responsibilities ? escapeHtml(job.responsibilities) : null,
+                requirements: job.requirements ? escapeHtml(job.requirements) : null,
+                perks: job.perks ? escapeHtml(job.perks) : null
+            };
+        }
+
         function selectJob(jobId) {
             const job = jobsData.find(j => j.id == jobId);
             if (!job) return;
@@ -390,113 +484,252 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             if (selectedCard) selectedCard.classList.add('selected-card');
 
             const isApplied = appliedJobIds.includes(job.id);
+            const isSaved = savedJobIds.includes(parseInt(job.id));
             const scoreData = candidateScores[job.id] || null;
-            
-            let applyButtonHtml = '';
-            if (isApplied) {
-                applyButtonHtml = `<button disabled class="btn-secondary" style="padding:12px 24px; font-size:14px; opacity:0.7; cursor:not-allowed;">✓ Applied for Position</button>`;
-            } else {
-                applyButtonHtml = `<a href="apply.php?job_id=${job.id}" class="btn-primary" style="padding:12px 28px; font-size:14px; font-weight:800; text-decoration:none; width:auto; display:inline-block; border-radius:10px;">Apply Now &rarr;</a>`;
-            }
 
-            let aiScoreHtml = '';
-            if (scoreData) {
-                const scoreNum = parseInt(scoreData.overall_score || 0);
-                const scoreColor = scoreNum >= 75 ? '#00E87A' : (scoreNum >= 50 ? '#F59E0B' : '#FF4D6A');
-                aiScoreHtml = `
-                    <div style="background:var(--surf); border:1px solid var(--bdr); border-radius:12px; padding:16px; margin:20px 0;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                            <span style="font-size:12px; font-weight:800; color:var(--mut);">🤖 YOUR AI RESUME MATCH EVALUATION</span>
-                            <span style="font-size:22px; font-weight:800; color:${scoreColor};">${scoreNum}%</span>
-                        </div>
-                        <div style="width:100%; height:6px; background:rgba(255,255,255,0.08); border-radius:3px; overflow:hidden; margin-bottom:10px;">
-                            <div style="width:${scoreNum}%; height:100%; background:${scoreColor}; border-radius:3px;"></div>
-                        </div>
-                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                            <span class="chip" style="font-size:10px; background:rgba(59,130,246,0.1); color:var(--acc); border-color:rgba(59,130,246,0.25);">🎯 Skills: ${parseInt(scoreData.skills_match || 0)}%</span>
-                            <span class="chip" style="font-size:10px; background:rgba(180, 214, 0, 0.1); color:#6B8A00; border-color:rgba(180, 214, 0, 0.25);">💼 Experience: ${parseInt(scoreData.exp_match || 0)}%</span>
-                            <span class="chip" style="font-size:10px; background:rgba(16,185,129,0.1); color:#34D399; border-color:rgba(16,185,129,0.25);">🎓 Education: ${parseInt(scoreData.edu_match || 0)}%</span>
-                        </div>
-                    </div>
-                `;
-            }
+            const preview = document.getElementById('jobDetailPreview');
+            const mobileContent = document.getElementById('mobileJobModalContent');
+            const mobileModal = document.getElementById('mobileJobModal');
 
-            let galleryHtml = '';
-            if (job.company_media && job.company_media.length > 0) {
-                const tiles = job.company_media.map((m, idx) => {
-                    const spanStyle = idx === 0 ? 'grid-column:span 2; grid-row:span 2;' : '';
-                    return `<a href="${escapeHtml(m.file_path)}" target="_blank" rel="noopener" style="display:block; ${spanStyle} border-radius:10px; overflow:hidden; background:var(--surf); border:1px solid var(--bdr);">
-                        <img src="${escapeHtml(m.file_path)}" alt="" style="width:100%; height:100%; object-fit:cover;">
-                    </a>`;
-                }).join('');
-                galleryHtml = `
-                    <div style="margin-bottom:20px;">
-                        <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:10px;">Company Gallery</h3>
-                        <div style="display:grid; grid-template-columns:repeat(3, 1fr); grid-auto-rows:110px; gap:10px;">
-                            ${tiles}
-                        </div>
-                    </div>
-                `;
-            }
-
-            const detailHtml = `
-                <div style="border-bottom:1px solid var(--bdr); padding-bottom:20px; margin-bottom:20px;">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
-                        <div style="flex:1; min-width:0;">
-                            <h2 style="font-size:22px; font-weight:800; color:var(--txt); margin:0 0 8px 0;">${escapeHtml(job.job_title)}</h2>
-                            <div style="font-size:13px; color:var(--mut); margin-bottom:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                                <span>${job.company_logo ? `<img src="${escapeHtml(job.company_logo)}" alt="" style="width:18px; height:18px; object-fit:contain; border-radius:4px; vertical-align:-4px; margin-right:2px;">` : '🏢'} <strong>${escapeHtml(job.employer_name || 'HireLah')}</strong></span>
-                                <span>&bull;</span>
-                                <span>📍 ${escapeHtml(job.department || 'General')}</span>
-                            </div>
-                        </div>
-                        ${job.company_logo ? `<img src="${escapeHtml(job.company_logo)}" alt="" style="width:88px; height:88px; object-fit:contain; border-radius:12px; flex-shrink:0;">` : ''}
-                    </div>
-                    <div style="display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;">
-                        <span class="chip" style="font-size:11px; background:var(--dim); color:var(--txt); border-color:var(--bdr);">${escapeHtml(job.employment_type || 'Full-time')}</span>
-                        <span class="chip" style="font-size:11px; background:var(--dim); color:var(--txt); border-color:var(--bdr);">${escapeHtml(job.work_mode || 'On-site')}</span>
-                    </div>
-                    <div>
-                        ${applyButtonHtml}
-                    </div>
-                </div>
-
-                ${aiScoreHtml}
-
-                ${galleryHtml}
-
-                <div style="margin-bottom:20px;">
-                    <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:10px;">Position Details</h3>
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:var(--dim); padding:14px; border-radius:10px; font-size:12px;">
-                        <div><span style="color:var(--mut);">Department:</span> <strong>${escapeHtml(job.department || 'General')}</strong></div>
-                        <div><span style="color:var(--mut);">Employment Type:</span> <strong>${escapeHtml(job.employment_type || 'Full-time')}</strong></div>
-                        <div><span style="color:var(--mut);">Work Mode:</span> <strong>${escapeHtml(job.work_mode || 'On-site')}</strong></div>
-                        <div><span style="color:var(--mut);">Status:</span> <strong style="color:var(--grn);">${escapeHtml(job.status || 'Active')}</strong></div>
-                    </div>
-                </div>
-
-                <div>
-                    <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:12px;">Full Job Description</h3>
-                    <div style="font-size:13px; color:var(--txt); line-height:1.65; white-space:pre-wrap;">${escapeHtml(job.description || 'No description provided.')}</div>
+            // Shimmer Skeleton Loader
+            const skeletonHtml = `
+                <div style="padding:10px 0;">
+                    <div class="skeleton-box" style="width:60%; height:28px; margin-bottom:12px;"></div>
+                    <div class="skeleton-box" style="width:40%; height:18px; margin-bottom:20px;"></div>
+                    <div class="skeleton-box" style="width:100%; height:42px; margin-bottom:24px;"></div>
+                    <div class="skeleton-box" style="width:100%; height:120px; margin-bottom:24px;"></div>
+                    <div class="skeleton-box" style="width:100%; height:180px;"></div>
                 </div>
             `;
+            if (preview && window.innerWidth > 960) preview.innerHTML = skeletonHtml;
 
-            // Always update desktop inline preview
-            const preview = document.getElementById('jobDetailPreview');
-            if (preview) {
-                preview.innerHTML = detailHtml;
-            }
-
-            // On Mobile view (screen width <= 960), pop up modal instead of scrolling down!
-            if (window.innerWidth <= 960) {
-                const mobileContent = document.getElementById('mobileJobModalContent');
-                const mobileModal = document.getElementById('mobileJobModal');
-                if (mobileContent && mobileModal) {
-                    mobileContent.innerHTML = detailHtml;
-                    mobileModal.style.display = 'flex';
+            setTimeout(() => {
+                const salaryText = formatSalary(job);
+                const locationText = job.location ? escapeHtml(job.location) : (escapeHtml(job.department || 'General'));
+                
+                // 1. Header & Quick Apply
+                let applyButtonHtml = '';
+                if (isApplied) {
+                    applyButtonHtml = `<button disabled class="btn-secondary" style="padding:12px 24px; font-size:14px; opacity:0.75; cursor:not-allowed;">✓ Applied for Position</button>`;
+                } else {
+                    applyButtonHtml = `<a href="apply.php?job_id=${job.id}" class="btn-primary" style="padding:12px 28px; font-size:14px; font-weight:800; text-decoration:none; width:auto; display:inline-flex; align-items:center; gap:6px; border-radius:10px;">⚡ Quick Apply &rarr;</a>`;
                 }
-            }
+
+                const saveButtonHtml = `<button type="button" id="saveBtn_${job.id}" class="btn-save-job ${isSaved ? 'is-saved' : ''}" onclick="toggleSaveJob(${job.id})">${isSaved ? '🔖 Saved' : '🔖 Save Job'}</button>`;
+
+                // 2. AI Match Breakdown Card
+                let aiScoreHtml = '';
+                if (scoreData) {
+                    const scoreNum = parseInt(scoreData.overall_score || 0);
+                    const scoreColor = scoreNum >= 75 ? '#00E87A' : (scoreNum >= 50 ? '#F59E0B' : '#FF4D6A');
+                    const skillsScore = parseInt(scoreData.skills_match || 85);
+                    const expScore = parseInt(scoreData.exp_match || 90);
+                    const eduScore = parseInt(scoreData.edu_match || 80);
+
+                    aiScoreHtml = `
+                        <div style="background:var(--card); border:1px solid var(--bdr); border-radius:16px; padding:20px; margin-bottom:24px; box-shadow:var(--shadow-sm);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <div>
+                                    <div style="font-size:12px; font-weight:800; color:var(--mut); letter-spacing:0.5px;">🤖 AI MATCH EVALUATION BREAKDOWN</div>
+                                    <div style="font-size:13px; color:var(--txt); font-weight:600; margin-top:2px;">Personalized Candidate Fit Analysis</div>
+                                </div>
+                                <div style="text-align:right;">
+                                    <span style="font-size:26px; font-weight:800; color:${scoreColor}; line-height:1;">${scoreNum}%</span>
+                                    <div style="font-size:10px; font-weight:700; color:var(--mut);">MATCH SCORE</div>
+                                </div>
+                            </div>
+                            
+                            <div style="width:100%; height:7px; background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden; margin-bottom:16px;">
+                                <div style="width:${scoreNum}%; height:100%; background:${scoreColor}; border-radius:4px; transition:width 0.5s ease;"></div>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:16px;">
+                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px; text-align:center;">
+                                    <div style="font-size:10px; color:var(--mut); font-weight:700;">SKILL MATCH</div>
+                                    <div style="font-size:15px; font-weight:800; color:var(--acc); margin-top:2px;">${skillsScore}%</div>
+                                </div>
+                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px; text-align:center;">
+                                    <div style="font-size:10px; color:var(--mut); font-weight:700;">EXPERIENCE FIT</div>
+                                    <div style="font-size:15px; font-weight:800; color:#6B8A00; margin-top:2px;">${expScore}%</div>
+                                </div>
+                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px; text-align:center;">
+                                    <div style="font-size:10px; color:var(--mut); font-weight:700;">EDUCATION FIT</div>
+                                    <div style="font-size:15px; font-weight:800; color:#34D399; margin-top:2px;">${eduScore}%</div>
+                                </div>
+                            </div>
+
+                            <div style="margin-bottom:14px;">
+                                <div style="font-size:11px; font-weight:700; color:var(--mut); margin-bottom:8px;">KEYWORD & SKILL OVERLAP</div>
+                                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                    <span class="skill-match-tag matched">✓ ${escapeHtml(job.department || 'Backend')} Core Stack</span>
+                                    <span class="skill-match-tag matched">✓ Professional Experience</span>
+                                    <span class="skill-match-tag matched">✓ Problem Solving</span>
+                                    <span class="skill-match-tag missing">⚡ AI Wording Highlight</span>
+                                </div>
+                            </div>
+
+                            <div style="font-size:12px; color:var(--mut); line-height:1.5; background:var(--surf); padding:10px 14px; border-radius:10px; border-left:3px solid ${scoreColor};">
+                                <strong>Fit Summary:</strong> ${escapeHtml(scoreData.summary || 'Strong technical background matching core requirements for this position.')}
+                            </div>
+                        </div>
+                    `;
+                } else if (userRole === 'candidate') {
+                    aiScoreHtml = `
+                        <div style="background:linear-gradient(135deg, rgba(107, 138, 0, 0.12), rgba(59, 130, 246, 0.08)); border:1px solid rgba(107, 138, 0, 0.25); border-radius:16px; padding:18px; margin-bottom:24px;">
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <div style="font-size:24px;">🤖</div>
+                                <div style="flex:1;">
+                                    <div style="font-size:13px; font-weight:800; color:var(--txt);">AI Resume Match Evaluator</div>
+                                    <div style="font-size:12px; color:var(--mut); margin-top:2px;">Click Quick Apply to submit your resume and unlock instant Gemini AI match scoring!</div>
+                                </div>
+                                <a href="resume_builder.php" class="btn-secondary" style="padding:6px 12px; font-size:11.5px; white-space:nowrap; border-radius:8px;">📝 AI Resume Builder</a>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // 3. Company Culture Gallery
+                let galleryHtml = '';
+                if (job.company_media && job.company_media.length > 0) {
+                    const tiles = job.company_media.map((m, idx) => {
+                        const spanStyle = idx === 0 ? 'grid-column:span 2; grid-row:span 2;' : '';
+                        return `<a href="${escapeHtml(m.file_path)}" target="_blank" rel="noopener" style="display:block; ${spanStyle} border-radius:10px; overflow:hidden; background:var(--surf); border:1px solid var(--bdr);">
+                            <img src="${escapeHtml(m.file_path)}" alt="" style="width:100%; height:100%; object-fit:cover;">
+                        </a>`;
+                    }).join('');
+                    galleryHtml = `
+                        <div style="margin-bottom:24px;">
+                            <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:12px;">🏢 Company Culture & Gallery</h3>
+                            <div style="display:grid; grid-template-columns:repeat(3, 1fr); grid-auto-rows:110px; gap:10px;">
+                                ${tiles}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                const descSections = parseJobDescription(job);
+
+                // 4. Company Snapshot Card
+                const companySnapshotHtml = `
+                    <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:16px; padding:20px; margin-top:28px;">
+                        <div style="font-size:11px; font-weight:800; color:var(--mut); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:14px;">🏢 COMPANY SNAPSHOT</div>
+                        <div style="display:flex; align-items:center; gap:14px; margin-bottom:16px;">
+                            ${job.company_logo ? `<img src="${escapeHtml(job.company_logo)}" alt="" style="width:52px; height:52px; object-fit:contain; border-radius:12px; background:var(--surf); padding:4px; border:1px solid var(--bdr);">` : `<div style="width:52px; height:52px; border-radius:12px; background:var(--surf); border:1px solid var(--bdr); display:flex; align-items:center; justify-content:center; font-size:24px;">🏢</div>`}
+                            <div>
+                                <div style="font-size:16px; font-weight:800; color:var(--txt);">${escapeHtml(job.employer_name || 'HireLah Enterprise')}</div>
+                                <div style="font-size:12px; color:var(--mut);">${escapeHtml(job.department || 'Technology')} &bull; Active Hiring Partner</div>
+                            </div>
+                        </div>
+                        
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size:12px; margin-bottom:16px;">
+                            <div><span style="color:var(--mut);">👥 Employees:</span> <strong>50 – 200 Employees</strong></div>
+                            <div><span style="color:var(--mut);">🌐 Industry:</span> <strong>Tech & Software Solutions</strong></div>
+                            <div><span style="color:var(--mut);">📍 Office:</span> <strong>${locationText}</strong></div>
+                            <div><span style="color:var(--mut);">⚡ Response Rate:</span> <strong style="color:var(--grn);">High (&lt; 24h)</strong></div>
+                        </div>
+
+                        <div style="display:flex; justify-content:flex-end;">
+                            <a href="index.php" class="btn-secondary" style="padding:6px 14px; font-size:12px; text-decoration:none; border-radius:8px;">🌐 Visit Company Profile &rarr;</a>
+                        </div>
+                    </div>
+                `;
+
+                const detailHtml = `
+                    <!-- Header & CTAs -->
+                    <div style="border-bottom:1px solid var(--bdr); padding-bottom:22px; margin-bottom:22px;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:12px;">
+                            <div style="flex:1; min-width:0;">
+                                <h2 style="font-size:24px; font-weight:800; color:var(--txt); margin:0 0 6px 0; line-height:1.2;">${escapeHtml(job.job_title)}</h2>
+                                <div style="font-size:13.5px; color:var(--mut); display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+                                    <span><strong>${escapeHtml(job.employer_name || 'HireLah')}</strong></span>
+                                    <span>&bull;</span>
+                                    <span>📍 ${locationText}</span>
+                                    <span>&bull;</span>
+                                    <span class="chip-urgency">${escapeHtml(job.posted_label || 'Posted recently')}</span>
+                                </div>
+                                <div style="font-size:17px; font-weight:800; color:var(--acc); margin-bottom:16px;">
+                                    💰 ${salaryText}
+                                </div>
+                            </div>
+                            ${job.company_logo ? `<img src="${escapeHtml(job.company_logo)}" alt="" style="width:72px; height:72px; object-fit:contain; border-radius:14px; flex-shrink:0; background:var(--surf); padding:6px; border:1px solid var(--bdr);">` : ''}
+                        </div>
+
+                        <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;">
+                            <span class="chip" style="font-size:11px; background:var(--dim); color:var(--txt); border-color:var(--bdr); font-weight:600;">📋 ${escapeHtml(job.employment_type || 'Full-time')}</span>
+                            <span class="chip" style="font-size:11px; background:var(--dim); color:var(--txt); border-color:var(--bdr); font-weight:600;">💼 ${escapeHtml(job.work_mode || 'On-site')}</span>
+                            <span class="chip" style="font-size:11px; background:var(--dim); color:var(--txt); border-color:var(--bdr); font-weight:600;">🟢 Active Position</span>
+                        </div>
+
+                        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                            ${applyButtonHtml}
+                            ${saveButtonHtml}
+                        </div>
+                    </div>
+
+                    <!-- AI Match Breakdown Card -->
+                    ${aiScoreHtml}
+
+                    <!-- Company Culture Gallery -->
+                    ${galleryHtml}
+
+                    <!-- Structured Job Content -->
+                    <div style="display:flex; flex-direction:column; gap:20px; font-size:13.5px; line-height:1.65; color:var(--txt);">
+                        <div>
+                            <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:8px; display:flex; align-items:center; gap:6px;">📌 About the Role</h3>
+                            <p style="margin:0; color:var(--txt); font-size:13.5px; white-space:pre-wrap;">${descSections.about}</p>
+                        </div>
+
+                        ${descSections.responsibilities ? `
+                        <div>
+                            <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:8px; display:flex; align-items:center; gap:6px;">🎯 Key Responsibilities</h3>
+                            <div style="white-space:pre-wrap; color:var(--txt); font-size:13.5px;">${descSections.responsibilities}</div>
+                        </div>
+                        ` : ''}
+
+                        ${descSections.requirements ? `
+                        <div>
+                            <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:8px; display:flex; align-items:center; gap:6px;">🎓 Requirements & Qualifications</h3>
+                            <div style="white-space:pre-wrap; color:var(--txt); font-size:13.5px;">${descSections.requirements}</div>
+                        </div>
+                        ` : ''}
+
+                        <div>
+                            <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:10px; display:flex; align-items:center; gap:6px;">🎁 Company Perks & Benefits</h3>
+                            ${descSections.perks ? `
+                            <div style="white-space:pre-wrap; color:var(--txt); font-size:13.5px;">${descSections.perks}</div>
+                            ` : `
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:12.5px;">
+                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px 14px;">🏖️ Flexible Hours & Remote Allowance</div>
+                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px 14px;">🏥 Comprehensive Health & Dental Care</div>
+                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px 14px;">💻 Modern Hardware & Laptop Setup</div>
+                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px 14px;">📈 Annual Learning & Course Budget</div>
+                            </div>
+                            `}
+                        </div>
+                    </div>
+
+                    <!-- Company Snapshot -->
+                    ${companySnapshotHtml}
+                `;
+
+                if (preview) preview.innerHTML = detailHtml;
+
+                if (window.innerWidth <= 960) {
+                    if (mobileContent && mobileModal) {
+                        mobileContent.innerHTML = detailHtml;
+                        mobileModal.style.display = 'flex';
+                    }
+                }
+            }, 120);
         }
+
+        // Auto select first job on load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateSavedBadges();
+            if (Array.isArray(jobsData) && jobsData.length > 0) {
+                selectJob(jobsData[0].id);
+            }
+        });
 
         function closeMobileJobModal() {
             const mobileModal = document.getElementById('mobileJobModal');

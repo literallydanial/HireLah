@@ -68,8 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div style="font-size:13px; color:var(--mut); margin-bottom:24px;">Join HireLah today</div>
 
         <?php if(isset($_SESSION['toast'])): ?>
-            <div style="background:rgba(0, 232, 122, 0.12); border:1px solid rgba(0, 232, 122, 0.4); border-radius:8px; padding:10px; margin-bottom:16px; color:var(--grn); font-size:13px; font-weight:600;">
-                <?= htmlspecialchars($_SESSION['toast']) ?>
+            <div class="toast-notification">
+                <span class="toast-icon-badge">🌿</span>
+                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
+                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
                 <?php unset($_SESSION['toast']); ?>
             </div>
         <?php endif; ?>

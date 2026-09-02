@@ -90,7 +90,7 @@ $actions_list = $pdo->query("SELECT DISTINCT action FROM admin_logs ORDER BY act
             background: rgba(255, 77, 106, 0.15); color: var(--red); border: 1px solid rgba(255, 77, 106, 0.3);
         }
         .act-add_user {
-            background: rgba(0, 232, 122, 0.15); color: var(--grn); border: 1px solid rgba(0, 232, 122, 0.3);
+            background: var(--toast-icon-bg); color: var(--toast-icon-color); border: 1px solid var(--toast-bdr);
         }
         .act-change_role, .act-toggle_verify {
             background: rgba(217, 255, 79, 0.15); color: var(--acc); border: 1px solid rgba(217, 255, 79, 0.3);

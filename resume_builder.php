@@ -252,15 +252,46 @@ try {
         }
     </style>
 </head>
-<body style="padding:20px 0;">
+<body>
     <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
     <div class="rb-glow rb-glow-1"></div>
     <div class="rb-glow rb-glow-2"></div>
 
-    <div style="max-width:900px; margin:0 auto; padding:0 16px; position:relative; z-index:2;">
-        <div style="margin-bottom:20px; display:flex; align-items:center; gap:12px;">
-            <a href="index.php" class="btn-secondary" style="padding:6px 12px; font-size:12px;">&larr; Back to Home</a>
+    <header>
+        <div class="header-inner">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo"></div>
+            </div>
+
+            <nav style="display:flex; gap:4px; margin-left:24px">
+                <?php if(($_SESSION['user_role'] ?? '') === 'candidate'): ?>
+                    <a href="jobs.php">📋 Job Board</a>
+                    <a href="candidate_dashboard.php">👤 My Applications</a>
+                    <a href="resume_builder.php" class="active">📝 AI Resume Builder</a>
+                    <a href="profile.php">⚙️ Profile Settings</a>
+                <?php elseif(($_SESSION['user_role'] ?? '') === 'employer'): ?>
+                    <a href="employer_dashboard.php">👥 Applications & Stats</a>
+                    <a href="job_dashboard.php">💼 My Jobs</a>
+                    <a href="questionnaire.php">📋 Questionnaires</a>
+                    <a href="resume_builder.php" class="active">📝 AI Resume Builder</a>
+                    <a href="profile.php">⚙️ Settings</a>
+                <?php else: ?>
+                    <a href="admin_dashboard.php">🛡️ Control Panel</a>
+                    <a href="resume_builder.php" class="active">📝 AI Resume Builder</a>
+                    <a href="profile.php">⚙️ Settings</a>
+                <?php endif; ?>
+            </nav>
+
+            <div class="header-right-actions">
+                <?php if(isset($_SESSION['user_name'])): ?>
+                    <span class="user-info-text" style="font-size:12px; color:var(--mut); margin-right:10px;">Logged in as <?= htmlspecialchars($_SESSION['user_name']) ?></span>
+                    <a href="logout.php" class="btn-secondary" style="padding:6px 14px; font-size:12px;">Logout</a>
+                <?php endif; ?>
+            </div>
         </div>
+    </header>
+
+    <main style="max-width:1180px; margin:36px auto; padding:0 24px; position:relative; z-index:2;">
 
         <div class="panel" style="margin-bottom:24px;">
             <div class="panel-title">🪄 AI Resume Builder</div>
@@ -672,5 +703,6 @@ function askAi(btn) {
         });
 }
 </script>
+</main>
 <script src="theme.js"></script></body>
 </html>
