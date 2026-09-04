@@ -1,6 +1,6 @@
 # =========================================================================
 # HIRESENSE APACHE SECURITY & PROTECTION (.htaccess)
-# Designed for Apache 2.2 / 2.4 (InfinityFree / XAMPP)
+# Designed for Apache 2.2 / 2.4 (Ubuntu / XAMPP)
 # =========================================================================
 
 # Block direct web access to configuration, secrets, dependencies, backups & SQL/zip artifacts

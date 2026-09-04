@@ -2,6 +2,7 @@
 require_once 'auth.php';
 require_once 'ai.php';
 require_once 'notifications_helper.php';
+require_once 'company_helpers.php';
 require_login();
 
 $user_id = $_SESSION['user_id'];
@@ -161,6 +162,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: profile.php");
             exit;
         }
+        // Company branding is shared across every HR teammate now, so only the
+        // company's admin (the first person who registered, or whoever they've
+        // promoted) may change it.
+        $company_id = require_company_admin($pdo);
+
         $company_name = trim($_POST['company_name'] ?? '');
         $company_website = trim($_POST['company_website'] ?? '');
         $company_address = trim($_POST['company_address'] ?? '');
@@ -172,8 +178,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $stmt = $pdo->prepare("UPDATE users SET company_name = ?, company_website = ?, company_address = ?, contact_email = ? WHERE id = ?");
-        if ($stmt->execute([$company_name, $company_website, $company_address, $contact_email, $user_id])) {
+        $stmt = $pdo->prepare("UPDATE companies SET name = ?, website = ?, address = ?, contact_email = ? WHERE id = ?");
+        if ($stmt->execute([$company_name, $company_website, $company_address, $contact_email, $company_id])) {
             $_SESSION['toast'] = "Company settings saved.";
         } else {
             $_SESSION['error'] = "Failed to save company settings.";
@@ -187,6 +193,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: profile.php");
             exit;
         }
+        $company_id = require_company_admin($pdo);
+
         $file = $_FILES['company_logo'] ?? null;
         if (!$file || $file['error'] === UPLOAD_ERR_INI_SIZE || ($file['size'] ?? 0) > 2 * 1024 * 1024) {
             $_SESSION['error'] = "Uploaded logo exceeds the maximum allowed size limit (2MB).";
@@ -201,8 +209,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $path = $upload_dir . uniqid() . '.' . $ext;
                     if (move_uploaded_file($file['tmp_name'], $path)) {
-                        $stmt = $pdo->prepare("UPDATE users SET company_logo = ? WHERE id = ?");
-                        $stmt->execute([$path, $user_id]);
+                        $stmt = $pdo->prepare("UPDATE companies SET logo = ? WHERE id = ?");
+                        $stmt->execute([$path, $company_id]);
                         $_SESSION['toast'] = "Company logo updated.";
                     } else {
                         $_SESSION['error'] = "Failed to save company logo.";
@@ -210,6 +218,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             } else {
                 $_SESSION['error'] = "Invalid image format. Use JPG, PNG, SVG, WEBP or GIF.";
+            }
+        }
+        header("Location: profile.php");
+        exit;
+    }
+    elseif ($action === 'regenerate_invite_link') {
+        if ($user['role'] !== 'employer') {
+            $_SESSION['error'] = "Access denied. Only employer accounts can manage the team.";
+            header("Location: profile.php");
+            exit;
+        }
+        $company_id = require_company_admin($pdo);
+        regenerate_invite_token($pdo, $company_id);
+        $_SESSION['toast'] = "Invite link refreshed. The old link no longer works.";
+        header("Location: profile.php");
+        exit;
+    }
+    elseif ($action === 'remove_team_member') {
+        if ($user['role'] !== 'employer') {
+            $_SESSION['error'] = "Access denied. Only employer accounts can manage the team.";
+            header("Location: profile.php");
+            exit;
+        }
+        $company_id = require_company_admin($pdo);
+        $member_id = (int)($_POST['member_id'] ?? 0);
+
+        if ($member_id === (int)$user_id) {
+            $_SESSION['error'] = "You can't remove yourself from the team. Ask another admin, or transfer admin rights first.";
+        } else {
+            $del = $pdo->prepare("DELETE FROM company_members WHERE company_id = ? AND user_id = ? AND role != 'admin'");
+            $del->execute([$company_id, $member_id]);
+            if ($del->rowCount() > 0) {
+                $_SESSION['toast'] = "Teammate removed from the company.";
+            } else {
+                $_SESSION['error'] = "Couldn't remove that teammate (they may already be gone, or are an admin).";
             }
         }
         header("Location: profile.php");
@@ -379,6 +422,36 @@ if ($user['role'] === 'employer') {
     }
 }
 
+// Multi-HR team data — which company this HR is currently acting as, their
+// role in it, everyone else on the team, and the invite link/QR to grow it.
+$user_companies = [];
+$active_company_id = null;
+$active_company = null;
+$is_company_admin = false;
+$company_members = [];
+$invite_link = null;
+if ($user['role'] === 'employer') {
+    $user_companies = get_user_companies($pdo, $user_id);
+    $active_company_id = get_active_company_id($pdo);
+    foreach ($user_companies as $c) {
+        if ((int)$c['id'] === (int)$active_company_id) { $active_company = $c; break; }
+    }
+    $is_company_admin = $active_company && $active_company['role'] === 'admin';
+    if ($active_company_id) {
+        $company_members = get_company_members($pdo, $active_company_id);
+        if ($is_company_admin) {
+            $tok_stmt = $pdo->prepare("SELECT invite_token FROM companies WHERE id = ?");
+            $tok_stmt->execute([$active_company_id]);
+            $invite_token = $tok_stmt->fetchColumn();
+            if ($invite_token) {
+                $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+                $base = $scheme . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+                $invite_link = $base . '/join_company.php?invite=' . urlencode($invite_token);
+            }
+        }
+    }
+}
+
 $cand_applications = [];
 if ($user['role'] === 'candidate') {
     try {
@@ -443,6 +516,7 @@ if ($user['role'] === 'candidate') {
                     <a href="profile.php" class="active">⚙️ Profile Settings</a>
                 <?php endif; ?>
             </nav>
+            <?php include 'company_switcher.php'; ?>
 
             <div class="header-right-actions">
                 <?php if($user['role'] === 'candidate'): ?>
@@ -602,44 +676,55 @@ if ($user['role'] === 'candidate') {
                     <div class="panel-title" style="display:flex; align-items:center; gap:8px;">
                         <span>🏢</span> Company Profile & Candidate Branding
                     </div>
-                    <p style="font-size:13px; color:var(--mut); margin-bottom:20px;">This information is displayed on candidate-facing job postings, application receipts, and interview communications.</p>
+                    <p style="font-size:13px; color:var(--mut); margin-bottom:20px;">This information is shared by everyone on your company's HR team and is displayed on candidate-facing job postings, application receipts, and interview communications.</p>
+
+                    <?php if(!$is_company_admin): ?>
+                        <div style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.25); border-radius:10px; padding:10px 14px; margin-bottom:18px; font-size:12.5px; color:var(--mut);">
+                            ℹ️ Only your company's admin can change these details. You can view them below.
+                        </div>
+                    <?php endif; ?>
 
                     <form method="POST">
                         <input type="hidden" name="action" value="update_company_info">
+                        <fieldset <?= $is_company_admin ? '' : 'disabled' ?> style="border:none; padding:0; margin:0;">
 
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:18px;">
                             <div>
                                 <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Company Name</label>
-                                <input type="text" name="company_name" placeholder="Acme Corporation Sdn Bhd" value="<?= htmlspecialchars($user['company_name'] ?? '') ?>">
+                                <input type="text" name="company_name" placeholder="Acme Corporation Sdn Bhd" value="<?= htmlspecialchars($active_company['name'] ?? '') ?>">
                             </div>
                             <div>
                                 <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Official Website</label>
-                                <input type="url" name="company_website" placeholder="https://acme.com" value="<?= htmlspecialchars($user['company_website'] ?? '') ?>">
+                                <input type="url" name="company_website" placeholder="https://acme.com" value="<?= htmlspecialchars($active_company['website'] ?? '') ?>">
                             </div>
                         </div>
 
                         <div style="margin-bottom:18px;">
                             <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Candidate Contact Email (Optional)</label>
-                            <input type="email" name="contact_email" placeholder="careers@acme.com &mdash; leave blank to use account email" value="<?= htmlspecialchars($user['contact_email'] ?? '') ?>">
+                            <input type="email" name="contact_email" placeholder="careers@acme.com &mdash; leave blank to use account email" value="<?= htmlspecialchars($active_company['contact_email'] ?? '') ?>">
                         </div>
 
                         <div style="margin-bottom:24px;">
                             <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Company Address</label>
-                            <textarea name="company_address" rows="3" placeholder="Level 18, Menara Acme, Jalan Sultan Ismail, 50250 Kuala Lumpur"><?= htmlspecialchars($user['company_address'] ?? '') ?></textarea>
+                            <textarea name="company_address" rows="3" placeholder="Level 18, Menara Acme, Jalan Sultan Ismail, 50250 Kuala Lumpur"><?= htmlspecialchars($active_company['address'] ?? '') ?></textarea>
                         </div>
 
+                        <?php if($is_company_admin): ?>
                         <div style="display:flex; justify-content:flex-end;">
                             <button type="submit" class="btn-primary" style="width:auto; padding:11px 28px;">Save Company Info &rarr;</button>
                         </div>
+                        <?php endif; ?>
+                        </fieldset>
                     </form>
 
+                    <?php if($is_company_admin): ?>
                     <div style="border-top:1px dashed var(--bdr); margin-top:24px; padding-top:20px;">
                         <label style="display:block; font-size:13px; font-weight:700; color:var(--txt); margin-bottom:10px;">Company Logo</label>
                         <form method="POST" enctype="multipart/form-data" style="display:flex; align-items:center; gap:20px; flex-wrap:wrap;">
                             <input type="hidden" name="action" value="upload_company_logo">
                             <div style="width:72px; height:72px; border-radius:12px; background:var(--surf); border:1px solid var(--bdr); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
-                                <?php if(!empty($user['company_logo'])): ?>
-                                    <img src="<?= htmlspecialchars($user['company_logo']) ?>" alt="Company logo" style="width:100%; height:100%; object-fit:contain;">
+                                <?php if(!empty($active_company['logo'])): ?>
+                                    <img src="<?= htmlspecialchars($active_company['logo']) ?>" alt="Company logo" style="width:100%; height:100%; object-fit:contain;">
                                 <?php else: ?>
                                     <span style="font-size:28px;">🏢</span>
                                 <?php endif; ?>
@@ -651,6 +736,7 @@ if ($user['role'] === 'candidate') {
                             <button type="submit" class="btn-secondary" style="padding:9px 18px; font-size:12.5px;">Upload Logo</button>
                         </form>
                     </div>
+                    <?php endif; ?>
 
                     <div style="border-top:1px dashed var(--bdr); margin-top:24px; padding-top:20px;">
                         <label style="display:block; font-size:13px; font-weight:700; color:var(--txt); margin-bottom:4px;">Company Culture Gallery</label>
@@ -684,6 +770,96 @@ if ($user['role'] === 'candidate') {
                         <?php else: ?>
                             <div style="font-size:12.5px; color:var(--mut);">Gallery has reached capacity (6/6). Remove a photo above to upload a new one.</div>
                         <?php endif; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if($user['role'] === 'employer' && $active_company_id): ?>
+                <!-- Team Management Panel -->
+                <div class="panel" style="grid-column: 1 / -1; padding:32px;">
+                    <div class="panel-title" style="display:flex; align-items:center; gap:8px;">
+                        <span>👥</span> Team — <?= htmlspecialchars($active_company['name'] ?? 'Your Company') ?>
+                    </div>
+                    <p style="font-size:13px; color:var(--mut); margin-bottom:20px;">
+                        Everyone below shares this company's jobs, candidates, and questionnaires.
+                        <?php if(count($user_companies) > 1): ?>
+                            You belong to <?= count($user_companies) ?> companies — use the company switcher to jump between them.
+                        <?php endif; ?>
+                    </p>
+
+                    <?php if($is_company_admin): ?>
+                    <div style="background:var(--surf); border:1px solid var(--bdr); border-radius:12px; padding:20px; margin-bottom:24px;">
+                        <label style="display:block; font-size:13px; font-weight:700; color:var(--txt); margin-bottom:10px;">Invite Teammates</label>
+                        <p style="font-size:12.5px; color:var(--mut); margin:0 0 14px 0;">Share this link, or have them scan the QR code — anyone who opens it joins your team instantly as an HR teammate.</p>
+
+                        <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
+                            <div style="flex:1; min-width:260px;">
+                                <div style="display:flex; gap:8px; margin-bottom:10px;">
+                                    <input type="text" readonly id="inviteLinkInput" value="<?= htmlspecialchars($invite_link ?? '') ?>" style="flex:1; font-family:monospace; font-size:12px;">
+                                    <button type="button" class="btn-secondary" style="padding:9px 16px; font-size:12.5px; white-space:nowrap;" onclick="copyInviteLink()">📋 Copy</button>
+                                </div>
+                                <form method="POST" onsubmit="return confirm('Generate a new invite link? The old link and QR code will stop working immediately.');">
+                                    <input type="hidden" name="action" value="regenerate_invite_link">
+                                    <button type="submit" class="btn-secondary" style="padding:8px 16px; font-size:12px;">🔄 Regenerate Link</button>
+                                </form>
+                            </div>
+                            <div style="text-align:center;">
+                                <div id="inviteQrCode" style="width:150px; height:150px; display:flex; align-items:center; justify-content:center; background:#fff; border-radius:10px; border:1px solid var(--bdr); padding:8px;"></div>
+                                <div style="font-size:11px; color:var(--mut); margin-top:6px;">Scan to join</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <script src="qrcode.js?v=<?php echo @filemtime(__DIR__.'/qrcode.js'); ?>"></script>
+                    <script>
+                        (function() {
+                            var link = document.getElementById('inviteLinkInput').value;
+                            if (!link) return;
+                            try {
+                                var qr = qrcode(0, 'M');
+                                qr.addData(link);
+                                qr.make();
+                                document.getElementById('inviteQrCode').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+                            } catch (e) {
+                                document.getElementById('inviteQrCode').textContent = 'QR unavailable';
+                            }
+                        })();
+                        function copyInviteLink() {
+                            var input = document.getElementById('inviteLinkInput');
+                            input.select();
+                            input.setSelectionRange(0, 99999);
+                            navigator.clipboard && navigator.clipboard.writeText(input.value).catch(function(){ document.execCommand('copy'); });
+                        }
+                    </script>
+                    <?php endif; ?>
+
+                    <label style="display:block; font-size:13px; font-weight:700; color:var(--txt); margin-bottom:10px;">Members (<?= count($company_members) ?>)</label>
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <?php foreach($company_members as $m): ?>
+                            <div style="display:flex; align-items:center; gap:14px; padding:12px 14px; background:var(--surf); border:1px solid var(--bdr); border-radius:10px;">
+                                <div style="width:38px; height:38px; border-radius:50%; background:var(--acc); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; flex-shrink:0; overflow:hidden;">
+                                    <?php if(!empty($m['profile_picture'])): ?>
+                                        <img src="<?= htmlspecialchars($m['profile_picture']) ?>" alt="" style="width:100%; height:100%; object-fit:cover;">
+                                    <?php else: ?>
+                                        <?= htmlspecialchars(strtoupper(substr($m['name'], 0, 1))) ?>
+                                    <?php endif; ?>
+                                </div>
+                                <div style="flex:1; min-width:0;">
+                                    <div style="font-size:13.5px; font-weight:600; color:var(--txt);"><?= htmlspecialchars($m['name']) ?><?= (int)$m['id'] === (int)$user_id ? ' (You)' : '' ?></div>
+                                    <div style="font-size:12px; color:var(--mut);"><?= htmlspecialchars($m['email']) ?></div>
+                                </div>
+                                <span style="font-size:11px; font-weight:700; padding:4px 10px; border-radius:999px; <?= $m['role'] === 'admin' ? 'background:rgba(59,130,246,0.15); color:var(--acc);' : 'background:var(--bg); color:var(--mut); border:1px solid var(--bdr);' ?>">
+                                    <?= $m['role'] === 'admin' ? '⭐ Admin' : 'HR' ?>
+                                </span>
+                                <?php if($is_company_admin && $m['role'] !== 'admin'): ?>
+                                    <form method="POST" onsubmit="return confirm('Remove <?= htmlspecialchars(addslashes($m['name'])) ?> from this company?');">
+                                        <input type="hidden" name="action" value="remove_team_member">
+                                        <input type="hidden" name="member_id" value="<?= (int)$m['id'] ?>">
+                                        <button type="submit" title="Remove" style="width:28px; height:28px; border-radius:50%; border:1px solid var(--bdr); background:var(--bg); color:var(--red); font-size:14px; cursor:pointer;">&times;</button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
                     </div>
                 </div>
             <?php endif; ?>

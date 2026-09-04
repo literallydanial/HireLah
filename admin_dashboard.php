@@ -168,7 +168,7 @@ $total_candidates_eval = (int)$pdo->query("SELECT COUNT(*) FROM candidates")->fe
 $total_questionnaires = (int)$pdo->query("SELECT COUNT(*) FROM questionnaires")->fetchColumn();
 
 // Google Gemini AI Screening Diagnostics
-$env_api_key = getenv('GEMINI_API_KEY') ?: (getenv('GOOGLE_API_KEY') ?: (getenv('CLAUDE_API_KEY') ?: ''));
+$env_api_key = getenv('GEMINI_API_KEY') ?: (getenv('GOOGLE_API_KEY') ?: '');
 $gemini_key_configured = !empty($env_api_key) || true; // Built-in Gemini engine enabled
 
 // Gemini API Key Health Check (tests the configured key/model against live Gemini API)
@@ -188,12 +188,6 @@ $key_status_map = [
 $gemini_status = $key_status_map[$key_check['status']]['label'] ?? 'Unknown';
 $gemini_status_color = $key_status_map[$key_check['status']]['color'] ?? '#9CA3AF';
 $gemini_status_detail = $key_check['message'] ?? '';
-
-// Backward compatibility variables
-$claude_status = $gemini_status;
-$claude_status_color = $gemini_status_color;
-$claude_status_detail = $gemini_status_detail;
-$claude_latency_ms = $gemini_latency_ms;
 
 // Candidate Match Analytics (AI Screening Stats)
 $avg_match_score = (int)$pdo->query("SELECT COALESCE(AVG(overall_score), 0) FROM candidates")->fetchColumn();

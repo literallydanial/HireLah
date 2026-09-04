@@ -2,13 +2,28 @@
 session_start();
 require_once 'db.php';
 require_once 'mailer.php';
+require_once 'company_helpers.php';
+
+// A ?invite=TOKEN link (from a company's Settings > Team page, or its QR
+// code) always registers the new account as an employer joining that
+// specific company as HR — remembered across the OTP step via session so it
+// still applies even if the token isn't resubmitted with the POST.
+$invite_token = $_GET['invite'] ?? $_POST['invite_token'] ?? null;
+if ($invite_token) {
+    $_SESSION['pending_invite_token'] = $invite_token;
+}
+$invite_company = !empty($_SESSION['pending_invite_token']) ? get_company_by_invite_token($pdo, $_SESSION['pending_invite_token']) : null;
+if ($invite_token && !$invite_company) {
+    // token was present but doesn't resolve to anything (revoked/rotated/typo)
+    unset($_SESSION['pending_invite_token']);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name']);
     $email = trim($_POST['email']);
     $password = $_POST['password'];
-    $role = $_POST['role'];
-    
+    $role = $invite_company ? 'employer' : $_POST['role'];
+
     if (!isset($_POST['agree_terms'])) {
         $error = "You must agree to the Terms & Conditions and PDPA Act 2010 Policy to create an account.";
     } elseif (!in_array($role, ['candidate', 'employer'])) {
@@ -67,6 +82,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div style="font-size:24px; font-weight:800; margin-bottom:6px;">Create an Account</div>
         <div style="font-size:13px; color:var(--mut); margin-bottom:24px;">Join HireLah today</div>
 
+        <?php if ($invite_company): ?>
+            <div style="background:rgba(0,232,122,0.1); border:1px solid rgba(0,232,122,0.35); border-radius:8px; padding:12px; margin-bottom:16px; text-align:left; font-size:13px; color:var(--txt);">
+                🤝 You're joining <strong><?= htmlspecialchars($invite_company['name']) ?></strong> as an HR teammate. We'll add you to their team automatically once you verify your email.
+            </div>
+        <?php endif; ?>
+
         <?php if(isset($_SESSION['toast'])): ?>
             <div class="toast-notification">
                 <span class="toast-icon-badge">🌿</span>
@@ -86,10 +107,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <input type="text" name="name" placeholder="Full Name" required style="margin-bottom:12px;">
             <input type="email" name="email" placeholder="Email Address" required style="margin-bottom:12px;">
             <input type="password" name="password" placeholder="Password" required style="margin-bottom:12px;">
-            <select name="role" required style="margin-bottom:16px;">
-                <option value="candidate">I am a Candidate</option>
-                <option value="employer">I am an Employer</option>
-            </select>
+            <?php if ($invite_company): ?>
+                <input type="hidden" name="role" value="employer">
+                <input type="hidden" name="invite_token" value="<?= htmlspecialchars($_SESSION['pending_invite_token']) ?>">
+                <div style="margin-bottom:16px; text-align:left; font-size:12.5px; color:var(--mut); padding:8px 0;">Account type: <strong style="color:var(--txt);">Employer (HR)</strong> — fixed by the invite link.</div>
+            <?php else: ?>
+                <select name="role" required style="margin-bottom:16px;">
+                    <option value="candidate">I am a Candidate</option>
+                    <option value="employer">I am an Employer</option>
+                </select>
+            <?php endif; ?>
 
             <div style="margin-bottom:20px; text-align:left; font-size:12px; color:var(--mut); display:flex; gap:10px; align-items:flex-start;">
                 <input type="checkbox" name="agree_terms" id="agree_terms" required style="width:18px; height:18px; min-height:18px; margin-top:1px; cursor:pointer; flex-shrink:0;">
@@ -103,6 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         <div style="margin-top:20px; font-size:12px; color:var(--mut);">
             Already have an account? <a href="login.php" style="color:var(--acc); font-weight:700;">Login here</a>
+            <?php if ($invite_company): ?>&mdash; you'll be added to <?= htmlspecialchars($invite_company['name']) ?> right after you log in.<?php endif; ?>
         </div>
     </div>
 <script src="theme.js"></script></body>

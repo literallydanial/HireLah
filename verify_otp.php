@@ -2,6 +2,7 @@
 session_start();
 require_once 'db.php';
 require_once 'mailer.php';
+require_once 'company_helpers.php';
 
 $user_id = $_SESSION['pending_otp_user_id'] ?? ($_GET['user_id'] ?? null);
 
@@ -46,21 +47,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $up->execute([$user_id]);
 
             unset($_SESSION['pending_otp_user_id']);
-            
+
             // Auto login user after successful OTP verification
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
             $_SESSION['user_role'] = $user['role'];
 
+            // A brand-new employer either joins the company they were invited
+            // to (link/QR carried them here via register.php), or — the
+            // normal, non-invited signup — becomes the sole admin of a new
+            // company of their own, same as every employer before this
+            // feature existed.
+            if ($user['role'] === 'employer') {
+                $invite_company = !empty($_SESSION['pending_invite_token']) ? get_company_by_invite_token($pdo, $_SESSION['pending_invite_token']) : null;
+                if ($invite_company) {
+                    join_company($pdo, $user['id'], $invite_company['id']);
+                    $_SESSION['toast'] = "Account verified! You've joined " . $invite_company['name'] . " as an HR teammate.";
+                } else {
+                    create_company_for_new_employer($pdo, $user);
+                }
+                unset($_SESSION['pending_invite_token']);
+            }
+
             if ($user['role'] === 'candidate' && !empty($_SESSION['redirect_after_login'])) {
                 $target = $_SESSION['redirect_after_login'];
                 unset($_SESSION['redirect_after_login']);
-                $_SESSION['toast'] = "Account verified & logged in! Continuing to your job application.";
+                // Generic message: this redirect now carries visitors back to
+                // whatever they were doing before verifying — a job
+                // application, or an AI Resume Checker result waiting to be
+                // shown — not just job applications.
+                $_SESSION['toast'] = "Account verified & logged in! Continuing where you left off.";
                 header("Location: " . $target);
                 exit;
             }
 
-            $_SESSION['toast'] = "Account verified successfully! Welcome to HireLah.";
+            if (empty($_SESSION['toast'])) {
+                $_SESSION['toast'] = "Account verified successfully! Welcome to HireLah.";
+            }
             header("Location: " . ($user['role'] === 'employer' ? "employer_dashboard.php" : "jobs.php"));
             exit;
         }

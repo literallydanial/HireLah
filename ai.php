@@ -2,31 +2,55 @@
 // ai.php
 
 function get_api_key() {
-    if (!empty($_SESSION['api_key'])) {
-        return $_SESSION['api_key'];
-    }
+    // Always re-read config.json rather than trusting a cached copy in
+    // $_SESSION. The previous version returned the cached value forever
+    // once a session had it, so a long-lived login (an HR tab left open for
+    // days, an admin session nobody closed) kept using whatever key/model
+    // was cached at first load — even after the key was rotated or the
+    // config re-saved by someone else. That looked exactly like "the API
+    // key stops working after the site sits idle for a while, and only
+    // re-saving the config in that browser tab fixes it" (re-saving calls
+    // save_api_config(), which force-refreshes that session's cache). A
+    // local disk read is cheap, so just do it every time and keep every
+    // session in sync with whatever is actually saved.
     $config_file = __DIR__ . '/config.json';
     if (file_exists($config_file)) {
         $json = json_decode(file_get_contents($config_file), true);
         if (!empty($json['api_key'])) {
             $_SESSION['api_key'] = $json['api_key'];
-            if (!empty($json['ai_model'])) {
-                $_SESSION['ai_model'] = $json['ai_model'];
-            }
+            $_SESSION['ai_model'] = $json['ai_model'] ?? ($_SESSION['ai_model'] ?? 'gemini-3.7-flash');
             return $json['api_key'];
         }
     }
-    return null;
+    // No key on disk — fall back to a session-only value if one was set
+    // this request (e.g. immediately after save_api_config(), before a
+    // redirect reloads the page) rather than always returning null.
+    return $_SESSION['api_key'] ?? null;
 }
 
 function save_api_config($key, $model = 'gemini-3.6-flash') {
     $_SESSION['api_key'] = $key;
     $_SESSION['ai_model'] = $model;
     $config_file = __DIR__ . '/config.json';
-    file_put_contents($config_file, json_encode([
-        'api_key' => $key,
-        'ai_model' => $model
-    ], JSON_PRETTY_PRINT));
+
+    // Read-modify-write, not overwrite: config.json also holds the SMTP
+    // settings (smtp_host/user/pass/port/from) saved from the admin's
+    // Settings page. A previous version of this function replaced the whole
+    // file with just {api_key, ai_model}, which silently deleted the SMTP
+    // config every time someone saved the Gemini API key here — breaking
+    // OTP/verification emails until an admin happened to re-save SMTP
+    // settings separately. Preserve every other existing key.
+    $curr_config = [];
+    if (file_exists($config_file)) {
+        $decoded = json_decode(file_get_contents($config_file), true);
+        if (is_array($decoded)) {
+            $curr_config = $decoded;
+        }
+    }
+    $curr_config['api_key'] = $key;
+    $curr_config['ai_model'] = $model;
+
+    file_put_contents($config_file, json_encode($curr_config, JSON_PRETTY_PRINT));
 }
 
 function call_gemini_api($api_key, $prompt) {
@@ -101,11 +125,6 @@ function call_gemini_api($api_key, $prompt) {
     }
 
     return null;
-}
-
-// Backward-compatibility alias
-function call_anthropic_claude($api_key, $prompt) {
-    return call_gemini_api($api_key, $prompt);
 }
 
 /**

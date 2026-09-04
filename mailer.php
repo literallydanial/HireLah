@@ -58,7 +58,7 @@ function send_questionnaire_email($candidate_name, $candidate_email, $job_title,
         }
         $mail->addAddress($candidate_email, $candidate_name ?: 'Candidate');
 
-        // Dynamic Base URL Resolution (Adapts to root htdocs/ or subfolder on InfinityFree)
+        // Dynamic Base URL Resolution (Adapts to root htdocs/ or a subfolder deployment)
         $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? "https" : "http";
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
         $script_dir = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/\\');

@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'db.php';
+require_once 'company_helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email']);
@@ -22,9 +23,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['user_name'] = $user['name'];
         $_SESSION['user_role'] = $user['role'];
-        
+
         $_SESSION['toast'] = "Welcome back, " . $user['name'] . "!";
-        
+
+        // If they arrived via a company invite link/QR (and logged in with an
+        // existing employer account rather than registering fresh), join that
+        // company now — instant join, the link itself is the permission.
+        if ($user['role'] === 'employer' && !empty($_SESSION['pending_invite_token'])) {
+            $invite_company = get_company_by_invite_token($pdo, $_SESSION['pending_invite_token']);
+            if ($invite_company) {
+                join_company($pdo, $user['id'], $invite_company['id']);
+                $_SESSION['toast'] = "Welcome back! You've joined " . $invite_company['name'] . " as an HR teammate.";
+            }
+            unset($_SESSION['pending_invite_token']);
+        }
+
         // Redirect back to intended job application page if candidate was applying before login
         if ($user['role'] === 'candidate' && !empty($_SESSION['redirect_after_login'])) {
             $target = $_SESSION['redirect_after_login'];

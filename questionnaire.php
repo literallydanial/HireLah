@@ -3,19 +3,26 @@ require_once 'auth.php';
 require_role('employer');
 require_once 'notifications_helper.php';
 require_once 'questionnaire_helpers.php';
+require_once 'company_helpers.php';
 
 $empNotifs = getEmployerNotifications($pdo, $_SESSION['user_id']);
 $notifItems = $empNotifs['items'];
 $unreadCount = $empNotifs['unread_count'];
 
 $employer_id = $_SESSION['user_id'];
+$active_company_id = get_active_company_id($pdo);
 
 // Handle Questionnaire Deletion
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_questionnaire') {
     $del_id = $_POST['questionnaire_id'] ?? null;
     if ($del_id) {
-        $del_stmt = $pdo->prepare("DELETE FROM questionnaires WHERE id = ? AND (employer_id = ? OR employer_id IS NULL)");
-        $del_stmt->execute([$del_id, $employer_id]);
+        if ($active_company_id) {
+            $del_stmt = $pdo->prepare("DELETE FROM questionnaires WHERE id = ? AND (company_id = ? OR (company_id IS NULL AND employer_id = ?))");
+            $del_stmt->execute([$del_id, $active_company_id, $employer_id]);
+        } else {
+            $del_stmt = $pdo->prepare("DELETE FROM questionnaires WHERE id = ? AND (employer_id = ? OR employer_id IS NULL)");
+            $del_stmt->execute([$del_id, $employer_id]);
+        }
         $_SESSION['toast'] = "Questionnaire template deleted.";
         header("Location: questionnaire.php");
         exit;
@@ -63,28 +70,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         $error = "Please add at least one question to the questionnaire.";
     } else {
         $json = json_encode($clean_questions);
-        if ($q_id) {
-            $update_stmt = $pdo->prepare("UPDATE questionnaires SET title = ?, job_id = ?, status = ?, description = ?, questions_json = ? WHERE id = ? AND (employer_id = ? OR employer_id IS NULL)");
-            $update_stmt->execute([$title, $job_id, $status, $description, $json, $q_id, $employer_id]);
-            $_SESSION['toast'] = "Questionnaire updated successfully!";
-        } else {
-            $insert_stmt = $pdo->prepare("INSERT INTO questionnaires (job_id, employer_id, title, status, description, questions_json) VALUES (?, ?, ?, ?, ?, ?)");
-            $insert_stmt->execute([$job_id, $employer_id, $title, $status, $description, $json]);
-            $_SESSION['toast'] = "New Questionnaire template saved successfully!";
+        try {
+            if ($q_id) {
+                if ($active_company_id) {
+                    $update_stmt = $pdo->prepare("UPDATE questionnaires SET title = ?, job_id = ?, status = ?, description = ?, questions_json = ? WHERE id = ? AND (company_id = ? OR (company_id IS NULL AND employer_id = ?))");
+                    $update_stmt->execute([$title, $job_id, $status, $description, $json, $q_id, $active_company_id, $employer_id]);
+                } else {
+                    $update_stmt = $pdo->prepare("UPDATE questionnaires SET title = ?, job_id = ?, status = ?, description = ?, questions_json = ? WHERE id = ? AND (employer_id = ? OR employer_id IS NULL)");
+                    $update_stmt->execute([$title, $job_id, $status, $description, $json, $q_id, $employer_id]);
+                }
+                $_SESSION['toast'] = "Questionnaire updated successfully!";
+            } else {
+                $insert_stmt = $pdo->prepare("INSERT INTO questionnaires (job_id, employer_id, company_id, title, status, description, questions_json) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $insert_stmt->execute([$job_id, $employer_id, $active_company_id, $title, $status, $description, $json]);
+                $_SESSION['toast'] = "New Questionnaire template saved successfully!";
+            }
+            header("Location: questionnaire.php");
+            exit;
+        } catch (\Throwable $e) {
+            // Without this, a DB-level failure (e.g. a NOT NULL column rejecting
+            // a template saved with no job assigned) is an uncaught exception —
+            // with display_errors off in production that renders as a blank
+            // "HTTP ERROR 500" page instead of a usable error message.
+            error_log("Questionnaire Save Error: " . $e->getMessage());
+            $error = "Could not save this questionnaire template. Please try again, or contact support if the problem continues.";
         }
-        header("Location: questionnaire.php");
-        exit;
     }
 }
 
 // Fetch all jobs for optional assignment dropdown
-$jobs_stmt = $pdo->prepare("SELECT id, job_title FROM jobs WHERE employer_id = ? OR employer_id IS NULL ORDER BY created_at DESC");
-$jobs_stmt->execute([$employer_id]);
+if ($active_company_id) {
+    $jobs_stmt = $pdo->prepare("SELECT id, job_title FROM jobs WHERE company_id = ? OR (company_id IS NULL AND employer_id = ?) ORDER BY created_at DESC");
+    $jobs_stmt->execute([$active_company_id, $employer_id]);
+} else {
+    $jobs_stmt = $pdo->prepare("SELECT id, job_title FROM jobs WHERE employer_id = ? OR employer_id IS NULL ORDER BY created_at DESC");
+    $jobs_stmt->execute([$employer_id]);
+}
 $my_jobs = $jobs_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Fetch all saved questionnaires created by employer
-$q_stmt = $pdo->prepare("SELECT q.*, j.job_title FROM questionnaires q LEFT JOIN jobs j ON q.job_id = j.id WHERE q.employer_id = ? OR q.employer_id IS NULL ORDER BY q.created_at DESC");
-$q_stmt->execute([$employer_id]);
+// Fetch all saved questionnaires for this employer's company team
+if ($active_company_id) {
+    $q_stmt = $pdo->prepare("SELECT q.*, j.job_title FROM questionnaires q LEFT JOIN jobs j ON q.job_id = j.id WHERE q.company_id = ? OR (q.company_id IS NULL AND q.employer_id = ?) ORDER BY q.created_at DESC");
+    $q_stmt->execute([$active_company_id, $employer_id]);
+} else {
+    $q_stmt = $pdo->prepare("SELECT q.*, j.job_title FROM questionnaires q LEFT JOIN jobs j ON q.job_id = j.id WHERE q.employer_id = ? OR q.employer_id IS NULL ORDER BY q.created_at DESC");
+    $q_stmt->execute([$employer_id]);
+}
 $questionnaires = $q_stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // If editing a specific questionnaire via GET param
@@ -243,6 +274,7 @@ $job_id_param = $_GET['job_id'] ?? null;
                 <a href="questionnaire.php" class="active">📋 Questionnaires</a>
                 <a href="profile.php">⚙️ Settings</a>
             </nav>
+            <?php include 'company_switcher.php'; ?>
 
             <div class="header-right-actions">
                 <div class="notif-bell-wrapper" style="position:relative; margin-right:8px;">

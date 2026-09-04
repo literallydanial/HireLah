@@ -2,13 +2,18 @@
 require_once 'auth.php';
 require_role('employer');
 require_once 'notifications_helper.php';
+require_once 'company_helpers.php';
 
 $employer_id = $_SESSION['user_id'];
 $user_role = $_SESSION['user_role'] ?? '';
+$active_company_id = get_active_company_id($pdo);
 
-// Fetch all jobs for this employer to populate job selector
+// Fetch all jobs for this employer's company team to populate job selector
 if ($user_role === 'admin') {
     $jobs_stmt = $pdo->query("SELECT id, job_title, department FROM jobs ORDER BY created_at DESC");
+} elseif ($active_company_id) {
+    $jobs_stmt = $pdo->prepare("SELECT id, job_title, department FROM jobs WHERE company_id = ? OR (company_id IS NULL AND employer_id = ?) ORDER BY created_at DESC");
+    $jobs_stmt->execute([$active_company_id, $employer_id]);
 } else {
     $jobs_stmt = $pdo->prepare("SELECT id, job_title, department FROM jobs WHERE employer_id = ? OR employer_id IS NULL ORDER BY created_at DESC");
     $jobs_stmt->execute([$employer_id]);
@@ -68,8 +73,8 @@ if (!empty($selected_ids)) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Candidate Comparison Matrix - HireLah</title>
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
-    <link rel="icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
-    <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
+    <link rel="icon" type="image/png" href="logo/logo.png">
+    <link rel="shortcut icon" type="image/png" href="logo/logo.png">
     <style>
         .compare-table-wrapper {
             overflow-x: auto;
@@ -122,7 +127,7 @@ if (!empty($selected_ids)) {
     </style>
 </head>
 <body>
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png" alt="HireLah Watermark Logo"></div>
 
     <header>
         <div class="header-inner">
@@ -136,6 +141,7 @@ if (!empty($selected_ids)) {
                 <a href="employer_dashboard.php?job_id=<?= $selected_job_id ?>">&larr; Back to Applicants</a>
                 <a href="job_dashboard.php">💼 My Jobs</a>
             </nav>
+            <?php include 'company_switcher.php'; ?>
 
             <div class="header-right-actions">
                 <span class="user-info-text" style="font-size:12px; color:var(--mut); margin-right:10px;">Logged in as <?= htmlspecialchars($_SESSION['user_name']) ?></span>

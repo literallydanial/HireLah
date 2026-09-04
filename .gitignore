@@ -1,4 +1,4 @@
-# Secrets — contains Anthropic API key and SMTP/Gmail app password.
+# Secrets — contains Gemini API key and SMTP/Gmail app password.
 # Keep this file on the server, just don't track it in git.
 config.json
 

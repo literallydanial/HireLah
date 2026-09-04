@@ -87,6 +87,10 @@ session_start();
         <div class="header-inner">
             <div style="display:flex; align-items:center; gap:10px;">
                 <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
+                <div>
+                    <div style="font-size:15px; font-weight:800; line-height:1" class="header-brand-title">HireLah Job Portal</div>
+                    <div style="font-size:9px; color:var(--mut); letter-spacing:0.8px">LEGAL & PRIVACY POLICY</div>
+                </div>
             </div>
             
             <nav style="display:flex; gap:4px; margin-left:24px">

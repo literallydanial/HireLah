@@ -3,6 +3,8 @@ session_start();
 require 'db.php';
 require_once 'questionnaire_helpers.php';
 require_once 'employer_helpers.php';
+require_once 'company_helpers.php';
+$active_company_id = (($_SESSION['user_role'] ?? '') === 'employer') ? get_active_company_id($pdo) : null;
 
 $id = $_GET['id'] ?? null;
 if (!$id) {
@@ -41,8 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($clean_custom)) {
                 $q_title = !empty($custom_title) ? $custom_title : "Custom Screening Questions";
                 $q_json = json_encode($clean_custom);
-                $ins_q = $pdo->prepare("INSERT INTO questionnaires (employer_id, title, questions_json) VALUES (?, ?, ?)");
-                $ins_q->execute([$_SESSION['user_id'], $q_title, $q_json]);
+                $ins_q = $pdo->prepare("INSERT INTO questionnaires (employer_id, company_id, title, questions_json) VALUES (?, ?, ?, ?)");
+                $ins_q->execute([$_SESSION['user_id'], $active_company_id, $q_title, $q_json]);
                 $q_id = $pdo->lastInsertId();
             }
         }
@@ -103,11 +105,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $api_key = get_api_key();
         if (!$api_key) {
             if (($_SESSION['user_role'] ?? '') === 'admin') {
-                $_SESSION['toast'] = "Please set your Google Gemini API Key first!";
+                $_SESSION['toast'] = "Please set your Anthropic API Key first!";
                 header("Location: set_key.php");
                 exit;
             }
-            $_SESSION['toast'] = "AI screening is not yet configured. Please contact your administrator to set up the Gemini API key.";
+            $_SESSION['toast'] = "AI screening is not yet configured. Please contact your administrator to set up the Anthropic API key.";
             header("Location: candidate.php?id=$id");
             exit;
         }
@@ -145,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $id
                 ]);
 
-                $_SESSION['toast'] = "Google Gemini AI Screening completed successfully!";
+                $_SESSION['toast'] = "AI Screening completed successfully!";
             } catch (Exception $e) {
                 $_SESSION['toast'] = "AI Error: " . $e->getMessage();
             }
@@ -265,11 +267,16 @@ if (empty($c['screened']) && !empty($c['stripped_text'])) {
     }
 }
 
-// Fetch saved questionnaires for employer
+// Fetch saved questionnaires for this employer's company team
 $saved_questionnaires = [];
 if (($_SESSION['user_role'] ?? '') === 'employer') {
-    $sq_stmt = $pdo->prepare("SELECT * FROM questionnaires WHERE (employer_id = ? OR job_id = ?) AND (status IS NULL OR status != 'Draft') ORDER BY created_at DESC");
-    $sq_stmt->execute([$_SESSION['user_id'], $c['job_id']]);
+    if ($active_company_id) {
+        $sq_stmt = $pdo->prepare("SELECT * FROM questionnaires WHERE (company_id = ? OR employer_id = ? OR job_id = ?) AND (status IS NULL OR status != 'Draft') ORDER BY created_at DESC");
+        $sq_stmt->execute([$active_company_id, $_SESSION['user_id'], $c['job_id']]);
+    } else {
+        $sq_stmt = $pdo->prepare("SELECT * FROM questionnaires WHERE (employer_id = ? OR job_id = ?) AND (status IS NULL OR status != 'Draft') ORDER BY created_at DESC");
+        $sq_stmt->execute([$_SESSION['user_id'], $c['job_id']]);
+    }
     $saved_questionnaires = $sq_stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -339,21 +346,24 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
     <header>
         <div class="header-inner">
             <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
+            <div>
+                <div style="font-size:15px; font-weight:800; line-height:1">HireLah AI Screener</div>
+                <div style="font-size:9px; color:var(--mut); letter-spacing:0.8px">POWERED BY GEMINI</div>
+            </div>
             <nav style="display:flex; gap:4px; margin-left:24px">
                 <?php 
                 $backLink = ($_SESSION['user_role'] ?? '') === 'employer' ? 'employer_dashboard.php' : (($_SESSION['user_role'] ?? '') === 'candidate' ? 'candidate_dashboard.php' : 'admin_dashboard.php');
                 ?>
                 <a href="<?= $backLink ?>">&larr; Back to Dashboard</a>
             </nav>
+            <?php include 'company_switcher.php'; ?>
         </div>
     </header>
     
     <main style="max-width:900px;">
         <?php if(isset($_SESSION['toast'])): ?>
-            <div class="toast-notification">
-                <span class="toast-icon-badge">🌿</span>
-                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
-                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
+            <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:var(--grn); font-size:13px; font-weight:700;">
+                <?= htmlspecialchars($_SESSION['toast']) ?>
                 <?php unset($_SESSION['toast']); ?>
             </div>
         <?php endif; ?>

@@ -2,14 +2,22 @@
 require_once 'auth.php';
 require_role('employer');
 require_once 'notifications_helper.php';
+require_once 'company_helpers.php';
 
 $empNotifs = getEmployerNotifications($pdo, $_SESSION['user_id']);
 $notifItems = $empNotifs['items'];
 $unreadCount = $empNotifs['unread_count'];
 
-// Fetch jobs for this employer
-$stmt = $pdo->prepare("SELECT * FROM jobs WHERE employer_id = ? OR employer_id IS NULL");
-$stmt->execute([$_SESSION['user_id']]);
+// Fetch jobs for this employer's whole company team (shared workspace), not
+// just the ones this particular HR account happened to post.
+$active_company_id = get_active_company_id($pdo);
+if ($active_company_id) {
+    $stmt = $pdo->prepare("SELECT * FROM jobs WHERE company_id = ? OR (company_id IS NULL AND employer_id = ?)");
+    $stmt->execute([$active_company_id, $_SESSION['user_id']]);
+} else {
+    $stmt = $pdo->prepare("SELECT * FROM jobs WHERE employer_id = ? OR employer_id IS NULL");
+    $stmt->execute([$_SESSION['user_id']]);
+}
 $jobs = $stmt->fetchAll();
 
 // Handle Job Selection
@@ -207,6 +215,10 @@ foreach ($jobs as $j) {
         <div class="header-inner">
             <div style="display:flex; align-items:center; gap:10px;">
                 <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
+                <div>
+                    <div style="font-size:15px; font-weight:800; line-height:1" class="header-brand-title">HireLah Job Portal</div>
+                    <div style="font-size:9px; color:var(--mut); letter-spacing:0.8px">RECRUITMENT PLATFORM</div>
+                </div>
             </div>
             
             <nav style="display:flex; gap:4px; margin-left:24px">
@@ -215,6 +227,7 @@ foreach ($jobs as $j) {
                 <a href="questionnaire.php">📋 Questionnaires</a>
                 <a href="profile.php">⚙️ Settings</a>
             </nav>
+            <?php include 'company_switcher.php'; ?>
 
             <div class="header-right-actions">
                 <div class="notif-bell-wrapper" style="position:relative; margin-right:8px;">
@@ -264,10 +277,8 @@ foreach ($jobs as $j) {
     
     <main>
         <?php if(isset($_SESSION['toast'])): ?>
-            <div class="toast-notification">
-                <span class="toast-icon-badge">🌿</span>
-                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
-                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
+            <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:var(--grn); font-size:13px; font-weight:700;">
+                <?= htmlspecialchars($_SESSION['toast']) ?>
                 <?php unset($_SESSION['toast']); ?>
             </div>
         <?php endif; ?>
@@ -531,7 +542,7 @@ foreach ($jobs as $j) {
                 <div class="tr th">
                     <div>Rank</div><div>👤 Candidate</div><div>🔧 Top Skills</div>
                     <div style="text-align:center">📊 Score</div>
-                    <div>🤖 Gemini Verdict</div><div>📋 HR Status</div>
+                    <div>🤖 Claude Verdict</div><div>📋 HR Status</div>
                     <div>📅 Applied</div><div style="text-align:center">⚙ Actions</div>
                 </div>
                 

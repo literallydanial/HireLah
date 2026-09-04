@@ -850,7 +850,7 @@ if (file_exists('db.php')) {
         }
         .energy-headline .accent { color: #0A0A0A; background: #D9FF4F; padding: 0 8px; position: relative; z-index: 1; }
         .energy-subtext { font-size: 16px; color: #555; max-width: 460px; margin: -190px 0 32px; line-height: 1.5; position: relative; z-index: 1; }
-        .energy-cta-row { display: flex; align-items: center; gap: 14px; margin-bottom: 40px; flex-wrap: wrap; position: relative; z-index: 1; }
+        .energy-cta-row { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; flex-wrap: wrap; position: relative; z-index: 1; }
         .btn-lime {
             display: inline-flex; align-items: center; gap: 8px;
             background: #D9FF4F; color: #0A0A0A;
@@ -869,6 +869,31 @@ if (file_exists('db.php')) {
             transition: transform 0.15s ease;
         }
         .btn-outline-dark:hover { transform: translateY(-2px); }
+
+        /* Callout so it's obvious "Upload Resume" runs the free AI Resume
+           Check, not just a generic file upload. */
+        .resume-check-wrap { position: relative; display: inline-flex; }
+        .resume-check-flag {
+            position: absolute; top: -16px; right: -14px; z-index: 2;
+            background: #4F3FF0; color: #FFFFFF;
+            font-weight: 800; font-size: 10.5px; letter-spacing: 0.2px;
+            white-space: nowrap;
+            padding: 5px 10px; border-radius: 999px;
+            transform: rotate(8deg);
+            box-shadow: 0 6px 14px rgba(79,63,240,0.35);
+            pointer-events: none;
+            animation: resumeFlagPop 2.4s ease-in-out infinite;
+        }
+        @keyframes resumeFlagPop {
+            0%, 100% { transform: rotate(8deg) translateY(0); }
+            50% { transform: rotate(8deg) translateY(-3px); }
+        }
+        .energy-cta-caption {
+            width: 100%;
+            font-size: 12.5px; color: #6B6B6B;
+            margin: 0 0 40px; position: relative; z-index: 1;
+        }
+        [data-theme="dark"] .energy-cta-caption { color: rgba(249, 250, 251, 0.55); }
 
         .energy-visual { position: relative; padding: 20px; }
         .energy-visual-blob {
@@ -963,15 +988,24 @@ if (file_exists('db.php')) {
             .energy-stat-bar { grid-template-columns: repeat(2, 1fr); }
             .energy-stat-item { border-bottom: 1px solid rgba(255,255,255,0.12); }
         }
+        @media (max-width: 520px) {
+            /* The CTA buttons wrap onto separate lines here, so the "Free AI
+               Check" flag needs room above Upload Resume instead of
+               overlapping the Search Jobs button sitting right above it. */
+            .energy-cta-row { row-gap: 30px; }
+            .resume-check-flag { top: -13px; right: 2px; font-size: 10px; padding: 4px 9px; }
+            /* Clear the fixed round theme-toggle button (bottom:20px;
+               left:20px; 45px wide) so the caption's first line doesn't
+               render underneath it. */
+            .energy-cta-caption { padding-left: 58px; }
+        }
         /* ================= End Hero Redesign ================= */
     </style>
 </head>
 <body>
     <?php if(isset($_SESSION['toast'])): ?>
-        <div class="toast-notification">
-            <span class="toast-icon-badge">🌿</span>
-            <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
-            <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
+        <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:#00E87A; font-size:13px; font-weight:700; font-family:sans-serif; backdrop-filter:blur(10px);">
+            ✓ <?= htmlspecialchars($_SESSION['toast']) ?>
             <?php unset($_SESSION['toast']); ?>
         </div>
     <?php endif; ?>
@@ -1030,11 +1064,15 @@ if (file_exists('db.php')) {
                         Search Jobs
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
                     </a>
-                    <a href="resume_check.php" class="btn-outline-dark">
-                        Upload Resume
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 8 5-5 5 5"></path><path d="M5 21h14"></path></svg>
-                    </a>
+                    <span class="resume-check-wrap">
+                        <span class="resume-check-flag">✨ Free AI Check</span>
+                        <a href="resume_check.php" class="btn-outline-dark">
+                            Upload Resume
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 8 5-5 5 5"></path><path d="M5 21h14"></path></svg>
+                        </a>
+                    </span>
                 </div>
+                <p class="energy-cta-caption">👆 Get instant AI-powered feedback &amp; a match score on your resume &mdash; no job application needed.</p>
             </div>
 
             <!-- Right Column: Interactive Card Preview -->
