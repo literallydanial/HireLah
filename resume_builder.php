@@ -251,19 +251,17 @@ try {
         .resume-doc li { margin-bottom: 4px; }
 
         @media print {
-            body * { visibility: hidden; }
-            #printArea, #printArea * { visibility: visible; }
-            /* position:fixed (not absolute) anchors to the actual viewport/page,
-               ignoring the surrounding .panel's position:relative — with
-               absolute, #printArea was positioned relative to that .panel,
-               which itself sits far down the page behind everything above it
-               (visibility:hidden keeps elements' layout space, it just hides
-               their painting), producing a large blank top margin. */
-            #printArea {
-                position: fixed; top: 0; left: 0; width: 100%; border: none; padding: 0; margin: 0; box-shadow: none;
-                font-size: 12px; line-height: 1.35;
-                background: #fff;
-            }
+            /* Hide specific known elements by name instead of "hide everything,
+               then re-show the target" (visibility/display tricks on body *
+               kept catching either #printArea's own ancestors or its
+               positioning context, causing a blank page or a large blank
+               top margin in earlier attempts). #printArea is left in normal
+               document flow — once everything before it is removed, it
+               naturally renders at the top with no positioning hack needed. */
+            .bg-watermark-logo, header, #resumeIntroPanel, #resumeResultHeader, #pastResumesPanel { display: none !important; }
+            main { margin: 0 !important; padding: 0 !important; max-width: none !important; }
+            #resumeResultPanel { background: none !important; border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
+            #printArea { font-size: 12px; line-height: 1.35; }
             /* Tighter vertical rhythm than the on-screen preview so a typical
                one-page resume's worth of content doesn't spill a couple of
                lines onto an otherwise-empty second page. */
@@ -318,7 +316,7 @@ try {
 
     <main style="max-width:1180px; margin:36px auto; padding:0 24px; position:relative; z-index:2;">
 
-        <div class="panel" style="margin-bottom:24px;">
+        <div class="panel" id="resumeIntroPanel" style="margin-bottom:24px;">
             <div class="panel-title">🪄 AI Resume Builder</div>
             <div style="font-size:13px; color:var(--mut);">
                 Fill in your details (rough notes are fine), and AI will turn them into a polished, professional resume you can download.
@@ -339,8 +337,8 @@ try {
 
         <?php if($generated): ?>
             <!-- ===== GENERATED RESUME PREVIEW ===== -->
-            <div class="panel" style="margin-bottom:20px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+            <div class="panel" id="resumeResultPanel" style="margin-bottom:20px;">
+                <div id="resumeResultHeader" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
                     <div class="panel-title" style="margin-bottom:0;">✅ Your Resume is Ready</div>
                     <div style="display:flex; gap:8px;">
                         <button onclick="window.print()" class="btn-primary" style="padding:9px 16px; font-size:12.5px;">⬇ Download as PDF</button>
@@ -472,7 +470,7 @@ try {
         <?php endif; ?>
 
         <?php if(!empty($past_builds)): ?>
-            <div class="panel" style="margin:24px 0 40px;">
+            <div class="panel" id="pastResumesPanel" style="margin:24px 0 40px;">
                 <div class="panel-title">🕓 Your Previous Resumes</div>
                 <?php foreach($past_builds as $pb): ?>
                     <a href="resume_builder.php?view=<?= (int)$pb['id'] ?>" style="display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--bdr); font-size:12.5px; text-decoration:none; color:inherit;">
