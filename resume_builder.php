@@ -251,10 +251,14 @@ try {
         .resume-doc li { margin-bottom: 4px; }
 
         @media print {
-            body * { visibility: hidden; }
-            #printArea, #printArea * { visibility: visible; }
+            /* display:none (not visibility:hidden) so hidden elements are fully
+               removed from layout — visibility:hidden still reserves their
+               space, which pushed #printArea's absolute-positioned box down
+               by the height of everything above it, leaving a blank top margin. */
+            body * { display: none; }
+            #printArea, #printArea * { display: revert; }
             #printArea {
-                position: absolute; top: 0; left: 0; width: 100%; border: none; padding: 0; box-shadow: none;
+                position: static; width: 100%; border: none; padding: 0; margin: 0; box-shadow: none;
                 font-size: 12px; line-height: 1.35;
             }
             /* Tighter vertical rhythm than the on-screen preview so a typical
