@@ -395,13 +395,13 @@ try {
 
                 <!-- ---- FORM MODE ---- -->
                 <div class="mode-panel active" id="formPanel">
-                    <div class="panel" style="margin-bottom:20px;">
-                        <div class="panel-title">💼 Work Experience</div>
+                    <div class="panel" id="expPanel" style="margin-bottom:20px;">
+                        <div class="panel-title" id="expPanelTitle">💼 Work Experience</div>
                         <div id="expContainer"></div>
                         <button type="button" class="add-btn" onclick="addExp()">+ Add Work Experience</button>
                     </div>
 
-                    <div class="panel" style="margin-bottom:20px;">
+                    <div class="panel" id="eduPanel" style="margin-bottom:20px;">
                         <div class="panel-title">🎓 Education</div>
                         <div id="eduContainer"></div>
                         <button type="button" class="add-btn" onclick="addEdu()">+ Add Education</button>
@@ -489,6 +489,27 @@ function addEdu() {
 // Start with one of each
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('expContainer')) { addExp(); addEdu(); }
+});
+
+// Fresh-grad toggle: reorder Education before Work Experience, relabel the
+// Work Experience panel as internships/projects, since a fresh grad's
+// "experience" is usually one of those rather than a job.
+document.addEventListener('DOMContentLoaded', function() {
+    const freshGradCheck = document.getElementById('freshGradCheck');
+    if (!freshGradCheck) return;
+    freshGradCheck.addEventListener('change', function() {
+        const formPanelEl = document.getElementById('formPanel');
+        const expPanel = document.getElementById('expPanel');
+        const eduPanel = document.getElementById('eduPanel');
+        const expTitle = document.getElementById('expPanelTitle');
+        if (this.checked) {
+            expTitle.textContent = '💼 Internships / Part-Time Jobs / Projects (optional)';
+            formPanelEl.insertBefore(eduPanel, expPanel);
+        } else {
+            expTitle.textContent = '💼 Work Experience';
+            formPanelEl.insertBefore(expPanel, eduPanel);
+        }
+    });
 });
 
 // ================== MODE SWITCHER ==================
