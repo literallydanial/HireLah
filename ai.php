@@ -577,11 +577,13 @@ function generate_fallback_resume_document($input) {
     ];
 }
 
-function generate_resume_document($api_key, $input) {
-    if (!empty($api_key)) {
-        try {
-            $input_json = json_encode($input, JSON_PRETTY_PRINT);
-            $prompt = <<<PROMPT
+function build_resume_prompt($input) {
+    $input_json = json_encode($input, JSON_PRETTY_PRINT);
+    $fresh_grad_note = '';
+    if (!empty($input['is_fresh_grad'])) {
+        $fresh_grad_note = "\n\nThis candidate is a fresh graduate with little or no full-time work history. Write the summary around their education, academic projects, and coursework. Treat any listed internships/part-time work as supporting evidence of transferable skills, not a career history. Do not imply years of professional experience the candidate doesn't have. Emphasize potential, foundational skills, and eagerness to start their career.";
+    }
+    return <<<PROMPT
 You are an expert resume writer helping a candidate build a professional resume from their own rough notes. Turn the raw input below into polished, professional resume content — proper grammar, active verbs, concise impact-focused bullet points. Do NOT invent facts, companies, numbers, or achievements that are not implied by the candidate's notes — only rephrase and structure what they gave you.
 
 CANDIDATE'S TARGET ROLE AND RAW NOTES (JSON):
@@ -605,8 +607,14 @@ Output strictly a JSON object, no text outside the JSON:
     "skills": ["cleaned up skill", "..."]
 }
 
-Keep the same number of experience/education entries as given in the input, in the same order. Each experience entry should have 2-4 bullet points.
+Keep the same number of experience/education entries as given in the input, in the same order. Each experience entry should have 2-4 bullet points.{$fresh_grad_note}
 PROMPT;
+}
+
+function generate_resume_document($api_key, $input) {
+    if (!empty($api_key)) {
+        try {
+            $prompt = build_resume_prompt($input);
 
             $response = call_gemini_api($api_key, $prompt);
 
