@@ -251,15 +251,18 @@ try {
         .resume-doc li { margin-bottom: 4px; }
 
         @media print {
-            /* display:none (not visibility:hidden) so hidden elements are fully
-               removed from layout — visibility:hidden still reserves their
-               space, which pushed #printArea's absolute-positioned box down
-               by the height of everything above it, leaving a blank top margin. */
-            body * { display: none; }
-            #printArea, #printArea * { display: revert; }
+            body * { visibility: hidden; }
+            #printArea, #printArea * { visibility: visible; }
+            /* position:fixed (not absolute) anchors to the actual viewport/page,
+               ignoring the surrounding .panel's position:relative — with
+               absolute, #printArea was positioned relative to that .panel,
+               which itself sits far down the page behind everything above it
+               (visibility:hidden keeps elements' layout space, it just hides
+               their painting), producing a large blank top margin. */
             #printArea {
-                position: static; width: 100%; border: none; padding: 0; margin: 0; box-shadow: none;
+                position: fixed; top: 0; left: 0; width: 100%; border: none; padding: 0; margin: 0; box-shadow: none;
                 font-size: 12px; line-height: 1.35;
+                background: #fff;
             }
             /* Tighter vertical rhythm than the on-screen preview so a typical
                one-page resume's worth of content doesn't spill a couple of
