@@ -43,8 +43,9 @@ if (file_exists('db.php')) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&family=Anton&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
-    <link rel="icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
-    <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
+    <link rel="icon" type="image/png" href="assets/casey-2.png?v=<?php echo @filemtime(__DIR__.'/assets/casey-2.png'); ?>">
+    <link rel="shortcut icon" type="image/png" href="assets/casey-2.png?v=<?php echo @filemtime(__DIR__.'/assets/casey-2.png'); ?>">
+    <link rel="apple-touch-icon" href="assets/casey-1.png?v=<?php echo @filemtime(__DIR__.'/assets/casey-1.png'); ?>">
     <style>
         /* CSS Variables for Light Mode (Default) and Dark Mode */
         :root {
@@ -1049,7 +1050,7 @@ if (file_exists('db.php')) {
             <!-- Left Column: Copy & CTAs -->
             <div>
                 <div class="energy-headline-wrap">
-                    <img src="assets/hero-photo.png" alt="" class="energy-headline-bg-photo">
+                    <img src="assets/casey-2.png" alt="" class="energy-headline-bg-photo">
                     <h1 class="energy-headline">
                         Find work that<br>actually fits, <span class="accent">lah.</span>
                     </h1>
