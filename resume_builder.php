@@ -405,6 +405,13 @@ try {
                         <h4>Skills</h4>
                         <div><?= htmlspecialchars(implode(' · ', $generated['skills'])) ?></div>
                     <?php endif; ?>
+
+                    <?php if(!empty($generated['achievements'])): ?>
+                        <h4>Achievements</h4>
+                        <ul>
+                            <?php foreach($generated['achievements'] as $a): ?><li><?= htmlspecialchars($a) ?></li><?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
                 </div>
             </div>
         <?php else: ?>

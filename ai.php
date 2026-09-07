@@ -567,6 +567,7 @@ function generate_fallback_resume_document($input) {
     }
 
     $skills = array_values(array_filter(array_map('trim', explode(',', $input['skills'] ?? ''))));
+    $achievements = $clean_bullets($input['extra_notes'] ?? '');
     $target_title = $input['target_title'] ?? 'Professional';
 
     if (!empty($input['is_fresh_grad']) || count($experience) === 0) {
@@ -586,7 +587,8 @@ function generate_fallback_resume_document($input) {
         'summary' => $summary,
         'experience' => $experience,
         'education' => $education,
-        'skills' => $skills
+        'skills' => $skills,
+        'achievements' => $achievements
     ];
 }
 
@@ -617,10 +619,11 @@ Output strictly a JSON object, no text outside the JSON:
     "education": [
         {"degree": "as given", "school": "as given", "year": "as given"}
     ],
-    "skills": ["cleaned up skill", "..."]
+    "skills": ["cleaned up skill", "..."],
+    "achievements": ["cleaned up certification/award/achievement/language from extra_notes, one per entry", "..."]
 }
 
-Keep the same number of experience/education entries as given in the input, in the same order. Each experience entry should have 2-4 bullet points.{$fresh_grad_note}
+Keep the same number of experience/education entries as given in the input, in the same order. Each experience entry should have 2-4 bullet points. The "achievements" array must be built ONLY from the candidate's "extra_notes" field (certifications, achievements, awards, languages, or anything else they listed there) — split it into short, individually-listable entries. If extra_notes is empty, output an empty array for "achievements". Do not put achievements content into "summary" or "skills" instead — it belongs in its own "achievements" array.{$fresh_grad_note}
 PROMPT;
 }
 
