@@ -253,7 +253,20 @@ try {
         @media print {
             body * { visibility: hidden; }
             #printArea, #printArea * { visibility: visible; }
-            #printArea { position: absolute; top: 0; left: 0; width: 100%; border: none; padding: 0; box-shadow: none; }
+            #printArea {
+                position: absolute; top: 0; left: 0; width: 100%; border: none; padding: 0; box-shadow: none;
+                font-size: 12px; line-height: 1.35;
+            }
+            /* Tighter vertical rhythm than the on-screen preview so a typical
+               one-page resume's worth of content doesn't spill a couple of
+               lines onto an otherwise-empty second page. */
+            #printArea h2 { font-size: 18px; }
+            #printArea h4 { margin: 12px 0 6px; padding-bottom: 3px; }
+            #printArea .contact-line { margin-bottom: 10px; }
+            #printArea ul { margin: 0 0 8px; }
+            #printArea li { margin-bottom: 2px; }
+            #printArea .job-h, #printArea .job-meta { margin-bottom: 0; }
+            @page { size: A4; margin: 12mm; }
         }
     </style>
 </head>
