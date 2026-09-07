@@ -259,6 +259,12 @@ try {
                document flow — once everything before it is removed, it
                naturally renders at the top with no positioning hack needed. */
             .bg-watermark-logo, header, #resumeIntroPanel, #resumeResultHeader, #pastResumesPanel { display: none !important; }
+            /* .rb-glow-1/.rb-glow-2 are decorative blurred background orbs;
+               body > button is the light/dark theme toggle theme.js injects
+               directly onto <body> — neither lives inside main/header, so
+               the selectors above never caught them. */
+            .rb-glow-1, .rb-glow-2, body > button { display: none !important; }
+            body { background: #fff !important; }
             main { margin: 0 !important; padding: 0 !important; max-width: none !important; }
             #resumeResultPanel { background: none !important; border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
             #printArea {
