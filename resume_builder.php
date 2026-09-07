@@ -39,6 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'gener
     $contact_email = trim($_POST['contact_email'] ?? '');
     $contact_phone = trim($_POST['contact_phone'] ?? '');
     $location = trim($_POST['location'] ?? '');
+    $is_fresh_grad = isset($_POST['is_fresh_grad']);
 
     $experience = [];
     foreach (($_POST['exp_company'] ?? []) as $i => $company) {
@@ -64,7 +65,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'gener
         'experience' => $experience,
         'education' => $education,
         'skills' => trim($_POST['skills'] ?? ''),
-        'extra_notes' => trim($_POST['extra_notes'] ?? '')
+        'extra_notes' => trim($_POST['extra_notes'] ?? ''),
+        'is_fresh_grad' => $is_fresh_grad
     ];
 
     if ($target_title === '' && empty($experience)) {
@@ -380,6 +382,10 @@ try {
                         <div><label class="f">Target Job Title</label><input type="text" name="target_title" id="targetTitleInput" placeholder="e.g. Digital Marketing Executive" required></div>
                         <div><label class="f">Location</label><input type="text" name="location" placeholder="e.g. Kuala Lumpur"></div>
                     </div>
+                    <label class="f" style="display:flex; align-items:center; gap:6px; margin-top:8px; cursor:pointer;">
+                        <input type="checkbox" name="is_fresh_grad" id="freshGradCheck" style="width:auto;">
+                        I'm a fresh graduate / have little work experience
+                    </label>
                 </div>
 
                 <div class="mode-tabs">
