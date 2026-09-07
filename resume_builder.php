@@ -532,6 +532,7 @@ function switchMode(mode) {
 // ================== CHAT MODE ==================
 let chatStarted = false;
 let chatStep = null;
+let chatIsFreshGrad = false;
 let chatExperiences = [];
 let chatEducations = [];
 let chatCurrentExp = {};
@@ -579,8 +580,14 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function chatStart() {
-    chatAddMsg("Let's build your resume together! First, tell me about your most recent job — what company did you work at?", 'ai');
-    chatStep = 'exp_company';
+    chatIsFreshGrad = document.getElementById('freshGradCheck').checked;
+    if (chatIsFreshGrad) {
+        chatAddMsg("Let's build your resume together! Since you're a fresh graduate, let's start with your education — what's your degree or qualification?", 'ai');
+        chatStep = 'edu_degree';
+    } else {
+        chatAddMsg("Let's build your resume together! First, tell me about your most recent job — what company did you work at?", 'ai');
+        chatStep = 'exp_company';
+    }
 }
 
 function chatAdvance(answer) {
@@ -612,9 +619,22 @@ function chatAdvance(answer) {
             if (answer.toLowerCase().startsWith('yes')) {
                 chatAddMsg('Great — what company was that at?', 'ai');
                 chatStep = 'exp_company';
+            } else if (chatIsFreshGrad) {
+                chatAddMsg('Last thing — list your key skills, separated by commas (e.g. "Canva, Excel, Mandarin").', 'ai');
+                chatStep = 'skills';
             } else {
                 chatAddMsg("Now let's cover your education. What's your degree or qualification?", 'ai');
                 chatStep = 'edu_degree';
+            }
+            break;
+        case 'exp_intro_skip':
+            if (['skip', 'no', 'none', ''].includes(answer.trim().toLowerCase())) {
+                chatAddMsg('Last thing — list your key skills, separated by commas (e.g. "Canva, Excel, Mandarin").', 'ai');
+                chatStep = 'skills';
+            } else {
+                chatCurrentExp = { company: answer };
+                chatAddMsg('And what was your role there?', 'ai');
+                chatStep = 'exp_role';
             }
             break;
         case 'edu_degree':
@@ -639,6 +659,9 @@ function chatAdvance(answer) {
             if (answer.toLowerCase().startsWith('yes')) {
                 chatAddMsg('Sure — what degree or qualification?', 'ai');
                 chatStep = 'edu_degree';
+            } else if (chatIsFreshGrad) {
+                chatAddMsg("Do you have any internships, part-time jobs, or class/personal projects you'd like to include? Type them in, or type 'skip'.", 'ai');
+                chatStep = 'exp_intro_skip';
             } else {
                 chatAddMsg('Last thing — list your key skills, separated by commas (e.g. "Canva, Excel, Mandarin").', 'ai');
                 chatStep = 'skills';
