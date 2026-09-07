@@ -261,7 +261,11 @@ try {
             .bg-watermark-logo, header, #resumeIntroPanel, #resumeResultHeader, #pastResumesPanel { display: none !important; }
             main { margin: 0 !important; padding: 0 !important; max-width: none !important; }
             #resumeResultPanel { background: none !important; border: none !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
-            #printArea { font-size: 12px; line-height: 1.35; }
+            #printArea {
+                background: none !important; border: none !important; box-shadow: none !important;
+                border-radius: 0 !important; padding: 0 !important;
+                font-size: 12px; line-height: 1.35;
+            }
             /* Tighter vertical rhythm than the on-screen preview so a typical
                one-page resume's worth of content doesn't spill a couple of
                lines onto an otherwise-empty second page. */
