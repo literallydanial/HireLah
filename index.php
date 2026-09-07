@@ -832,7 +832,7 @@ if (file_exists('db.php')) {
             object-fit: contain;
             object-position: 50% 100%;
             transform: translateY(120px);
-            opacity: 0.18;
+            opacity: 0.85;
             z-index: 0;
             pointer-events: none;
             user-select: none;
@@ -952,6 +952,10 @@ if (file_exists('db.php')) {
             background-image: radial-gradient(rgba(255, 255, 255, 0.10) 1.5px, transparent 1.5px);
         }
         [data-theme="dark"] .energy-headline { color: #F5F5F5; }
+        [data-theme="dark"] .energy-headline-bg-photo {
+            opacity: 0.85;
+            filter: brightness(0) invert(1) drop-shadow(0 8px 25px rgba(255, 255, 255, 0.12));
+        }
         [data-theme="dark"] .energy-subtext { color: rgba(249, 250, 251, 0.65); }
         [data-theme="dark"] .btn-outline-dark {
             background: transparent;
@@ -980,10 +984,336 @@ if (file_exists('db.php')) {
         [data-theme="dark"] .job-item-title { color: #F5F5F5; }
         [data-theme="dark"] .job-item-meta { color: #A6A6AE; }
 
+        .energy-pill-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #0A0A0A;
+            color: #D9FF4F;
+            font-size: 11.5px;
+            font-weight: 800;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            padding: 6px 14px;
+            border-radius: 999px;
+            margin-bottom: 12px;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+        }
+        [data-theme="dark"] .energy-pill-tag {
+            background: #2A2B30;
+            color: #D9FF4F;
+            border: 1px solid rgba(217, 255, 79, 0.3);
+        }
+
+        .btn-link-jobs {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #555555;
+            font-weight: 600;
+            font-size: 14.5px;
+            text-decoration: none;
+            padding: 8px 12px;
+            transition: color 0.2s ease, transform 0.2s ease;
+        }
+        .btn-link-jobs:hover {
+            color: #0A0A0A;
+            transform: translateX(3px);
+        }
+        [data-theme="dark"] .btn-link-jobs {
+            color: rgba(249, 250, 251, 0.65);
+        }
+        [data-theme="dark"] .btn-link-jobs:hover {
+            color: #D9FF4F;
+        }
+
+        /* AI Score Banner */
+        .ai-score-banner {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: linear-gradient(135deg, rgba(79, 63, 240, 0.08) 0%, rgba(217, 255, 79, 0.12) 100%);
+            border: 1px solid rgba(79, 63, 240, 0.2);
+            border-radius: 16px;
+            padding: 14px 18px;
+            margin-bottom: 14px;
+        }
+        [data-theme="dark"] .ai-score-banner {
+            background: linear-gradient(135deg, rgba(79, 63, 240, 0.18) 0%, rgba(217, 255, 79, 0.08) 100%);
+            border-color: rgba(79, 63, 240, 0.35);
+        }
+        .ai-score-radial {
+            width: 48px;
+            height: 48px;
+            background: #4F3FF0;
+            color: #FFFFFF;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Space Grotesk', sans-serif;
+            font-weight: 800;
+            box-shadow: 0 4px 14px rgba(79, 63, 240, 0.35);
+            flex-shrink: 0;
+        }
+        .ai-score-num { font-size: 19px; line-height: 1; }
+        .ai-score-denom { font-size: 10px; opacity: 0.8; margin-left: 1px; }
+        .ai-score-status { font-weight: 700; font-size: 13.5px; color: #120D2C; margin-bottom: 2px; }
+        [data-theme="dark"] .ai-score-status { color: #FFFFFF; }
+        .ai-score-sub { font-size: 11.5px; color: #6C6C8A; font-weight: 500; }
+        [data-theme="dark"] .ai-score-sub { color: #A6A6AE; }
+
+        /* Quick AI Tools Cards */
+        .ai-quick-tools-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .ai-tool-mini-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--job-card-bg);
+            border: 1px solid var(--job-card-border);
+            border-radius: 14px;
+            padding: 12px 16px;
+            text-decoration: none;
+            transition: all 0.22s ease;
+        }
+        .ai-tool-mini-card:hover {
+            border-color: #B9D600;
+            transform: translateX(3px);
+            background: #FFFFFF;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        }
+        [data-theme="dark"] .ai-tool-mini-card {
+            background: #26272B;
+            border-color: #34353A;
+        }
+        [data-theme="dark"] .ai-tool-mini-card:hover {
+            background: #2E2F34;
+            border-color: #D9FF4F;
+        }
+        .ai-tool-icon {
+            font-size: 20px;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: rgba(217, 255, 79, 0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        [data-theme="dark"] .ai-tool-icon {
+            background: rgba(217, 255, 79, 0.12);
+        }
+        .ai-tool-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: #120D2C;
+        }
+        [data-theme="dark"] .ai-tool-name { color: #F5F5F5; }
+        .ai-tool-desc {
+            font-size: 11.5px;
+            color: #6C6C8A;
+            font-weight: 500;
+        }
+        [data-theme="dark"] .ai-tool-desc { color: #A6A6AE; }
+        .ai-tool-arrow {
+            margin-left: auto;
+            color: #6B7F00;
+            font-weight: 700;
+            font-size: 16px;
+            transition: transform 0.2s ease;
+        }
+        [data-theme="dark"] .ai-tool-arrow { color: #D9FF4F; }
+        .ai-tool-mini-card:hover .ai-tool-arrow { transform: translateX(3px); }
+
+        .card-action-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #4F3FF0;
+            text-decoration: none;
+            margin-top: 14px;
+            transition: gap 0.2s ease, color 0.2s ease;
+        }
+        .card-action-link:hover {
+            gap: 9px;
+            color: #3729C9;
+        }
+        [data-theme="dark"] .card-action-link {
+            color: #D9FF4F;
+        }
+        [data-theme="dark"] .card-action-link:hover {
+            color: #E6FF80;
+        }
+
+        .nav-badge-pill {
+            background: linear-gradient(135deg, #4F3FF0, #7B00FF);
+            color: #FFFFFF;
+            font-size: 10.5px;
+            font-weight: 800;
+            padding: 2px 7px;
+            border-radius: 999px;
+            margin-left: 4px;
+            letter-spacing: 0.3px;
+        }
+
+        /* ================= Social Buttons & Modern Footer ================= */
+        .header-social-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 6px;
+        }
+        .header-social-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: rgba(10, 10, 10, 0.05);
+            color: #1A1A1A;
+            text-decoration: none;
+            transition: all 0.22s ease;
+        }
+        .header-social-btn:hover {
+            transform: translateY(-2px);
+        }
+        .header-social-btn.instagram:hover {
+            background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%);
+            color: #FFFFFF;
+            box-shadow: 0 4px 12px rgba(214, 36, 159, 0.35);
+        }
+        .header-social-btn.tiktok:hover {
+            background: #000000;
+            color: #FFFFFF;
+            box-shadow: -2px -2px 8px rgba(0, 242, 254, 0.4), 2px 2px 8px rgba(254, 44, 85, 0.4);
+        }
+        [data-theme="dark"] .header-social-btn {
+            background: #26272B;
+            color: #F5F5F5;
+        }
+
+        .energy-footer {
+            background: #0A0A0A;
+            color: #FFFFFF;
+            padding: 60px 6% 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            position: relative;
+            z-index: 2;
+        }
+        [data-theme="dark"] .energy-footer {
+            background: #111215;
+            border-top-color: #222328;
+        }
+        .footer-container {
+            max-width: 1280px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1.4fr 1.3fr 1fr;
+            gap: 48px;
+            align-items: flex-start;
+            padding-bottom: 40px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .footer-brand-col { max-width: 340px; }
+        .footer-tagline {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.65);
+            line-height: 1.6;
+            margin-top: 12px;
+        }
+        .footer-social-col { display: flex; flex-direction: column; gap: 14px; }
+        .footer-col-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            color: #FFFFFF;
+            letter-spacing: 0.5px;
+        }
+        .footer-social-buttons {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .btn-social {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 18px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-size: 13.5px;
+            font-weight: 700;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        .btn-social.btn-instagram {
+            background: rgba(255, 255, 255, 0.06);
+            color: #FFFFFF;
+        }
+        .btn-social.btn-instagram:hover {
+            background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%);
+            border-color: transparent;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(214, 36, 159, 0.45);
+        }
+        .btn-social.btn-tiktok {
+            background: rgba(255, 255, 255, 0.06);
+            color: #FFFFFF;
+        }
+        .btn-social.btn-tiktok:hover {
+            background: #000000;
+            border-color: transparent;
+            transform: translateY(-2px);
+            box-shadow: -2px -2px 14px rgba(0, 242, 254, 0.6), 2px 2px 14px rgba(254, 44, 85, 0.6);
+        }
+        .footer-links-col { display: flex; flex-direction: column; gap: 14px; }
+        .footer-quick-links {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .footer-quick-links a {
+            color: rgba(255, 255, 255, 0.65);
+            text-decoration: none;
+            font-size: 13.5px;
+            transition: color 0.2s ease, transform 0.2s ease;
+        }
+        .footer-quick-links a:hover {
+            color: #D9FF4F;
+            transform: translateX(3px);
+        }
+        .footer-bottom-bar {
+            max-width: 1280px;
+            margin: 24px auto 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12.5px;
+            color: rgba(255, 255, 255, 0.45);
+        }
+        @media (max-width: 900px) {
+            .footer-container {
+                grid-template-columns: 1fr;
+                gap: 32px;
+            }
+        }
         @media (max-width: 900px) {
             .energy-header { padding: 16px 20px; }
             .energy-nav { gap: 16px; }
             .energy-nav a.energy-nav-link { display: none; }
+            .header-social-group { display: none; }
             .energy-hero-section { padding: 40px 20px 0; }
             .energy-hero-grid { grid-template-columns: 1fr; }
             .energy-stat-bar { grid-template-columns: repeat(2, 1fr); }
@@ -1023,9 +1353,18 @@ if (file_exists('db.php')) {
 
         <nav class="energy-nav">
             <a href="#features" class="energy-nav-link">How it works</a>
-            <a href="jobs.php" class="energy-nav-link">Find Jobs</a>
+            <a href="resume_check.php" class="energy-nav-link" style="color:var(--txt-primary); font-weight:700;">✨ AI Check <span class="nav-badge-pill">Free</span></a>
             <a href="resume_builder.php" class="energy-nav-link">Resume Builder</a>
+            <a href="jobs.php" class="energy-nav-link">Find Jobs</a>
             <a href="register.php" class="energy-nav-link">Join HireLah</a>
+            <div class="header-social-group">
+                <a href="https://www.instagram.com/hirelah.my" target="_blank" rel="noopener noreferrer" class="header-social-btn instagram" title="Follow us on Instagram @hirelah.my" aria-label="Instagram">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                </a>
+                <a href="https://www.tiktok.com/@hirelah.my" target="_blank" rel="noopener noreferrer" class="header-social-btn tiktok" title="Follow us on TikTok @hirelah.my" aria-label="TikTok">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.85.12V9.4a6.33 6.33 0 0 0-6.6 6.33 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.16 8.16 0 0 0 4.78 1.52V6.82a4.85 4.85 0 0 1-1.6-.13z"/></svg>
+                </a>
+            </div>
             <?php if(isset($_SESSION['user_id'])): ?>
                 <span class="energy-nav-link" style="font-weight:600;">Hi, <?= htmlspecialchars($_SESSION['user_name']) ?></span>
                 <?php if($_SESSION['user_role'] === 'employer'): ?>
@@ -1051,29 +1390,33 @@ if (file_exists('db.php')) {
             <div>
                 <div class="energy-headline-wrap">
                     <img src="assets/casey-2.png" alt="" class="energy-headline-bg-photo">
+                    <div class="energy-pill-tag">✨ 100% FREE AI CAREER INTELLIGENCE</div>
                     <h1 class="energy-headline">
-                        Find work that<br>actually fits, <span class="accent">lah.</span>
+                       Find work that actually fits, <span class="accent">lah.</span>
                     </h1>
                 </div>
 
                 <p class="energy-subtext">
-                    Smart matches powered by AI-assisted screening. Real opportunities, reviewed with a human touch, built for your future.
+                    Get instant ATS keyword scoring, AI resume critiques, and build professional resumes in minutes — 100% free with zero sign-up required.
                 </p>
 
                 <div class="energy-cta-row">
-                    <a href="jobs.php" class="btn-lime">
-                        Search Jobs
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
-                    </a>
                     <span class="resume-check-wrap">
-                        <span class="resume-check-flag">✨ Free AI Check</span>
-                        <a href="resume_check.php" class="btn-outline-dark">
-                            Upload Resume
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 8 5-5 5 5"></path><path d="M5 21h14"></path></svg>
+                        <span class="resume-check-flag">⚡ Instant Score</span>
+                        <a href="resume_check.php" class="btn-lime">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"></path></svg>
+                            Free AI Resume Check
                         </a>
                     </span>
+                    <a href="resume_builder.php" class="btn-outline-dark">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><line x1="10" y1="9" x2="8" y2="9"></line></svg>
+                        Build Resume
+                    </a>
+                    <a href="jobs.php" class="btn-link-jobs">
+                        Browse <?= $total_live_roles ?> live jobs &rarr;
+                    </a>
                 </div>
-                <p class="energy-cta-caption">👆 Get instant AI-powered feedback &amp; a match score on your resume &mdash; no job application needed.</p>
+                <p class="energy-cta-caption">🚀 No account or payment required &mdash; instant AI diagnosis &amp; PDF resume builder ready to go.</p>
             </div>
 
             <!-- Right Column: Interactive Card Preview -->
@@ -1131,20 +1474,20 @@ if (file_exists('db.php')) {
         <!-- Stat Bar -->
         <div class="energy-stat-bar">
             <div class="energy-stat-item">
-                <svg class="energy-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
-                <div><span class="energy-stat-num"><?= $total_live_roles ?>+</span><span class="energy-stat-label">Active Jobs</span></div>
-            </div>
-            <div class="energy-stat-item">
-                <svg class="energy-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V7l7-4 7 4v14"></path><path d="M9 9h1"></path><path d="M9 13h1"></path><path d="M14 9h1"></path><path d="M14 13h1"></path></svg>
-                <div><span class="energy-stat-num"><?= $departments_hiring ?>+</span><span class="energy-stat-label">Departments Hiring</span></div>
+                <svg class="energy-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"></path><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"></path></svg>
+                <div><span class="energy-stat-num" data-target="<?= $resumes_screened ?>"><?= $resumes_screened ?>+</span><span class="energy-stat-label">Resumes Screened</span></div>
             </div>
             <div class="energy-stat-item">
                 <svg class="energy-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"></path></svg>
-                <div><span class="energy-stat-num"><?= $strong_hires ?>+</span><span class="energy-stat-label">Strong Hires Flagged</span></div>
+                <div><span class="energy-stat-num" data-target="<?= $strong_hires ?>"><?= $strong_hires ?>+</span><span class="energy-stat-label">Strong Hires Flagged</span></div>
             </div>
             <div class="energy-stat-item">
-                <svg class="energy-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"></path><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"></path></svg>
-                <div><span class="energy-stat-num"><?= $resumes_screened ?>+</span><span class="energy-stat-label">Resumes Screened</span></div>
+                <svg class="energy-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+                <div><span class="energy-stat-num" data-target="<?= $total_live_roles ?>"><?= $total_live_roles ?>+</span><span class="energy-stat-label">Active Jobs</span></div>
+            </div>
+            <div class="energy-stat-item">
+                <svg class="energy-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"></path><path d="M5 21V7l7-4 7 4v14"></path><path d="M9 9h1"></path><path d="M9 13h1"></path><path d="M14 9h1"></path><path d="M14 13h1"></path></svg>
+                <div><span class="energy-stat-num" data-target="<?= $departments_hiring ?>"><?= $departments_hiring ?>+</span><span class="energy-stat-label">Departments Hiring</span></div>
             </div>
         </div>
     </section>
@@ -1152,32 +1495,408 @@ if (file_exists('db.php')) {
     <!-- Sleek Grid Feature Breakdown -->
     <section class="features-section" id="features">
         <div class="section-header">
-            <div class="section-tag">ENGINEERED FOR SPEED & EMPATHY</div>
-            <h2 class="section-title">Why modern teams choose HireLah</h2>
+            <div class="section-tag">POWERFUL AI CAREER TOOLKIT</div>
+            <h2 class="section-title">Everything you need to get hired faster</h2>
         </div>
 
         <div class="grid-3">
             <div class="glass-card">
-                <div class="card-icon-box">🧠</div>
-                <h3 class="glass-card-title">Structured Resume Insights</h3>
-                <p class="glass-card-desc">Instead of unorganized applicant files, our system extracts resume text cleanly, providing structured summaries of candidate experience and capability.</p>
+                <div class="card-icon-box">⚡</div>
+                <h3 class="glass-card-title">Free AI Resume Checker</h3>
+                <p class="glass-card-desc">Upload any PDF or Word resume to receive instant scoring on ATS readability, grammar, keyword matches, and recruiter appeal in seconds.</p>
+                <a href="resume_check.php" class="card-action-link">Run Free AI Check &rarr;</a>
+            </div>
+
+            <div class="glass-card">
+                <div class="card-icon-box">📄</div>
+                <h3 class="glass-card-title">Smart Resume Builder</h3>
+                <p class="glass-card-desc">Build clean, modern, and recruiter-approved resumes with live formatting, pre-filled sections, and instant 1-click PDF download.</p>
+                <a href="resume_builder.php" class="card-action-link">Build Resume Now &rarr;</a>
             </div>
 
             <div class="glass-card">
                 <div class="card-icon-box">🎯</div>
-                <h3 class="glass-card-title">Custom Questionnaires</h3>
-                <p class="glass-card-desc">Send tailored screening questionnaires specific to each position to evaluate skills and work history before inviting candidates to an interview.</p>
-            </div>
-
-            <div class="glass-card">
-                <div class="card-icon-box">🔒</div>
-                <h3 class="glass-card-title">Bias-Free Screening</h3>
-                <p class="glass-card-desc">Automatically strip PII to evaluate talent purely on merit, keeping hiring decisions transparent, ethical, and human-guided.</p>
+                <h3 class="glass-card-title">Direct Job Fast-Track</h3>
+                <p class="glass-card-desc">Apply directly to open positions and get screened fairly with structured, bias-free AI evaluations that put your strengths first.</p>
+                <a href="jobs.php" class="card-action-link">Search <?= $total_live_roles ?> Live Jobs &rarr;</a>
             </div>
         </div>
     </section>
 
+    <!-- Modern Footer with Social Links -->
+    <footer class="energy-footer">
+        <div class="footer-container">
+            <div class="footer-brand-col">
+                <a href="index.php" class="energy-brand" style="margin-bottom:12px;">
+                    <img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah" class="energy-brand-logo-img" style="height:44px;">
+                </a>
+                <p class="footer-tagline">AI-powered resume screening, intelligence &amp; modern hiring made simple, lah.</p>
+            </div>
+
+            <div class="footer-social-col">
+                <div class="footer-col-title">Follow Our Journey</div>
+                <div class="footer-social-buttons">
+                    <a href="https://www.instagram.com/hirelah.my" target="_blank" rel="noopener noreferrer" class="btn-social btn-instagram" title="Follow @hirelah.my on Instagram">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                        </svg>
+                        <span>Instagram @hirelah.my</span>
+                    </a>
+                    <a href="https://www.tiktok.com/@hirelah.my" target="_blank" rel="noopener noreferrer" class="btn-social btn-tiktok" title="Follow @hirelah.my on TikTok">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.85.12V9.4a6.33 6.33 0 0 0-6.6 6.33 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.16 8.16 0 0 0 4.78 1.52V6.82a4.85 4.85 0 0 1-1.6-.13z"/>
+                        </svg>
+                        <span>TikTok @hirelah.my</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="footer-links-col">
+                <div class="footer-col-title">Quick Links</div>
+                <div class="footer-quick-links">
+                    <a href="resume_check.php">✨ Free AI Resume Check</a>
+                    <a href="resume_builder.php">📄 AI Resume Builder</a>
+                    <a href="jobs.php">💼 Browse Live Jobs</a>
+                    <a href="terms.php">📋 Terms &amp; Conditions</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-bottom-bar">
+            <p>&copy; <?= date('Y') ?> HireLah. All rights reserved.</p>
+            <p>Made with ❤️ in Malaysia</p>
+        </div>
+    </footer>
+
     <script src="theme.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
+    <script>
+    document.addEventListener("DOMContentLoaded", () => {
+        if (typeof anime === "undefined") return;
+
+        // 1. Hero Entrance Timeline
+        const heroTL = anime.timeline({
+            easing: 'easeOutExpo'
+        });
+
+        // Header elements entrance
+        heroTL.add({
+            targets: ['.energy-brand', '.energy-nav-link', '.energy-nav .btn-employer'],
+            translateY: [-24, 0],
+            opacity: [0, 1],
+            duration: 800,
+            delay: anime.stagger(60),
+            easing: 'easeOutQuad'
+        })
+        // Casey photo entrance
+        .add({
+            targets: '.energy-headline-bg-photo',
+            translateY: [200, 120],
+            scale: [0.92, 1],
+            opacity: [0, document.documentElement.getAttribute('data-theme') === 'dark' ? 0.9 : 0.85],
+            duration: 1300,
+            easing: 'easeOutCubic'
+        }, '-=600')
+        // Headline text & accent badge
+        .add({
+            targets: '.energy-headline',
+            translateY: [40, 0],
+            opacity: [0, 1],
+            duration: 900,
+            easing: 'easeOutExpo'
+        }, '-=1000')
+        .add({
+            targets: '.energy-headline .accent',
+            scale: [0.8, 1],
+            rotate: [-3, 0],
+            duration: 600,
+            easing: 'easeOutBack(1.8)'
+        }, '-=500')
+        // Subtext & CTAs
+        .add({
+            targets: ['.energy-subtext', '.energy-cta-row', '.energy-cta-caption'],
+            translateY: [28, 0],
+            opacity: [0, 1],
+            duration: 800,
+            delay: anime.stagger(100),
+            easing: 'easeOutQuad'
+        }, '-=600')
+        // Free AI Check badge pop
+        .add({
+            targets: '.resume-check-flag',
+            scale: [0, 1],
+            rotate: [0, 8],
+            duration: 600,
+            easing: 'easeOutElastic(1, .6)'
+        }, '-=500')
+        // Visual blob & card entrance
+        .add({
+            targets: '.energy-visual-blob',
+            scale: [0.6, 1],
+            rotate: [-15, -4],
+            opacity: [0, 1],
+            duration: 1100,
+            easing: 'easeOutElastic(1, .7)'
+        }, '-=900')
+        .add({
+            targets: '.energy-visual-card',
+            translateY: [60, 0],
+            opacity: [0, 1],
+            scale: [0.94, 1],
+            duration: 1000,
+            easing: 'easeOutCubic'
+        }, '-=800')
+        // Sticky note pop with elastic bounce
+        .add({
+            targets: '.sticky-note',
+            scale: [0, 1],
+            rotate: [-10, 6],
+            translateY: [-20, 0],
+            duration: 800,
+            easing: 'easeOutBack(2)'
+        }, '-=600')
+        // Job item cards stagger inside preview card
+        .add({
+            targets: ['.job-item-card', '.snapshot-box'],
+            translateX: [30, 0],
+            opacity: [0, 1],
+            duration: 650,
+            delay: anime.stagger(90),
+            easing: 'easeOutQuad'
+        }, '-=500')
+        // Doodles pop in
+        .add({
+            targets: '.energy-doodle',
+            scale: [0, 1],
+            opacity: [0, 0.85],
+            duration: 600,
+            delay: anime.stagger(80),
+            easing: 'easeOutBack(2.5)'
+        }, '-=600');
+
+        // 2. Ambient Continuous Floating Loops
+        anime({
+            targets: '.energy-doodle:nth-of-type(1)',
+            translateY: [-5, 5],
+            rotate: [-8, 8],
+            duration: 3400,
+            direction: 'alternate',
+            loop: true,
+            easing: 'easeInOutSine'
+        });
+        anime({
+            targets: '.energy-doodle:nth-of-type(2)',
+            translateY: [6, -6],
+            scale: [0.95, 1.05],
+            duration: 4000,
+            direction: 'alternate',
+            loop: true,
+            easing: 'easeInOutSine'
+        });
+        anime({
+            targets: '.energy-doodle:nth-of-type(3), .energy-doodle:nth-of-type(4)',
+            translateY: [-4, 4],
+            duration: 2800,
+            direction: 'alternate',
+            loop: true,
+            easing: 'easeInOutSine'
+        });
+        anime({
+            targets: '.energy-visual-blob',
+            rotate: [-6, -2],
+            scale: [0.98, 1.02],
+            duration: 4500,
+            direction: 'alternate',
+            loop: true,
+            easing: 'easeInOutSine'
+        });
+        anime({
+            targets: '.sticky-note',
+            rotate: [4.5, 7.5],
+            duration: 3200,
+            direction: 'alternate',
+            loop: true,
+            easing: 'easeInOutSine'
+        });
+        anime({
+            targets: '.energy-headline-bg-photo',
+            translateY: [120, 115],
+            scale: [1, 1.015],
+            duration: 5000,
+            direction: 'alternate',
+            loop: true,
+            easing: 'easeInOutSine'
+        });
+
+        // 3. Stats Counter Animation on Scroll
+        const statBar = document.querySelector('.energy-stat-bar');
+        if (statBar) {
+            let statsAnimated = false;
+            const statObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting && !statsAnimated) {
+                        statsAnimated = true;
+
+                        // Stagger entrance for stat items
+                        anime({
+                            targets: '.energy-stat-item',
+                            translateY: [25, 0],
+                            opacity: [0, 1],
+                            duration: 700,
+                            delay: anime.stagger(100),
+                            easing: 'easeOutQuad'
+                        });
+
+                        // Count numbers up
+                        document.querySelectorAll('.energy-stat-num').forEach(el => {
+                            const target = parseInt(el.getAttribute('data-target') || '0', 10);
+                            const counter = { val: 0 };
+                            anime({
+                                targets: counter,
+                                val: target,
+                                round: 1,
+                                duration: 1800,
+                                easing: 'easeOutExpo',
+                                update: () => {
+                                    el.textContent = counter.val + '+';
+                                }
+                            });
+                        });
+                    }
+                });
+            }, { threshold: 0.2 });
+            statObserver.observe(statBar);
+        }
+
+        // 4. Features Section Reveal on Scroll
+        const featuresSection = document.querySelector('#features');
+        if (featuresSection) {
+            let featuresAnimated = false;
+            const featuresObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting && !featuresAnimated) {
+                        featuresAnimated = true;
+
+                        anime({
+                            targets: ['#features .section-tag', '#features .section-title'],
+                            translateY: [30, 0],
+                            opacity: [0, 1],
+                            duration: 800,
+                            delay: anime.stagger(120),
+                            easing: 'easeOutQuad'
+                        });
+
+                        anime({
+                            targets: '#features .glass-card',
+                            translateY: [50, 0],
+                            scale: [0.92, 1],
+                            opacity: [0, 1],
+                            duration: 900,
+                            delay: anime.stagger(150, { start: 250 }),
+                            easing: 'easeOutElastic(1, .8)'
+                        });
+
+                        anime({
+                            targets: '#features .card-icon-box',
+                            rotate: [-20, 0],
+                            scale: [0.4, 1],
+                            duration: 800,
+                            delay: anime.stagger(150, { start: 350 }),
+                            easing: 'easeOutBack(2)'
+                        });
+                    }
+                });
+            }, { threshold: 0.15 });
+            featuresObserver.observe(featuresSection);
+        }
+
+        // 5. Interactive Mouse Parallax & 3D Tilt on Hero Visual
+        const visualWrap = document.querySelector('.energy-visual');
+        if (visualWrap && window.innerWidth > 900) {
+            const card = visualWrap.querySelector('.energy-visual-card');
+            const blob = visualWrap.querySelector('.energy-visual-blob');
+            const sticky = visualWrap.querySelector('.sticky-note');
+
+            visualWrap.addEventListener('mousemove', (e) => {
+                const rect = visualWrap.getBoundingClientRect();
+                const x = (e.clientX - rect.left) / rect.width - 0.5;
+                const y = (e.clientY - rect.top) / rect.height - 0.5;
+
+                anime({
+                    targets: card,
+                    rotateY: x * 14,
+                    rotateX: -y * 14,
+                    translateZ: 10,
+                    duration: 400,
+                    easing: 'easeOutQuad'
+                });
+
+                anime({
+                    targets: blob,
+                    translateX: x * 20,
+                    translateY: y * 20,
+                    duration: 500,
+                    easing: 'easeOutQuad'
+                });
+
+                anime({
+                    targets: sticky,
+                    translateX: x * 15,
+                    translateY: y * 15,
+                    duration: 350,
+                    easing: 'easeOutQuad'
+                });
+            });
+
+            visualWrap.addEventListener('mouseleave', () => {
+                anime({
+                    targets: card,
+                    rotateY: 0,
+                    rotateX: 0,
+                    translateZ: 0,
+                    duration: 800,
+                    easing: 'easeOutElastic(1, .6)'
+                });
+                anime({
+                    targets: blob,
+                    translateX: 0,
+                    translateY: 0,
+                    duration: 800,
+                    easing: 'easeOutElastic(1, .6)'
+                });
+                anime({
+                    targets: sticky,
+                    translateX: 0,
+                    translateY: 0,
+                    duration: 800,
+                    easing: 'easeOutElastic(1, .6)'
+                });
+            });
+        }
+
+        // 6. Micro-interactions on CTA buttons
+        document.querySelectorAll('.btn-lime, .btn-outline-dark, .btn-employer').forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                anime({
+                    targets: btn,
+                    scale: 1.04,
+                    duration: 250,
+                    easing: 'easeOutBack(1.5)'
+                });
+            });
+            btn.addEventListener('mouseleave', () => {
+                anime({
+                    targets: btn,
+                    scale: 1,
+                    duration: 350,
+                    easing: 'easeOutQuad'
+                });
+            });
+        });
+    });
+    </script>
 </body>
 </html>
 
