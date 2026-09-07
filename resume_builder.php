@@ -16,6 +16,7 @@ if (!is_logged_in() || ($_SESSION['user_role'] ?? '') !== 'candidate') {
 $api_key = get_api_key();
 $error = null;
 $generated = null;
+$is_fresh_grad = false;
 
 $stmt = $pdo->prepare("SELECT email FROM users WHERE id = ?");
 $stmt->execute([$_SESSION['user_id']]);
@@ -29,6 +30,8 @@ if (isset($_GET['view'])) {
     if ($row) {
         $generated = json_decode($row['generated_content'], true);
         $generated_meta = ['full_name' => $_SESSION['user_name'] ?? '', 'target_title' => $row['target_title']];
+        $raw_input = json_decode($row['raw_input'], true);
+        $is_fresh_grad = !empty($raw_input['is_fresh_grad']);
     }
 }
 
@@ -339,26 +342,36 @@ try {
                         <div><?= htmlspecialchars($generated['summary']) ?></div>
                     <?php endif; ?>
 
-                    <?php if(!empty($generated['experience'])): ?>
-                        <h4>Experience</h4>
-                        <?php foreach($generated['experience'] as $exp): ?>
-                            <div class="job-h"><?= htmlspecialchars(($exp['role'] ?? '') . (!empty($exp['company']) ? ' — ' . $exp['company'] : '')) ?></div>
-                            <?php if(!empty($exp['duration'])): ?><div class="job-meta"><?= htmlspecialchars($exp['duration']) ?></div><?php endif; ?>
-                            <?php if(!empty($exp['bullets'])): ?>
-                                <ul>
-                                    <?php foreach($exp['bullets'] as $b): ?><li><?= htmlspecialchars($b) ?></li><?php endforeach; ?>
-                                </ul>
-                            <?php endif; ?>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <?php
+                        // A fresh graduate's strongest credential is their education, not a
+                        // job history — the chat/form input flow already asks for education
+                        // first for them, so the generated document should lead with it too.
+                        ob_start(); ?>
+                        <?php if(!empty($generated['experience'])): ?>
+                            <h4>Experience</h4>
+                            <?php foreach($generated['experience'] as $exp): ?>
+                                <div class="job-h"><?= htmlspecialchars(($exp['role'] ?? '') . (!empty($exp['company']) ? ' — ' . $exp['company'] : '')) ?></div>
+                                <?php if(!empty($exp['duration'])): ?><div class="job-meta"><?= htmlspecialchars($exp['duration']) ?></div><?php endif; ?>
+                                <?php if(!empty($exp['bullets'])): ?>
+                                    <ul>
+                                        <?php foreach($exp['bullets'] as $b): ?><li><?= htmlspecialchars($b) ?></li><?php endforeach; ?>
+                                    </ul>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        <?php $experience_html = ob_get_clean(); ?>
 
-                    <?php if(!empty($generated['education'])): ?>
-                        <h4>Education</h4>
-                        <?php foreach($generated['education'] as $edu): ?>
-                            <div class="job-h"><?= htmlspecialchars($edu['degree'] ?? '') ?></div>
-                            <div class="job-meta"><?= htmlspecialchars(($edu['school'] ?? '') . (!empty($edu['year']) ? ' · ' . $edu['year'] : '')) ?></div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <?php ob_start(); ?>
+                        <?php if(!empty($generated['education'])): ?>
+                            <h4>Education</h4>
+                            <?php foreach($generated['education'] as $edu): ?>
+                                <div class="job-h"><?= htmlspecialchars($edu['degree'] ?? '') ?></div>
+                                <div class="job-meta"><?= htmlspecialchars(($edu['school'] ?? '') . (!empty($edu['year']) ? ' · ' . $edu['year'] : '')) ?></div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        <?php $education_html = ob_get_clean(); ?>
+
+                    <?= $is_fresh_grad ? ($education_html . $experience_html) : ($experience_html . $education_html) ?>
 
                     <?php if(!empty($generated['skills'])): ?>
                         <h4>Skills</h4>
@@ -520,7 +533,11 @@ function switchMode(mode) {
     document.getElementById('chatPanel').classList.toggle('active', mode === 'chat');
 
     // Only the active mode's fields should actually submit with the form.
-    document.querySelectorAll('#formPanel input, #formPanel textarea').forEach(el => el.disabled = (mode === 'chat'));
+    // Includes buttons: the "Generate My Resume" submit button living inside
+    // #formPanel is still the form's implicit default button even while
+    // display:none, so pressing Enter in the chat text input was triggering
+    // a native form submit through it before the chat conversation finished.
+    document.querySelectorAll('#formPanel input, #formPanel textarea, #formPanel button').forEach(el => el.disabled = (mode === 'chat'));
     document.querySelectorAll('#chatHiddenFields input').forEach(el => el.disabled = (mode === 'form'));
 
     if (mode === 'chat' && !chatStarted) {
