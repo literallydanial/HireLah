@@ -569,8 +569,21 @@ function generate_fallback_resume_document($input) {
     $skills = array_values(array_filter(array_map('trim', explode(',', $input['skills'] ?? ''))));
     $target_title = $input['target_title'] ?? 'Professional';
 
+    if (!empty($input['is_fresh_grad']) || count($experience) === 0) {
+        $edu_phrase = '';
+        if (!empty($education)) {
+            $edu_phrase = ", with a foundation in " . ($education[0]['degree'] ?: 'their field of study');
+            if (!empty($education[0]['school'])) {
+                $edu_phrase .= ' from ' . $education[0]['school'];
+            }
+        }
+        $summary = "Motivated recent graduate pursuing a role as " . $target_title . $edu_phrase . ". Automated draft (AI not configured) — consider refining this summary further.";
+    } else {
+        $summary = "Motivated " . $target_title . " with hands-on experience across roles including " . ($experience[0]['role'] ?: 'recent positions') . ". Automated draft (AI not configured) — consider refining this summary further.";
+    }
+
     return [
-        'summary' => "Motivated " . $target_title . " with hands-on experience across " . (count($experience) > 0 ? "roles including " . ($experience[0]['role'] ?: 'recent positions') : "prior positions") . ". Automated draft (AI not configured) — consider refining this summary further.",
+        'summary' => $summary,
         'experience' => $experience,
         'education' => $education,
         'skills' => $skills
