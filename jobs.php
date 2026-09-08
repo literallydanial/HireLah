@@ -370,12 +370,12 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
 
             <!-- Quick Filter Chips Row -->
             <div class="quick-filter-bar" style="margin-top:16px; border-top:1px solid var(--bdr); padding-top:12px;">
-                <a href="jobs.php" class="quick-filter-chip <?= (!$filter_mode && !$filter_type && !$search && !$filter_location && !$filter_min_salary) ? 'active' : '' ?>">All Positions</a>
-                <a href="jobs.php?mode=Remote" class="quick-filter-chip <?= $filter_mode === 'Remote' ? 'active' : '' ?>">⚡ Remote Only</a>
-                <a href="jobs.php?search=Junior" class="quick-filter-chip <?= str_contains(strtolower($search), 'junior') ? 'active' : '' ?>">🎓 Fresh Grad Friendly</a>
-                <a href="jobs.php?min_salary=5000" class="quick-filter-chip <?= $filter_min_salary == 5000 ? 'active' : '' ?>">💰 High Salary (RM 5k+)</a>
-                <a href="jobs.php?mode=Hybrid" class="quick-filter-chip <?= $filter_mode === 'Hybrid' ? 'active' : '' ?>">🏢 Hybrid Work</a>
-                <a href="jobs.php?location=Kuala+Lumpur" class="quick-filter-chip <?= str_contains(strtolower($filter_location), 'kuala') ? 'active' : '' ?>">📍 Kuala Lumpur</a>
+                <button type="button" onclick="applyQuickFilter('reset', '')" class="quick-filter-chip <?= (!$filter_mode && !$filter_type && !$search && !$filter_location && !$filter_min_salary) ? 'active' : '' ?>">All Positions</button>
+                <button type="button" onclick="applyQuickFilter('mode', 'Remote')" class="quick-filter-chip <?= $filter_mode === 'Remote' ? 'active' : '' ?>">⚡ Remote Only</button>
+                <button type="button" onclick="applyQuickFilter('search', 'Junior')" class="quick-filter-chip <?= str_contains(strtolower($search), 'junior') ? 'active' : '' ?>">🎓 Fresh Grad Friendly</button>
+                <button type="button" onclick="applyQuickFilter('min_salary', '5000')" class="quick-filter-chip <?= $filter_min_salary == 5000 ? 'active' : '' ?>">💰 High Salary (RM 5k+)</button>
+                <button type="button" onclick="applyQuickFilter('mode', 'Hybrid')" class="quick-filter-chip <?= $filter_mode === 'Hybrid' ? 'active' : '' ?>">🏢 Hybrid Work</button>
+                <button type="button" onclick="applyQuickFilter('location', 'Kuala Lumpur')" class="quick-filter-chip <?= str_contains(strtolower($filter_location), 'kuala') ? 'active' : '' ?>">📍 Kuala Lumpur</button>
             </div>
         </form>
 
@@ -771,6 +771,31 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                     }
                 }
             }, 120);
+        }
+
+        function applyQuickFilter(name, value) {
+            const form = document.querySelector('form.search-bar-panel');
+            if (!form) return;
+
+            if (name === 'reset') {
+                const s = form.querySelector('input[name="search"]');
+                const l = form.querySelector('input[name="location"]');
+                if (s) s.value = '';
+                if (l) l.value = '';
+                form.querySelectorAll('select').forEach(sel => sel.selectedIndex = 0);
+                form.submit();
+                return;
+            }
+
+            const targetInput = form.querySelector(`[name="${name}"]`);
+            if (targetInput) {
+                if (targetInput.value === value) {
+                    targetInput.value = '';
+                } else {
+                    targetInput.value = value;
+                }
+            }
+            form.submit();
         }
 
         // Auto select first job on load
