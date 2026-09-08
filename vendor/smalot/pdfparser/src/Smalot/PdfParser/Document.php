@@ -203,7 +203,14 @@ class Document
      */
     public function extractXMPMetadata(string $content): void
     {
-        $xml = xml_parser_create();
+        if (!function_exists('xml_parser_create') || !function_exists('xml_parse_into_struct')) {
+            return;
+        }
+
+        $xml = @xml_parser_create();
+        if (!$xml) {
+            return;
+        }
         xml_parser_set_option($xml, \XML_OPTION_SKIP_WHITE, 1);
 
         if (1 === xml_parse_into_struct($xml, $content, $values, $index)) {
