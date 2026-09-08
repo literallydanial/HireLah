@@ -11,17 +11,21 @@ $active_company_id = get_active_company_id($pdo);
 
 // Handle creation of a new job posting via popup modal
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'post_job') {
-    $title = trim($_POST['job_title']);
-    $dept = trim($_POST['department']);
-    $type = trim($_POST['employment_type']);
-    $mode = trim($_POST['work_mode']);
+    $title = trim($_POST['job_title'] ?? '');
+    $dept = trim($_POST['department'] ?? '');
+    $type = trim($_POST['employment_type'] ?? 'Full-time');
+    $mode = trim($_POST['work_mode'] ?? 'Hybrid');
+    $salary_min = (!empty($_POST['salary_min']) && is_numeric($_POST['salary_min'])) ? (int)$_POST['salary_min'] : null;
+    $salary_max = (!empty($_POST['salary_max']) && is_numeric($_POST['salary_max'])) ? (int)$_POST['salary_max'] : null;
+    $salary_text = !empty($_POST['salary_text']) ? trim($_POST['salary_text']) : null;
+    $perks = !empty($_POST['perks']) ? trim($_POST['perks']) : null;
     $require_video = isset($_POST['require_video']) ? 1 : 0;
-    $desc = trim($_POST['description']);
+    $desc = trim($_POST['description'] ?? '');
     $employer_id = $_SESSION['user_id'];
 
     if (!empty($title) && !empty($desc)) {
-        $stmt = $pdo->prepare("INSERT INTO jobs (employer_id, company_id, job_title, department, employment_type, work_mode, require_video, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
-        if ($stmt->execute([$employer_id, $active_company_id, $title, $dept, $type, $mode, $require_video, $desc])) {
+        $stmt = $pdo->prepare("INSERT INTO jobs (employer_id, company_id, job_title, department, employment_type, work_mode, salary_min, salary_max, salary_text, perks, require_video, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
+        if ($stmt->execute([$employer_id, $active_company_id, $title, $dept, $type, $mode, $salary_min, $salary_max, $salary_text, $perks, $require_video, $desc])) {
             $_SESSION['toast'] = "Job position published successfully!";
             header("Location: job_dashboard.php");
             exit;
@@ -450,11 +454,27 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                     </div>
                 </div>
 
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px;">
+                    <div>
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Min Salary (RM/mo) <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
+                        <input type="number" name="salary_min" placeholder="e.g. 4000" style="padding:9px 12px; font-size:13px;">
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Max Salary (RM/mo) <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
+                        <input type="number" name="salary_max" placeholder="e.g. 7500" style="padding:9px 12px; font-size:13px;">
+                    </div>
+                </div>
+
                 <div style="margin-bottom:18px; padding:12px 16px; background:var(--surf); border:1px solid var(--bdr); border-radius:10px; display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" name="require_video" id="modal_require_video" value="1" style="width:18px; height:18px; cursor:pointer;">
                     <label for="modal_require_video" style="font-size:13px; font-weight:600; color:var(--txt); cursor:pointer;">
                         📹 Require YouTube Video Introduction Link from Applicants
                     </label>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company Perks & Benefits <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
+                    <textarea name="perks" rows="3" placeholder="e.g. Health insurance, 20 days annual leave, remote work allowance, performance bonus..." style="resize:vertical; padding:10px 12px; font-size:13px;"></textarea>
                 </div>
 
                 <div style="margin-bottom:24px;">

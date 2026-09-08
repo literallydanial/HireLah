@@ -43,18 +43,18 @@ if ($filter_location !== '') {
     $params[] = "%$filter_location%";
 }
 if ($filter_min_salary !== null) {
-    $sql .= " AND (COALESCE(j.salary_max, j.salary_min, 5000) >= ?)";
+    $sql .= " AND (COALESCE(j.salary_max, j.salary_min) >= ?)";
     $params[] = $filter_min_salary;
 }
 if ($filter_max_salary !== null) {
-    $sql .= " AND (COALESCE(j.salary_min, j.salary_max, 3000) <= ?)";
+    $sql .= " AND (COALESCE(j.salary_min, j.salary_max) <= ?)";
     $params[] = $filter_max_salary;
 }
 
 if ($sort_by === 'salary_high') {
-    $sql .= " ORDER BY COALESCE(j.salary_max, j.salary_min, 5000) DESC, j.created_at DESC";
+    $sql .= " ORDER BY COALESCE(j.salary_max, j.salary_min, 0) DESC, j.created_at DESC";
 } elseif ($sort_by === 'salary_low') {
-    $sql .= " ORDER BY COALESCE(j.salary_min, j.salary_max, 3000) ASC, j.created_at DESC";
+    $sql .= " ORDER BY CASE WHEN COALESCE(j.salary_min, j.salary_max) IS NULL THEN 1 ELSE 0 END, COALESCE(j.salary_min, j.salary_max) ASC, j.created_at DESC";
 } else {
     $sql .= " ORDER BY j.created_at DESC";
 }
@@ -504,22 +504,16 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             if (job.salary_text && job.salary_text.trim()) {
                 return escapeHtml(job.salary_text.trim());
             }
-            if (job.salary_min || job.salary_max) {
-                const min = job.salary_min ? 'RM ' + parseInt(job.salary_min).toLocaleString() : 'RM 3,000';
-                const max = job.salary_max ? 'RM ' + parseInt(job.salary_max).toLocaleString() : 'RM 7,000';
-                return `${min} – ${max} / month`;
+            const min = job.salary_min ? parseInt(job.salary_min) : null;
+            const max = job.salary_max ? parseInt(job.salary_max) : null;
+            if (min && max) {
+                return `RM ${min.toLocaleString()} – RM ${max.toLocaleString()} / month`;
+            } else if (min) {
+                return `From RM ${min.toLocaleString()} / month`;
+            } else if (max) {
+                return `Up to RM ${max.toLocaleString()} / month`;
             }
-            const title = (job.job_title || '').toLowerCase();
-            if (title.includes('senior') || title.includes('lead') || title.includes('manager')) {
-                return 'RM 6,500 – RM 10,500 / month';
-            } else if (title.includes('engineer') || title.includes('developer') || title.includes('backend') || title.includes('fullstack')) {
-                return 'RM 4,500 – RM 7,500 / month';
-            } else if (title.includes('intern') || title.includes('junior')) {
-                return 'RM 1,800 – RM 3,200 / month';
-            } else if (title.includes('designer') || title.includes('marketing') || title.includes('hr')) {
-                return 'RM 3,500 – RM 5,500 / month';
-            }
-            return 'RM 3,800 – RM 6,200 / month';
+            return null;
         }
 
         function parseJobDescription(job) {
@@ -704,9 +698,15 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                                     <span>&bull;</span>
                                     <span class="chip-urgency">${escapeHtml(job.posted_label || 'Posted recently')}</span>
                                 </div>
+                                ${salaryText ? `
                                 <div style="font-size:17px; font-weight:800; color:var(--acc); margin-bottom:16px;">
                                     💰 ${salaryText}
                                 </div>
+                                ` : `
+                                <div style="font-size:13.5px; font-weight:600; color:var(--mut); margin-bottom:16px;">
+                                    💰 Salary Undisclosed
+                                </div>
+                                `}
                             </div>
                             ${job.company_logo ? `<img src="${escapeHtml(job.company_logo)}" alt="" style="width:72px; height:72px; object-fit:contain; border-radius:14px; flex-shrink:0; background:var(--surf); padding:6px; border:1px solid var(--bdr);">` : ''}
                         </div>
@@ -750,19 +750,12 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                         </div>
                         ` : ''}
 
+                        ${descSections.perks ? `
                         <div>
                             <h3 style="font-size:15px; font-weight:800; color:var(--txt); margin-bottom:10px; display:flex; align-items:center; gap:6px;">🎁 Company Perks & Benefits</h3>
-                            ${descSections.perks ? `
                             <div style="white-space:pre-wrap; color:var(--txt); font-size:13.5px;">${descSections.perks}</div>
-                            ` : `
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:12.5px;">
-                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px 14px;">🏖️ Flexible Hours & Remote Allowance</div>
-                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px 14px;">🏥 Comprehensive Health & Dental Care</div>
-                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px 14px;">💻 Modern Hardware & Laptop Setup</div>
-                                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px 14px;">📈 Annual Learning & Course Budget</div>
-                            </div>
-                            `}
                         </div>
+                        ` : ''}
                     </div>
 
                     <!-- Company Snapshot -->

@@ -9,17 +9,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title = trim($_POST['job_title']);
-    $dept = trim($_POST['department']);
-    $type = trim($_POST['employment_type']);
-    $mode = trim($_POST['work_mode']);
+    $title = trim($_POST['job_title'] ?? '');
+    $dept = trim($_POST['department'] ?? '');
+    $type = trim($_POST['employment_type'] ?? 'Full-time');
+    $mode = trim($_POST['work_mode'] ?? 'Hybrid');
+    $salary_min = (!empty($_POST['salary_min']) && is_numeric($_POST['salary_min'])) ? (int)$_POST['salary_min'] : null;
+    $salary_max = (!empty($_POST['salary_max']) && is_numeric($_POST['salary_max'])) ? (int)$_POST['salary_max'] : null;
+    $salary_text = !empty($_POST['salary_text']) ? trim($_POST['salary_text']) : null;
+    $perks = !empty($_POST['perks']) ? trim($_POST['perks']) : null;
     $require_video = isset($_POST['require_video']) ? 1 : 0;
-    $desc = trim($_POST['description']);
+    $desc = trim($_POST['description'] ?? '');
     $employer_id = $_SESSION['user_id'];
     $active_company_id = get_active_company_id($pdo);
 
-    $stmt = $pdo->prepare("INSERT INTO jobs (employer_id, company_id, job_title, department, employment_type, work_mode, require_video, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
-    if ($stmt->execute([$employer_id, $active_company_id, $title, $dept, $type, $mode, $require_video, $desc])) {
+    $stmt = $pdo->prepare("INSERT INTO jobs (employer_id, company_id, job_title, department, employment_type, work_mode, salary_min, salary_max, salary_text, perks, require_video, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
+    if ($stmt->execute([$employer_id, $active_company_id, $title, $dept, $type, $mode, $salary_min, $salary_max, $salary_text, $perks, $require_video, $desc])) {
         $_SESSION['toast'] = "Job posted successfully!";
         header("Location: job_dashboard.php");
         exit;
@@ -79,6 +83,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
 
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:12px;">
+                <div>
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Min Salary (RM/mo) <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
+                    <input type="number" name="salary_min" placeholder="e.g. 4000">
+                </div>
+                <div>
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Max Salary (RM/mo) <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
+                    <input type="number" name="salary_max" placeholder="e.g. 7500">
+                </div>
+            </div>
+
             <div style="margin-bottom:16px; padding:12px; background:var(--surf); border:1px solid var(--bdr); border-radius:8px; display:flex; align-items:center; gap:10px;">
                 <input type="checkbox" name="require_video" id="require_video" value="1" style="width:18px; height:18px; cursor:pointer;">
                 <label for="require_video" style="font-size:13px; font-weight:600; color:var(--txt); cursor:pointer;">
@@ -86,9 +101,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </label>
             </div>
 
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Company Perks & Benefits <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
+                <textarea name="perks" rows="3" placeholder="e.g. Health insurance, 20 days annual leave, remote work allowance, performance bonus..." style="resize:vertical;"></textarea>
+            </div>
+
             <div style="margin-bottom:20px;">
                 <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Job Description & Requirements</label>
-                <textarea name="description" rows="10" placeholder="Paste the full job description and requirements here. Our AI will use this to screen candidates and generate structured recruiter reports..." required style="resize:vertical;"></textarea>
+                <textarea name="description" rows="8" placeholder="Paste the full job description and requirements here. Our AI will use this to screen candidates and generate structured recruiter reports..." required style="resize:vertical;"></textarea>
             </div>
             
             <button type="submit" class="btn-primary">Publish Job Posting &rarr;</button>

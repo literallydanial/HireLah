@@ -32,9 +32,14 @@ $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim($_POST['job_title'] ?? '');
     $dept = trim($_POST['department'] ?? '');
+    $location = trim($_POST['location'] ?? '');
     $type = trim($_POST['employment_type'] ?? '');
     $mode = trim($_POST['work_mode'] ?? '');
     $status = trim($_POST['status'] ?? 'Active');
+    $salary_min = (!empty($_POST['salary_min']) && is_numeric($_POST['salary_min'])) ? (int)$_POST['salary_min'] : null;
+    $salary_max = (!empty($_POST['salary_max']) && is_numeric($_POST['salary_max'])) ? (int)$_POST['salary_max'] : null;
+    $salary_text = !empty($_POST['salary_text']) ? trim($_POST['salary_text']) : null;
+    $perks = !empty($_POST['perks']) ? trim($_POST['perks']) : null;
     $require_video = isset($_POST['require_video']) ? 1 : 0;
     $desc = trim($_POST['description'] ?? '');
 
@@ -42,11 +47,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Job title and description are required.";
     } else {
         if ($active_company_id) {
-            $update_stmt = $pdo->prepare("UPDATE jobs SET job_title = ?, department = ?, employment_type = ?, work_mode = ?, status = ?, require_video = ?, description = ? WHERE id = ? AND (company_id = ? OR (company_id IS NULL AND employer_id = ?))");
-            $update_ok = $update_stmt->execute([$title, $dept, $type, $mode, $status, $require_video, $desc, $job_id, $active_company_id, $_SESSION['user_id']]);
+            $update_stmt = $pdo->prepare("UPDATE jobs SET job_title = ?, department = ?, location = ?, employment_type = ?, work_mode = ?, salary_min = ?, salary_max = ?, salary_text = ?, perks = ?, status = ?, require_video = ?, description = ? WHERE id = ? AND (company_id = ? OR (company_id IS NULL AND employer_id = ?))");
+            $update_ok = $update_stmt->execute([$title, $dept, $location, $type, $mode, $salary_min, $salary_max, $salary_text, $perks, $status, $require_video, $desc, $job_id, $active_company_id, $_SESSION['user_id']]);
         } else {
-            $update_stmt = $pdo->prepare("UPDATE jobs SET job_title = ?, department = ?, employment_type = ?, work_mode = ?, status = ?, require_video = ?, description = ? WHERE id = ? AND (employer_id = ? OR employer_id IS NULL)");
-            $update_ok = $update_stmt->execute([$title, $dept, $type, $mode, $status, $require_video, $desc, $job_id, $_SESSION['user_id']]);
+            $update_stmt = $pdo->prepare("UPDATE jobs SET job_title = ?, department = ?, location = ?, employment_type = ?, work_mode = ?, salary_min = ?, salary_max = ?, salary_text = ?, perks = ?, status = ?, require_video = ?, description = ? WHERE id = ? AND (employer_id = ? OR employer_id IS NULL)");
+            $update_ok = $update_stmt->execute([$title, $dept, $location, $type, $mode, $salary_min, $salary_max, $salary_text, $perks, $status, $require_video, $desc, $job_id, $_SESSION['user_id']]);
         }
         if ($update_ok) {
             $_SESSION['toast'] = "Job posting updated successfully!";
@@ -88,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; margin-bottom:14px;">
                 <div>
                     <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Department</label>
-                    <input type="text" name="department" value="<?= htmlspecialchars($job['department']) ?>">
+                    <input type="text" name="department" value="<?= htmlspecialchars($job['department'] ?? '') ?>">
                 </div>
                 <div>
                     <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Employment Type</label>
@@ -116,11 +121,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
 
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
+                <div>
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Min Salary (RM/mo) <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
+                    <input type="number" name="salary_min" value="<?= htmlspecialchars($job['salary_min'] ?? '') ?>" placeholder="e.g. 4000">
+                </div>
+                <div>
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Max Salary (RM/mo) <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
+                    <input type="number" name="salary_max" value="<?= htmlspecialchars($job['salary_max'] ?? '') ?>" placeholder="e.g. 7500">
+                </div>
+            </div>
+
             <div style="margin-bottom:16px; padding:12px; background:var(--surf); border:1px solid var(--bdr); border-radius:8px; display:flex; align-items:center; gap:10px;">
                 <input type="checkbox" name="require_video" id="require_video" value="1" <?= !empty($job['require_video']) ? 'checked' : '' ?> style="width:18px; height:18px; cursor:pointer;">
                 <label for="require_video" style="font-size:13px; font-weight:600; color:var(--txt); cursor:pointer;">
                     📹 Require YouTube Video Introduction Link from Applicants
                 </label>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Company Perks & Benefits <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
+                <textarea name="perks" rows="3" placeholder="e.g. Health insurance, 20 days annual leave, remote work allowance, performance bonus..." style="resize:vertical;"><?= htmlspecialchars($job['perks'] ?? '') ?></textarea>
             </div>
 
             <div style="margin-bottom:20px;">
