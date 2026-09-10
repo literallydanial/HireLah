@@ -1,4 +1,4 @@
-// theme.js - HireLah Global Theme, Loading Animations & Toast Notification System
+// theme.js - Keria Global Theme, Loading Animations & Toast Notification System
 const savedTheme = localStorage.getItem("theme");
 if (savedTheme) {
     document.documentElement.setAttribute("data-theme", savedTheme);

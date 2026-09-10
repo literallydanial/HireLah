@@ -122,9 +122,26 @@ h1, h2, h3, h4, h5, h6 {
   filter: drop-shadow(0 0 40px rgba(217, 255, 79, 0.3));
 }
 
-/* Swap to the light-text logo variant on dark backgrounds so "Hire" stays legible. */
-[data-theme="dark"] img[src^="logo/logo.png"] {
-  content: url('logo/logo-dark.png?v=1');
+/* Invert logo in Night / Dark Mode */
+.logo-box img,
+.energy-brand img,
+.energy-brand-logo-img,
+.bg-watermark-logo img,
+img[src*="logo/"],
+img[src*="logo."] {
+  transition: filter 0.3s ease;
+}
+
+[data-theme="dark"] .logo-box img,
+[data-theme="dark"] .energy-brand img,
+[data-theme="dark"] .energy-brand-logo-img,
+[data-theme="dark"] img[src*="logo/"],
+[data-theme="dark"] img[src*="logo."] {
+  filter: invert(1);
+}
+
+[data-theme="dark"] .bg-watermark-logo img {
+  filter: invert(1) drop-shadow(0 0 40px rgba(217, 255, 79, 0.3));
 }
 
 * { box-sizing: border-box; }

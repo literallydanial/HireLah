@@ -6,7 +6,7 @@ session_start();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terms & Conditions & PDPA Compliance - HireLah</title>
+    <title>Terms & Conditions & PDPA Compliance - Keria</title>
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
     <style>
         .lang-switcher {
@@ -82,13 +82,13 @@ session_start();
     <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
 </head>
 <body>
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
     <header>
         <div class="header-inner">
             <div style="display:flex; align-items:center; gap:10px;">
-                <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
+                <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
                 <div>
-                    <div style="font-size:15px; font-weight:800; line-height:1" class="header-brand-title">HireLah Job Portal</div>
+                    <div style="font-size:15px; font-weight:800; line-height:1" class="header-brand-title">Keria Job Portal</div>
                     <div style="font-size:9px; color:var(--mut); letter-spacing:0.8px">LEGAL & PRIVACY POLICY</div>
                 </div>
             </div>
@@ -122,10 +122,10 @@ session_start();
             <!-- Terms & Conditions Section -->
             <div class="doc-section">
                 <h2>1. Terms & Conditions of Service</h2>
-                <p>Welcome to <strong>HireLah Recruitment Platform</strong>. By creating an account or accessing our platform, you agree to comply with and be bound by the following Terms & Conditions.</p>
+                <p>Welcome to <strong>Keria Recruitment Platform</strong>. By creating an account or accessing our platform, you agree to comply with and be bound by the following Terms & Conditions.</p>
 
                 <h3>1.1 Account Registration & One-Time Password (OTP)</h3>
-                <p>To register an account on HireLah, you must provide accurate, complete, and current information. Account verification requires a valid email address through an automated One-Time Password (OTP) dispatch process.</p>
+                <p>To register an account on Keria, you must provide accurate, complete, and current information. Account verification requires a valid email address through an automated One-Time Password (OTP) dispatch process.</p>
                 <ul>
                     <li>You are responsible for maintaining the confidentiality of your account credentials.</li>
                     <li>Each user is allowed one primary candidate or employer account.</li>
@@ -133,7 +133,7 @@ session_start();
                 </ul>
 
                 <h3>1.2 AI Resume Screening & Match Scoring Evaluation</h3>
-                <p>HireLah utilizes advanced artificial intelligence (Google Gemini AI models) to extract resume content, analyze skills, evaluate career experience, and compute non-binding job match scores.</p>
+                <p>Keria utilizes advanced artificial intelligence (Google Gemini AI models) to extract resume content, analyze skills, evaluate career experience, and compute non-binding job match scores.</p>
                 <ul>
                     <li>AI Match Scores are generated solely as supplementary screening assistance for prospective employers.</li>
                     <li>Scores and automated assessments do not constitute a guarantee of employment, interview invitation, or final hiring decision.</li>
@@ -141,16 +141,16 @@ session_start();
                 </ul>
 
                 <h3>1.3 Candidate & Employer Conduct</h3>
-                <p>Users agree not to submit misleading resume documents, fraudulent job postings, or engage in unauthorized access attempts. HireLah reserves the right to suspend accounts violating these standards.</p>
+                <p>Users agree not to submit misleading resume documents, fraudulent job postings, or engage in unauthorized access attempts. Keria reserves the right to suspend accounts violating these standards.</p>
             </div>
 
             <!-- PDPA Act Section -->
             <div class="doc-section" id="pdpa">
                 <h2>2. Personal Data Protection Act 2010 (PDPA) Compliance Policy</h2>
-                <p>In accordance with the <strong>Personal Data Protection Act 2010 ("PDPA") of Malaysia</strong> (Act 709), HireLah is committed to safeguarding your personal data and respecting your privacy rights.</p>
+                <p>In accordance with the <strong>Personal Data Protection Act 2010 ("PDPA") of Malaysia</strong> (Act 709), Keria is committed to safeguarding your personal data and respecting your privacy rights.</p>
 
                 <h3>2.1 Collection of Personal Data</h3>
-                <p>When you register as a Candidate or Employer, HireLah collects personal information including but not limited to:</p>
+                <p>When you register as a Candidate or Employer, Keria collects personal information including but not limited to:</p>
                 <ul>
                     <li>Full Name, Email Address, and Account Credentials</li>
                     <li>PDF Resume documents, employment history, skills, education, and portfolio details</li>
@@ -184,10 +184,10 @@ session_start();
             <!-- Terma & Syarat Section -->
             <div class="doc-section">
                 <h2>1. Terma & Syarat Perkhidmatan</h2>
-                <p>Selamat datang ke <strong>Platform Pengambilan Pekerja HireLah</strong>. Dengan mendaftar akaun atau menggunakan platform kami, anda bersetuju untuk mematuhi dan terikat dengan Terma & Syarat berikut.</p>
+                <p>Selamat datang ke <strong>Platform Pengambilan Pekerja Keria</strong>. Dengan mendaftar akaun atau menggunakan platform kami, anda bersetuju untuk mematuhi dan terikat dengan Terma & Syarat berikut.</p>
 
                 <h3>1.1 Pendaftaran Akaun & Kata Laluan Sekali Guna (OTP)</h3>
-                <p>Untuk mendaftar akaun di HireLah, anda hendaklah memberikan maklumat yang tepat dan terkini. Pengesahan akaun memerlukan alamat e-mel yang sah melalui proses penghantaran Kod OTP automatik.</p>
+                <p>Untuk mendaftar akaun di Keria, anda hendaklah memberikan maklumat yang tepat dan terkini. Pengesahan akaun memerlukan alamat e-mel yang sah melalui proses penghantaran Kod OTP automatik.</p>
                 <ul>
                     <li>Anda bertanggungjawab menjaga kerahsiaan maklumat log masuk akaun anda.</li>
                     <li>Setiap pengguna hanya dibenarkan memiliki satu akaun calon atau majikan utama.</li>
@@ -195,7 +195,7 @@ session_start();
                 </ul>
 
                 <h3>1.2 Penapisan Resume AI & Penilaian Skor Padanan Kerja</h3>
-                <p>HireLah menggunakan kecerdasan buatan (Model Google Gemini AI) untuk mengekstrak kandungan resume, menganalisis kemahiran, menilai pengalaman kerja, dan mengira skor padanan kelayakan kerja.</p>
+                <p>Keria menggunakan kecerdasan buatan (Model Google Gemini AI) untuk mengekstrak kandungan resume, menganalisis kemahiran, menilai pengalaman kerja, dan mengira skor padanan kelayakan kerja.</p>
                 <ul>
                     <li>Skor Padanan AI dihasilkan hanya sebagai bantuan penapisan tambahan untuk majikan.</li>
                     <li>Skor AI tidak menjamin tawaran temuduga atau keputusan pengambilan kerja muktamad.</li>
@@ -203,16 +203,16 @@ session_start();
                 </ul>
 
                 <h3>1.3 Etika Pengguna & Majikan</h3>
-                <p>Pengguna bersetuju untuk tidak memuat naik maklumat resume palsu atau tawaran kerja yang mengelirukan. HireLah berhak menggantung akaun yang melanggar syarat ini.</p>
+                <p>Pengguna bersetuju untuk tidak memuat naik maklumat resume palsu atau tawaran kerja yang mengelirukan. Keria berhak menggantung akaun yang melanggar syarat ini.</p>
             </div>
 
             <!-- Akta PDPA Section -->
             <div class="doc-section" id="pdpa-ms">
                 <h2>2. Dasar Perlindungan Data Peribadi (PDPA 2010 - Akta 709)</h2>
-                <p>Selaras dengan <strong>Akta Perlindungan Data Peribadi 2010 ("PDPA") Malaysia</strong> (Akta 709), HireLah komited untuk melindungi data peribadi anda dan menghormati hak privasi anda.</p>
+                <p>Selaras dengan <strong>Akta Perlindungan Data Peribadi 2010 ("PDPA") Malaysia</strong> (Akta 709), Keria komited untuk melindungi data peribadi anda dan menghormati hak privasi anda.</p>
 
                 <h3>2.1 Pengumpulan Data Peribadi</h3>
-                <p>Semasa mendaftar sebagai Calon atau Majikan, HireLah mengumpul maklumat peribadi termasuk:</p>
+                <p>Semasa mendaftar sebagai Calon atau Majikan, Keria mengumpul maklumat peribadi termasuk:</p>
                 <ul>
                     <li>Nama Penuh, Alamat E-mel, dan Maklumat Akaun</li>
                     <li>Dokumen Resume PDF, sejarah pekerjaan, kemahiran, pendidikan, dan maklumat portfolio</li>

@@ -41,7 +41,7 @@ $actions_list = $pdo->query("SELECT DISTINCT action FROM admin_logs ORDER BY act
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Audit Logs - HireLah Admin</title>
+    <title>System Audit Logs - Keria Admin</title>
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
     <link rel="icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
     <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
@@ -101,13 +101,13 @@ $actions_list = $pdo->query("SELECT DISTINCT action FROM admin_logs ORDER BY act
     </style>
 </head>
 <body>
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
 
     <header>
         <div class="header-inner">
             <div class="logo-box">📜</div>
             <div>
-                <div style="font-size:15px; font-weight:800; line-height:1">HireLah ATS</div>
+                <div style="font-size:15px; font-weight:800; line-height:1">Keria ATS</div>
                 <div style="font-size:9px; color:var(--mut); letter-spacing:0.8px">SYSTEM AUDIT & ACTIVITY LOGS</div>
             </div>
 

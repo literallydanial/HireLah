@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if (empty($_SESSION['toast'])) {
-                $_SESSION['toast'] = "Account verified successfully! Welcome to HireLah.";
+                $_SESSION['toast'] = "Account verified successfully! Welcome to Keria.";
             }
             header("Location: " . ($user['role'] === 'employer' ? "employer_dashboard.php" : "jobs.php"));
             exit;
@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Verify Email OTP - HireLah</title>
+    <title>Verify Email OTP - Keria</title>
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
     <style>
         .otp-input-group {
@@ -142,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
 </head>
 <body style="display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg);">
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
     <main style="max-width:440px; width:100%; padding:20px; position:relative; z-index:2;">
         <?php if(isset($_SESSION['toast'])): ?>
             <div class="toast-notification">
@@ -156,7 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="panel" style="text-align:center; padding:32px 28px; border-radius:18px; box-shadow:var(--shadow-lg);">
             <div style="margin-bottom:12px; display:flex; justify-content:center;">
                 <div style="display:flex; align-items:center; justify-content:center;">
-                    <img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="height:72px; width:auto; max-width:100%; object-fit:contain;">
+                    <img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="height:72px; width:auto; max-width:100%; object-fit:contain;">
                 </div>
             </div>
             <h1 style="font-size:22px; font-weight:800; color:var(--txt); margin-bottom:6px;">Email Verification</h1>

@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Set Google Gemini API Key - HireLah</title>
+    <title>Set Google Gemini API Key - Keria</title>
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
 </head>
 <body style="display:flex; align-items:center; justify-content:center; min-height:100vh;">

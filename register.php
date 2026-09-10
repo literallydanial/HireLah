@@ -66,21 +66,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Register - HireLah</title>
+    <title>Register - Keria</title>
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
     <link rel="icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
     <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
 </head>
 <body style="display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px 0;">
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
     <div class="panel" style="max-width:400px; width:100%; text-align:center; position:relative; z-index:2;">
         <div style="margin-bottom:12px; display:flex; justify-content:center;">
             <div style="display:flex; align-items:center; justify-content:center;">
-                <img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="height:72px; width:auto; max-width:100%; object-fit:contain;">
+                <img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="height:72px; width:auto; max-width:100%; object-fit:contain;">
             </div>
         </div>
         <div style="font-size:24px; font-weight:800; margin-bottom:6px;">Create an Account</div>
-        <div style="font-size:13px; color:var(--mut); margin-bottom:24px;">Join HireLah today</div>
+        <div style="font-size:13px; color:var(--mut); margin-bottom:24px;">Join Keria today</div>
 
         <?php if ($invite_company): ?>
             <div style="background:rgba(0,232,122,0.1); border:1px solid rgba(0,232,122,0.35); border-radius:8px; padding:12px; margin-bottom:16px; text-align:left; font-size:13px; color:var(--txt);">

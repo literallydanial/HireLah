@@ -56,18 +56,18 @@ if (empty($token)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interview Response - HireLah</title>
+    <title>Interview Response - Keria</title>
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
     <link rel="icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
     <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
 </head>
 <body style="display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px 0;">
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
 
     <div class="panel" style="max-width:520px; width:100%; text-align:center; position:relative; z-index:2;">
         <div style="margin-bottom:12px; display:flex; justify-content:center;">
             <div style="display:flex; align-items:center; justify-content:center;">
-                <img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="height:72px; width:auto; max-width:100%; object-fit:contain;">
+                <img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="height:72px; width:auto; max-width:100%; object-fit:contain;">
             </div>
         </div>
 
@@ -88,7 +88,7 @@ if (empty($token)) {
 
             <div style="background:var(--surf); border:1px solid var(--bdr); border-radius:12px; padding:18px; text-align:left; margin-bottom:24px;">
                 <div style="font-size:14px; font-weight:800; color:var(--txt); margin-bottom:4px;"><?= htmlspecialchars($candidate['job_title']) ?></div>
-                <div style="font-size:12px; color:var(--mut); margin-bottom:12px;">Hiring Team: <strong><?= htmlspecialchars($candidate['employer_name'] ?: 'HireLah Employer') ?></strong></div>
+                <div style="font-size:12px; color:var(--mut); margin-bottom:12px;">Hiring Team: <strong><?= htmlspecialchars($candidate['employer_name'] ?: 'Keria Employer') ?></strong></div>
 
                 <?php if(!empty($candidate['interview_datetime'])): ?>
                     <div style="font-size:14px; font-weight:800; color:var(--acc); margin-bottom:8px;">

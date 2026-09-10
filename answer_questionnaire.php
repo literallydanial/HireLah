@@ -51,7 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$submitted) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($request['title']) ?> - HireLah</title>
+    <title><?= htmlspecialchars($request['title']) ?> - Keria</title>
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
     <style>
         .q-box {
@@ -64,10 +64,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$submitted) {
     </style>
 </head>
 <body style="display:flex; align-items:center; justify-content:center; min-height:100vh; padding:40px 20px;">
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
     <div class="panel" style="max-width:650px; width:100%; position:relative; z-index:2;">
         <div style="margin-bottom:20px; display:flex; align-items:center; justify-content:space-between;">
-            <div style="font-size:12px; font-weight:700; color:var(--acc);">HireLah Candidate Portal</div>
+            <div style="font-size:12px; font-weight:700; color:var(--acc);">Keria Candidate Portal</div>
             <span class="chip" style="background:var(--dim); color:var(--txt); font-size:11px;"><?= htmlspecialchars($request['job_title'] ?? 'Job Role') ?></span>
         </div>
 

@@ -120,7 +120,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Board - HireLah</title>
+    <title>Job Board - Keria</title>
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
     <style>
         .search-bar-panel {
@@ -220,11 +220,11 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
     <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
 </head>
 <body>
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
     <header>
         <div class="header-inner">
             <div style="display:flex; align-items:center; gap:10px;">
-                <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
+                <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
             </div>
 
             <nav style="display:flex; gap:4px; margin-left:24px">
@@ -410,7 +410,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                                         <span class="chip-urgency"><?= htmlspecialchars($j['posted_label']) ?></span>
                                     </div>
                                     <div style="font-size:12px; color:var(--mut); margin-bottom:10px;">
-                                        <strong><?= htmlspecialchars($j['employer_name'] ?? 'HireLah') ?></strong> &bull; 📍 <?= htmlspecialchars($j['department'] ?: 'General') ?>
+                                        <strong><?= htmlspecialchars($j['employer_name'] ?? 'Keria') ?></strong> &bull; 📍 <?= htmlspecialchars($j['department'] ?: 'General') ?>
                                     </div>
 
                                     <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap;">
@@ -467,7 +467,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         const appliedJobIds = <?= json_encode($applied_job_ids, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
         const userRole = <?= json_encode($_SESSION['user_role'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 
-        let savedJobIds = JSON.parse(localStorage.getItem('hirelah_saved_jobs') || '[]');
+        let savedJobIds = JSON.parse(localStorage.getItem('keria_saved_jobs') || localStorage.getItem('hirelah_saved_jobs') || '[]');
 
         function updateSavedBadges() {
             savedJobIds.forEach(id => {
@@ -485,7 +485,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 savedJobIds.push(jobId);
                 if (typeof showToast === 'function') showToast('Job saved to bookmarks!', 'success');
             }
-            localStorage.setItem('hirelah_saved_jobs', JSON.stringify(savedJobIds));
+            localStorage.setItem('keria_saved_jobs', JSON.stringify(savedJobIds));
 
             const btn = document.getElementById('saveBtn_' + jobId);
             if (btn) {
@@ -667,7 +667,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                         <div style="display:flex; align-items:center; gap:14px; margin-bottom:16px;">
                             ${job.company_logo ? `<img src="${escapeHtml(job.company_logo)}" alt="" style="width:52px; height:52px; object-fit:contain; border-radius:12px; background:var(--surf); padding:4px; border:1px solid var(--bdr);">` : `<div style="width:52px; height:52px; border-radius:12px; background:var(--surf); border:1px solid var(--bdr); display:flex; align-items:center; justify-content:center; font-size:24px;">🏢</div>`}
                             <div>
-                                <div style="font-size:16px; font-weight:800; color:var(--txt);">${escapeHtml(job.employer_name || 'HireLah Enterprise')}</div>
+                                <div style="font-size:16px; font-weight:800; color:var(--txt);">${escapeHtml(job.employer_name || 'Keria Enterprise')}</div>
                                 <div style="font-size:12px; color:var(--mut);">${escapeHtml(job.department || 'Technology')} &bull; Active Hiring Partner</div>
                             </div>
                         </div>
@@ -692,7 +692,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                             <div style="flex:1; min-width:0;">
                                 <h2 style="font-size:24px; font-weight:800; color:var(--txt); margin:0 0 6px 0; line-height:1.2;">${escapeHtml(job.job_title)}</h2>
                                 <div style="font-size:13.5px; color:var(--mut); display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
-                                    <span><strong>${escapeHtml(job.employer_name || 'HireLah')}</strong></span>
+                                    <span><strong>${escapeHtml(job.employer_name || 'Keria')}</strong></span>
                                     <span>&bull;</span>
                                     <span>📍 ${locationText}</span>
                                     <span>&bull;</span>
@@ -798,11 +798,27 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             form.submit();
         }
 
-        // Auto select first job on load
+        // Auto select requested job or first job on load
         document.addEventListener('DOMContentLoaded', function() {
             updateSavedBadges();
-            if (Array.isArray(jobsData) && jobsData.length > 0) {
-                selectJob(jobsData[0].id);
+            const urlParams = new URLSearchParams(window.location.search);
+            const targetId = urlParams.get('id');
+            let initialJobId = null;
+
+            if (targetId && jobsData.some(j => j.id == targetId)) {
+                initialJobId = targetId;
+            } else if (Array.isArray(jobsData) && jobsData.length > 0) {
+                initialJobId = jobsData[0].id;
+            }
+
+            if (initialJobId) {
+                selectJob(initialJobId);
+                const targetCard = document.getElementById('card_' + initialJobId);
+                if (targetCard) {
+                    setTimeout(() => {
+                        targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }, 100);
+                }
             }
         });
 

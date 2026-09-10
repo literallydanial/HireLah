@@ -1,6 +1,6 @@
 <?php
 // =========================================================================
-// HIRELAH DATABASE CONFIGURATION
+// KERIA DATABASE CONFIGURATION
 // =========================================================================
 // Fill in these 4 values for your production MySQL server:
 // -------------------------------------------------------------------------
@@ -27,10 +27,10 @@ $options = [
 try {
     $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
 } catch (\PDOException $e) {
-    error_log("HireLah DB Connection Error: " . $e->getMessage());
+    error_log("Keria DB Connection Error: " . $e->getMessage());
     die("<div style='font-family:sans-serif; max-width:600px; margin:50px auto; padding:24px; border:1px solid #F87171; background:#FEF2F2; color:#991B1B; border-radius:12px; text-align:center;'>" .
         "<h3 style='margin-top:0;'>⚠️ Service Temporarily Unavailable</h3>" .
-        "<p>HireLah is currently unable to connect to the database server.</p>" .
+        "<p>Keria is currently unable to connect to the database server.</p>" .
         "<p style='font-size:13px; color:#6B7280;'>If you are the administrator, please inspect <code>db.php</code> and verify your MySQL credentials.</p>" .
         "</div>");
 }

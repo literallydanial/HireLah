@@ -159,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
 </head>
 <body style="display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px 0;">
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
     <div class="panel" style="max-width:500px; width:100%; position:relative; z-index:2;">
         <div style="margin-bottom:20px; display:flex; align-items:center; gap:12px;">
             <a href="jobs.php" class="btn-secondary" style="padding:6px 12px; font-size:12px;">&larr; Back</a>

@@ -49,8 +49,8 @@ function send_questionnaire_email($candidate_name, $candidate_email, $job_title,
         );
 
         // Recipients
-        $from_email = !empty($config['smtp_from']) ? $config['smtp_from'] : (!empty($config['smtp_user']) ? $config['smtp_user'] : 'no-reply@hirelah.com');
-        $from_name  = $config['smtp_from_name'] ?? 'HireLah Recruitment Team';
+        $from_email = !empty($config['smtp_from']) ? $config['smtp_from'] : (!empty($config['smtp_user']) ? $config['smtp_user'] : 'no-reply@keria.com');
+        $from_name  = $config['smtp_from_name'] ?? 'Keria Recruitment Team';
         
         $mail->setFrom($from_email, $from_name);
         if (!empty($reply_to_email)) {
@@ -69,7 +69,7 @@ function send_questionnaire_email($candidate_name, $candidate_email, $job_title,
         $mail->CharSet = 'UTF-8';
         $mail->Encoding = 'base64';
         $mail->isHTML(true);
-        $mail->Subject = "Action Required: Screening Questions for " . ($job_title ? $job_title : "your Job Application") . " - HireLah";
+        $mail->Subject = "Action Required: Screening Questions for " . ($job_title ? $job_title : "your Job Application") . " - Keria";
 
         // Build Questions HTML list
         $q_html = '';
@@ -84,7 +84,7 @@ function send_questionnaire_email($candidate_name, $candidate_email, $job_title,
         $mail->Body = "
         <div style='font-family: Arial, sans-serif; max-width:600px; margin:0 auto; padding:24px; border:1px solid #E2E8F0; border-radius:12px; background:#ffffff;'>
             <div style='text-align:center; padding-bottom:16px; border-bottom:1px solid #E2E8F0;'>
-                <h2 style='color:#3B82F6; margin:0;'>HireLah AI Screening</h2>
+                <h2 style='color:#3B82F6; margin:0;'>Keria AI Screening</h2>
                 <p style='color:#64748B; font-size:13px; margin-top:4px;'>Screening Questionnaire Request</p>
             </div>
             
@@ -113,11 +113,11 @@ function send_questionnaire_email($candidate_name, $candidate_email, $job_title,
             </div>
 
             <div style='border-top:1px solid #E2E8F0; padding-top:16px; font-size:12px; color:#94A3B8; text-align:center;'>
-                © " . date('Y') . " HireLah ATS. All rights reserved.
+                © " . date('Y') . " Keria ATS. All rights reserved.
             </div>
         </div>";
 
-        $mail->AltBody = "Hi $candidate_name,\n\nPlease answer the screening questionnaire for $job_title at:\n$answer_url\n\nThank you,\nHireLah Team";
+        $mail->AltBody = "Hi $candidate_name,\n\nPlease answer the screening questionnaire for $job_title at:\n$answer_url\n\nThank you,\nKeria Team";
 
         $mail->send();
         return ['success' => true, 'error' => null];
@@ -173,8 +173,8 @@ function send_otp_email($user_name, $user_email, $otp_code) {
         );
 
         // Recipients
-        $from_email = !empty($config['smtp_from']) ? $config['smtp_from'] : (!empty($config['smtp_user']) ? $config['smtp_user'] : 'no-reply@hirelah.com');
-        $from_name  = $config['smtp_from_name'] ?? 'HireLah Account Verification';
+        $from_email = !empty($config['smtp_from']) ? $config['smtp_from'] : (!empty($config['smtp_user']) ? $config['smtp_user'] : 'no-reply@keria.com');
+        $from_name  = $config['smtp_from_name'] ?? 'Keria Account Verification';
         
         $mail->setFrom($from_email, $from_name);
         $mail->addAddress($user_email, $user_name ?: 'New User');
@@ -183,7 +183,7 @@ function send_otp_email($user_name, $user_email, $otp_code) {
         $mail->CharSet = 'UTF-8';
         $mail->Encoding = 'base64';
         $mail->isHTML(true);
-        $mail->Subject = "Your HireLah Account Verification Code: {$otp_code}";
+        $mail->Subject = "Your Keria Account Verification Code: {$otp_code}";
 
         // Digit styling for OTP
         $digits = str_split((string)$otp_code);
@@ -195,14 +195,14 @@ function send_otp_email($user_name, $user_email, $otp_code) {
         $mail->Body = "
         <div style='font-family: Arial, sans-serif; max-width:550px; margin:0 auto; padding:24px; border:1px solid #E2E8F0; border-radius:12px; background:#ffffff;'>
             <div style='text-align:center; padding-bottom:16px; border-bottom:1px solid #E2E8F0;'>
-                <h2 style='color:#3B82F6; margin:0;'>HireLah Account Verification</h2>
+                <h2 style='color:#3B82F6; margin:0;'>Keria Account Verification</h2>
                 <p style='color:#64748B; font-size:13px; margin-top:4px;'>Email Security & Verification</p>
             </div>
             
             <div style='padding:24px 0; text-align:center;'>
                 <p style='font-size:15px; color:#0F172A; text-align:left;'>Hi <strong>" . htmlspecialchars($user_name) . "</strong>,</p>
                 <p style='font-size:14px; color:#334155; line-height:1.6; text-align:left;'>
-                    Thank you for signing up with <strong>HireLah</strong>! Please use the 6-digit verification code below to confirm your email address and activate your account:
+                    Thank you for signing up with <strong>Keria</strong>! Please use the 6-digit verification code below to confirm your email address and activate your account:
                 </p>
 
                 <div style='margin:28px 0; text-align:center;'>
@@ -216,11 +216,11 @@ function send_otp_email($user_name, $user_email, $otp_code) {
             </div>
 
             <div style='border-top:1px solid #E2E8F0; padding-top:16px; font-size:12px; color:#94A3B8; text-align:center;'>
-                © " . date('Y') . " HireLah ATS. All rights reserved.
+                © " . date('Y') . " Keria ATS. All rights reserved.
             </div>
         </div>";
 
-        $mail->AltBody = "Hi $user_name,\n\nYour HireLah account verification OTP code is: $otp_code\nIt expires in 15 minutes.\n\nThank you,\nHireLah Team";
+        $mail->AltBody = "Hi $user_name,\n\nYour Keria account verification OTP code is: $otp_code\nIt expires in 15 minutes.\n\nThank you,\nKeria Team";
 
         $mail->send();
         return ['success' => true, 'error' => null];
@@ -276,8 +276,8 @@ function send_password_reset_email($user_name, $user_email, $reset_token) {
         );
 
         // Recipients
-        $from_email = !empty($config['smtp_from']) ? $config['smtp_from'] : (!empty($config['smtp_user']) ? $config['smtp_user'] : 'no-reply@hirelah.com');
-        $from_name  = $config['smtp_from_name'] ?? 'HireLah Account Support';
+        $from_email = !empty($config['smtp_from']) ? $config['smtp_from'] : (!empty($config['smtp_user']) ? $config['smtp_user'] : 'no-reply@keria.com');
+        $from_name  = $config['smtp_from_name'] ?? 'Keria Account Support';
         
         $mail->setFrom($from_email, $from_name);
         $mail->addAddress($user_email, $user_name ?: 'User');
@@ -293,19 +293,19 @@ function send_password_reset_email($user_name, $user_email, $reset_token) {
         $mail->CharSet = 'UTF-8';
         $mail->Encoding = 'base64';
         $mail->isHTML(true);
-        $mail->Subject = "Reset Your HireLah Account Password";
+        $mail->Subject = "Reset Your Keria Account Password";
 
         $mail->Body = "
         <div style='font-family: Arial, sans-serif; max-width:550px; margin:0 auto; padding:24px; border:1px solid #E2E8F0; border-radius:12px; background:#ffffff;'>
             <div style='text-align:center; padding-bottom:16px; border-bottom:1px solid #E2E8F0;'>
-                <h2 style='color:#6B8A00; margin:0;'>HireLah Account Support</h2>
+                <h2 style='color:#6B8A00; margin:0;'>Keria Account Support</h2>
                 <p style='color:#64748B; font-size:13px; margin-top:4px;'>Password Reset Request</p>
             </div>
             
             <div style='padding:24px 0;'>
                 <p style='font-size:15px; color:#0F172A;'>Hi <strong>" . htmlspecialchars($user_name) . "</strong>,</p>
                 <p style='font-size:14px; color:#334155; line-height:1.6;'>
-                    We received a request to reset the password for your <strong>HireLah</strong> account. Click the button below to set a new password:
+                    We received a request to reset the password for your <strong>Keria</strong> account. Click the button below to set a new password:
                 </p>
 
                 <div style='text-align:center; margin:30px 0;'>
@@ -326,11 +326,11 @@ function send_password_reset_email($user_name, $user_email, $reset_token) {
             </div>
 
             <div style='border-top:1px solid #E2E8F0; padding-top:16px; font-size:12px; color:#94A3B8; text-align:center;'>
-                © " . date('Y') . " HireLah ATS. All rights reserved.
+                © " . date('Y') . " Keria ATS. All rights reserved.
             </div>
         </div>";
 
-        $mail->AltBody = "Hi $user_name,\n\nYou requested a password reset for your HireLah account. Click or copy the link below to set a new password:\n$reset_url\n\nThis link expires in 1 hour.\n\nThank you,\nHireLah Team";
+        $mail->AltBody = "Hi $user_name,\n\nYou requested a password reset for your Keria account. Click or copy the link below to set a new password:\n$reset_url\n\nThis link expires in 1 hour.\n\nThank you,\nKeria Team";
 
         $mail->send();
         return ['success' => true, 'error' => null];
@@ -382,8 +382,8 @@ function send_interview_proposal_email($candidate_name, $candidate_email, $job_t
             )
         );
 
-        $from_email = !empty($config['smtp_from']) ? $config['smtp_from'] : (!empty($config['smtp_user']) ? $config['smtp_user'] : 'no-reply@hirelah.com');
-        $from_name  = $config['smtp_from_name'] ?? 'HireLah Recruitment Team';
+        $from_email = !empty($config['smtp_from']) ? $config['smtp_from'] : (!empty($config['smtp_user']) ? $config['smtp_user'] : 'no-reply@keria.com');
+        $from_name  = $config['smtp_from_name'] ?? 'Keria Recruitment Team';
 
         $mail->setFrom($from_email, $from_name);
         if (!empty($reply_to_email)) {
@@ -405,12 +405,12 @@ function send_interview_proposal_email($candidate_name, $candidate_email, $job_t
         $mail->CharSet = 'UTF-8';
         $mail->Encoding = 'base64';
         $mail->isHTML(true);
-        $mail->Subject = "Interview Proposal: " . ($job_title ? $job_title : "your Job Application") . " - HireLah";
+        $mail->Subject = "Interview Proposal: " . ($job_title ? $job_title : "your Job Application") . " - Keria";
 
         $mail->Body = "
         <div style='font-family: Arial, sans-serif; max-width:600px; margin:0 auto; padding:24px; border:1px solid #E2E8F0; border-radius:12px; background:#ffffff;'>
             <div style='text-align:center; padding-bottom:16px; border-bottom:1px solid #E2E8F0;'>
-                <h2 style='color:#6B8A00; margin:0;'>HireLah Interview Invitation</h2>
+                <h2 style='color:#6B8A00; margin:0;'>Keria Interview Invitation</h2>
                 <p style='color:#64748B; font-size:13px; margin-top:4px;'>Proposed Interview Schedule</p>
             </div>
             
@@ -442,11 +442,11 @@ function send_interview_proposal_email($candidate_name, $candidate_email, $job_t
             </div>
 
             <div style='border-top:1px solid #E2E8F0; padding-top:16px; font-size:12px; color:#94A3B8; text-align:center;'>
-                © " . date('Y') . " HireLah ATS. All rights reserved.
+                © " . date('Y') . " Keria ATS. All rights reserved.
             </div>
         </div>";
 
-        $mail->AltBody = "Hi $candidate_name,\n\nYou have been invited to an interview for $job_title on $formatted_date.\nConfirm slot: $confirm_url\nDecline: $decline_url\n\nThank you,\nHireLah Team";
+        $mail->AltBody = "Hi $candidate_name,\n\nYou have been invited to an interview for $job_title on $formatted_date.\nConfirm slot: $confirm_url\nDecline: $decline_url\n\nThank you,\nKeria Team";
 
         $mail->send();
         return ['success' => true, 'error' => null];
@@ -495,8 +495,8 @@ function send_interview_confirmed_email($employer_name, $employer_email, $candid
             )
         );
 
-        $from_email = !empty($config['smtp_from']) ? $config['smtp_from'] : (!empty($config['smtp_user']) ? $config['smtp_user'] : 'no-reply@hirelah.com');
-        $from_name  = $config['smtp_from_name'] ?? 'HireLah Interview System';
+        $from_email = !empty($config['smtp_from']) ? $config['smtp_from'] : (!empty($config['smtp_user']) ? $config['smtp_user'] : 'no-reply@keria.com');
+        $from_name  = $config['smtp_from_name'] ?? 'Keria Interview System';
 
         $mail->setFrom($from_email, $from_name);
         $mail->addAddress($employer_email, $employer_name ?: 'Employer');
@@ -529,11 +529,11 @@ function send_interview_confirmed_email($employer_name, $employer_email, $candid
             </div>
 
             <div style='border-top:1px solid #E2E8F0; padding-top:16px; font-size:12px; color:#94A3B8; text-align:center;'>
-                © " . date('Y') . " HireLah ATS. All rights reserved.
+                © " . date('Y') . " Keria ATS. All rights reserved.
             </div>
         </div>";
 
-        $mail->AltBody = "Hi $employer_name,\n\nCandidate $candidate_name has confirmed their interview for $job_title on $formatted_date.\n\nThank you,\nHireLah Team";
+        $mail->AltBody = "Hi $employer_name,\n\nCandidate $candidate_name has confirmed their interview for $job_title on $formatted_date.\n\nThank you,\nKeria Team";
 
         $mail->send();
         return ['success' => true, 'error' => null];

@@ -86,7 +86,7 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Applications - HireLah</title>
+    <title>My Applications - Keria</title>
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
     <style>
         .stats-grid {
@@ -136,11 +136,11 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
     <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
 </head>
 <body>
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
     <header>
         <div class="header-inner">
             <div style="display:flex; align-items:center; gap:10px;">
-                <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
+                <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
             </div>
 
             <nav style="display:flex; gap:4px; margin-left:24px">
@@ -256,7 +256,7 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
                                 </span>
                             </div>
 
-                            <div style="font-size:12px; color:var(--mut); margin-bottom:10px;">Employer: <strong><?= htmlspecialchars($ia['employer_name'] ?: 'HireLah Employer') ?></strong></div>
+                            <div style="font-size:12px; color:var(--mut); margin-bottom:10px;">Employer: <strong><?= htmlspecialchars($ia['employer_name'] ?: 'Keria Employer') ?></strong></div>
 
                             <?php if(!empty($ia['interview_datetime'])): ?>
                                 <div style="font-size:13px; font-weight:800; color:var(--acc); margin-bottom:10px; background:var(--dim); padding:8px 12px; border-radius:8px; display:inline-block;">
@@ -318,7 +318,7 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
                     $score_color = $score >= 75 ? '#00E87A' : ($score >= 50 ? '#F59E0B' : '#FF4D6A');
                     $strengths = !empty($app['strengths']) ? (json_decode($app['strengths'], true) ?: []) : [];
                 ?>
-                    <div class="app-card" data-title="<?= htmlspecialchars(strtolower($app['job_title'])) ?>" data-employer="<?= htmlspecialchars(strtolower($app['employer_name'] ?? 'hirelah')) ?>">
+                    <div class="app-card" data-title="<?= htmlspecialchars(strtolower($app['job_title'])) ?>" data-employer="<?= htmlspecialchars(strtolower($app['employer_name'] ?? 'keria')) ?>">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:14px;">
                             <div style="flex:1; min-width:240px;">
                                 <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
@@ -326,7 +326,7 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
                                     <span class="chip <?= $status_class ?>"><?= htmlspecialchars($app['status']) ?></span>
                                 </div>
                                 <div style="font-size:13px; color:var(--mut); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                                    <span>🏢 <strong><?= htmlspecialchars($app['employer_name'] ?? 'HireLah') ?></strong></span>
+                                    <span>🏢 <strong><?= htmlspecialchars($app['employer_name'] ?? 'Keria') ?></strong></span>
                                     <span>&bull;</span>
                                     <span>📅 Applied <?= date('M d, Y', strtotime($app['created_at'])) ?></span>
                                 </div>

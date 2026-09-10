@@ -342,12 +342,12 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
     </style>
 </head>
 <body>
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Watermark Logo"></div>
+    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
     <header>
         <div class="header-inner">
-            <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="HireLah Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
+            <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
             <div>
-                <div style="font-size:15px; font-weight:800; line-height:1">HireLah AI Screener</div>
+                <div style="font-size:15px; font-weight:800; line-height:1">Keria AI Screener</div>
                 <div style="font-size:9px; color:var(--mut); letter-spacing:0.8px">POWERED BY GEMINI</div>
             </div>
             <nav style="display:flex; gap:4px; margin-left:24px">
