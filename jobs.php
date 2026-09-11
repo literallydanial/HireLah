@@ -18,11 +18,12 @@ $sort_by = trim($_GET['sort'] ?? 'newest');
 $sql = "SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name, u.company_logo 
         FROM jobs j 
         LEFT JOIN users u ON j.employer_id = u.id 
-        WHERE j.status = 'Active' OR j.status IS NULL";
+        WHERE (j.status = 'Active' OR j.status IS NULL)";
 $params = [];
 
 if ($search !== '') {
-    $sql .= " AND (j.job_title LIKE ? OR j.department LIKE ? OR j.location LIKE ? OR j.description LIKE ? OR u.company_name LIKE ?)";
+    $sql .= " AND (j.job_title LIKE ? OR j.department LIKE ? OR j.location LIKE ? OR j.description LIKE ? OR u.company_name LIKE ? OR u.name LIKE ?)";
+    $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
@@ -125,37 +126,6 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         $candidate_scores = [];
     }
 }
-
-// Preset baseline scores for display to match screenshot perfectly if not yet applied
-$defaultScoreMap = [
-    0 => ['overall' => 15, 'skill' => 10, 'exp' => 90, 'edu' => 60, 'matched' => ['Networking', 'System Administration', 'Troubleshooting'], 'missing' => ['Security', 'Cloud']],
-    1 => ['overall' => 58, 'skill' => 65, 'exp' => 50, 'edu' => 70, 'matched' => ['Circuit Design', 'AutoCAD', 'Testing'], 'missing' => ['Embedded C', 'PLC']],
-    2 => ['overall' => 72, 'skill' => 85, 'exp' => 70, 'edu' => 80, 'matched' => ['React.js', 'JavaScript', 'Tailwind CSS', 'UI/UX'], 'missing' => ['Next.js', 'GraphQL']],
-    3 => ['overall' => 68, 'skill' => 75, 'exp' => 65, 'edu' => 80, 'matched' => ['Content Strategy', 'Social Media', 'Copywriting'], 'missing' => ['SEO Tools', 'Paid Ads']],
-    4 => ['overall' => 84, 'skill' => 90, 'exp' => 85, 'edu' => 85, 'matched' => ['Full-Stack', 'Node.js', 'PostgreSQL', 'REST API'], 'missing' => ['Docker', 'AWS']],
-    5 => ['overall' => 92, 'skill' => 95, 'exp' => 90, 'edu' => 95, 'matched' => ['Project Management', 'Agile/Scrum', 'Leadership'], 'missing' => ['PMP Certification']]
-];
-
-foreach ($jobs as $idx => &$j) {
-    if (!isset($candidate_scores[$j['id']])) {
-        $preset = $defaultScoreMap[$idx % count($defaultScoreMap)];
-        $matched = $preset['matched'];
-        if (!empty($j['department'])) {
-            $matched[0] = htmlspecialchars($j['department']);
-        }
-        $candidate_scores[$j['id']] = [
-            'overall_score' => $preset['overall'],
-            'skills_match' => $preset['skill'],
-            'exp_match' => $preset['exp'],
-            'edu_match' => $preset['edu'],
-            'summary' => 'Personalized candidate fit analysis based on profile skills, relevant background, and core job criteria.',
-            'parsed_skills' => $matched,
-            'parsed_strengths' => $matched,
-            'parsed_gaps' => $preset['missing']
-        ];
-    }
-}
-unset($j);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -301,7 +271,7 @@ unset($j);
         /* Floating Center Search & Filter Card */
         .banner-search-wrapper {
             flex: 1;
-            max-width: 820px;
+            max-width: 1080px;
             margin: 0 auto;
         }
 
@@ -309,7 +279,7 @@ unset($j);
             background: #FFFFFF;
             border: 1px solid #E5E7EB;
             border-radius: 22px;
-            padding: 14px 18px;
+            padding: 16px 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
             display: flex;
             flex-direction: column;
@@ -1419,7 +1389,8 @@ unset($j);
                     <?php foreach($jobs as $index => $j): 
                         $is_applied = in_array($j['id'], $applied_job_ids);
                         $sc = $candidate_scores[$j['id']] ?? null;
-                        $score_num = $sc ? (int)$sc['overall_score'] : 15;
+                        $has_score = !empty($sc);
+                        $score_num = $has_score ? (int)$sc['overall_score'] : 0;
                         
                         // Score bar colors
                         $bar_gradient = $score_num >= 70 ? 'linear-gradient(90deg, #A3E635, #22C55E)' : ($score_num >= 50 ? 'linear-gradient(90deg, #FBBF24, #F59E0B)' : 'linear-gradient(90deg, #F87171, #EF4444)');
@@ -1469,16 +1440,18 @@ unset($j);
                                 <?php endif; ?>
                             </div>
 
-                            <div class="card-ai-match-row">
-                                <div class="ai-match-label-group">
-                                    <span>🎴</span>
-                                    <span>AI Match</span>
+                            <?php if($has_score): ?>
+                                <div class="card-ai-match-row">
+                                    <div class="ai-match-label-group">
+                                        <span>🎴</span>
+                                        <span>AI Match</span>
+                                    </div>
+                                    <div class="ai-progress-track">
+                                        <div class="ai-progress-fill" style="width: <?= $score_num ?>%; background: <?= $bar_gradient ?>;"></div>
+                                    </div>
+                                    <span class="ai-score-pct" style="color: <?= $score_text_color ?>;"><?= $score_num ?>%</span>
                                 </div>
-                                <div class="ai-progress-track">
-                                    <div class="ai-progress-fill" style="width: <?= $score_num ?>%; background: <?= $bar_gradient ?>;"></div>
-                                </div>
-                                <span class="ai-score-pct" style="color: <?= $score_text_color ?>;"><?= $score_num ?>%</span>
-                            </div>
+                            <?php endif; ?>
                         </div>
                     <?php endforeach; ?>
 
@@ -1617,43 +1590,130 @@ unset($j);
 
             const isApplied = appliedJobIds.includes(job.id);
             const isSaved = savedJobIds.includes(parseInt(job.id));
-            const scoreData = candidateScores[job.id] || {
-                overall_score: 15,
-                skills_match: 10,
-                exp_match: 90,
-                edu_match: 60,
-                parsed_skills: ['Networking', 'System Administration', 'Troubleshooting'],
-                parsed_gaps: ['Security', 'Cloud']
-            };
-
-            const scoreNum = parseInt(scoreData.overall_score || 15);
-            const scoreColor = scoreNum >= 70 ? '#15803D' : (scoreNum >= 50 ? '#D97706' : '#DC2626');
-            const scoreBg = scoreNum >= 70 ? 'linear-gradient(90deg, #A3E635, #22C55E)' : (scoreNum >= 50 ? 'linear-gradient(90deg, #FBBF24, #F59E0B)' : 'linear-gradient(90deg, #F87171, #EF4444)');
+            const scoreData = candidateScores[job.id] || null;
 
             const salaryText = formatSalary(job);
             const locationText = job.location ? escapeHtml(job.location) : (escapeHtml(job.department || 'Kuala Lumpur'));
             const deptText = job.department ? escapeHtml(job.department) : 'Engineering';
-            const empName = job.employer_name ? escapeHtml(job.employer_name) : 'Nurul Sofea Zonkifle';
+            const empName = job.employer_name ? escapeHtml(job.employer_name) : 'Keria Employer';
 
-            // Build matched overlap badges
-            let matchedList = [];
-            if (Array.isArray(scoreData.parsed_skills) && scoreData.parsed_skills.length > 0) {
-                matchedList = scoreData.parsed_skills.slice(0, 4);
-            } else if (Array.isArray(scoreData.parsed_strengths) && scoreData.parsed_strengths.length > 0) {
-                matchedList = scoreData.parsed_strengths.slice(0, 3);
-            } else {
-                matchedList = ['Networking', 'System Administration', 'Troubleshooting'];
-            }
-            const matchedPills = matchedList.map(s => `<span class="overlap-pill-matched">✓ ${escapeHtml(s)}</span>`).join('');
+            // AI Match Breakdown Card
+            let aiScoreHtml = '';
+            if (scoreData) {
+                const scoreNum = parseInt(scoreData.overall_score || 0);
+                const scoreColor = scoreNum >= 70 ? '#15803D' : (scoreNum >= 50 ? '#D97706' : '#DC2626');
+                const scoreBg = scoreNum >= 70 ? 'linear-gradient(90deg, #A3E635, #22C55E)' : (scoreNum >= 50 ? 'linear-gradient(90deg, #FBBF24, #F59E0B)' : 'linear-gradient(90deg, #F87171, #EF4444)');
 
-            // Build gaps / missing badges
-            let missingList = [];
-            if (Array.isArray(scoreData.parsed_gaps) && scoreData.parsed_gaps.length > 0) {
-                missingList = scoreData.parsed_gaps.slice(0, 2);
-            } else {
-                missingList = ['Security', 'Cloud'];
+                const skillsScore = parseInt(scoreData.skills_match || 85);
+                const expScore = parseInt(scoreData.exp_match || 90);
+                const eduScore = parseInt(scoreData.edu_match || 80);
+
+                let parsedSkills = scoreData.parsed_skills;
+                if (typeof parsedSkills === 'string') {
+                    try { parsedSkills = JSON.parse(parsedSkills); } catch(e) {}
+                }
+                let parsedStrengths = scoreData.parsed_strengths;
+                if (typeof parsedStrengths === 'string') {
+                    try { parsedStrengths = JSON.parse(parsedStrengths); } catch(e) {}
+                }
+                let parsedGaps = scoreData.parsed_gaps;
+                if (typeof parsedGaps === 'string') {
+                    try { parsedGaps = JSON.parse(parsedGaps); } catch(e) {}
+                }
+
+                let matchedList = [];
+                if (Array.isArray(parsedSkills) && parsedSkills.length > 0) {
+                    matchedList = parsedSkills;
+                } else if (Array.isArray(parsedStrengths) && parsedStrengths.length > 0) {
+                    matchedList = parsedStrengths;
+                } else {
+                    matchedList = [
+                        (job.department ? job.department + ' Core Stack' : 'Relevant Skill Stack'),
+                        'Professional Experience',
+                        'Problem Solving'
+                    ];
+                }
+                const matchedPills = matchedList.map(s => `<span class="overlap-pill-matched">✓ ${escapeHtml(s)}</span>`).join('');
+
+                let missingList = [];
+                if (Array.isArray(parsedGaps) && parsedGaps.length > 0) {
+                    missingList = parsedGaps;
+                } else {
+                    missingList = ['AI Enhancement Recommendations'];
+                }
+                const missingPills = missingList.map(s => `<span class="overlap-pill-missing">⚡ ${escapeHtml(s)}</span>`).join('');
+
+                aiScoreHtml = `
+                    <div class="ai-eval-breakdown-card">
+                        <div class="ai-eval-header-row">
+                            <div class="ai-eval-title-block">
+                                <div class="ai-eval-title-line">
+                                    <span>🎴</span>
+                                    <span>AI Match Evaluation Breakdown</span>
+                                </div>
+                                <div class="ai-eval-subtitle">
+                                    Personalized Candidate Fit Analysis
+                                </div>
+                            </div>
+                            <div class="ai-eval-score-block">
+                                <span class="ai-eval-score-num" style="color:${scoreColor};">${scoreNum}%</span>
+                                <div>
+                                    <span class="ai-eval-score-label">MATCH SCORE</span>
+                                    <span class="ai-eval-info-icon" title="Evaluated against candidate skills, verified background & qualifications">ⓘ</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="ai-eval-progress-bar">
+                            <div class="ai-eval-progress-fill" style="width:${scoreNum}%; background:${scoreBg};"></div>
+                        </div>
+
+                        <div class="ai-eval-metrics-grid">
+                            <div class="ai-metric-item-card">
+                                <div class="ai-metric-title">🎯 Skill Match</div>
+                                <div class="ai-metric-val" style="color:${skillsScore >= 70 ? '#15803D' : (skillsScore >= 50 ? '#D97706' : '#DC2626')};">${skillsScore}%</div>
+                            </div>
+                            <div class="ai-metric-item-card">
+                                <div class="ai-metric-title">💼 Experience Fit</div>
+                                <div class="ai-metric-val" style="color:${expScore >= 70 ? '#15803D' : (expScore >= 50 ? '#D97706' : '#DC2626')};">${expScore}%</div>
+                            </div>
+                            <div class="ai-metric-item-card">
+                                <div class="ai-metric-title">🎓 Education Fit</div>
+                                <div class="ai-metric-val" style="color:${eduScore >= 70 ? '#15803D' : (eduScore >= 50 ? '#D97706' : '#DC2626')};">${eduScore}%</div>
+                            </div>
+                        </div>
+
+                        <div class="ai-overlap-section">
+                            <div class="ai-overlap-heading">Keywords & Skill Overlap</div>
+                            <div class="ai-overlap-pills-wrap">
+                                ${matchedPills}
+                                ${missingPills}
+                            </div>
+                        </div>
+
+                        ${scoreData.summary ? `
+                            <div style="font-size:12.5px; color:#4B5563; line-height:1.55; background:#FFFFFF; border:1px solid #E5E7EB; padding:12px 14px; border-radius:12px; border-left:3px solid ${scoreColor}; margin-top:14px;">
+                                <strong>Fit Summary:</strong> ${escapeHtml(scoreData.summary)}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            } else if (userRole === 'candidate') {
+                aiScoreHtml = `
+                    <div style="background:linear-gradient(135deg, rgba(210, 255, 58, 0.12), rgba(59, 130, 246, 0.06)); border:1px solid rgba(132, 204, 22, 0.3); border-radius:18px; padding:18px 20px; margin-bottom:24px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;">
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <div style="font-size:26px;">🤖</div>
+                                <div>
+                                    <div style="font-size:14px; font-weight:800; color:#0A0A0A;">AI Resume Match Evaluator</div>
+                                    <div style="font-size:12px; color:#4B5563; margin-top:2px;">Click Apply for Position to submit your resume and unlock instant Gemini AI match scoring!</div>
+                                </div>
+                            </div>
+                            <a href="resume_builder.php" class="btn-search-find" style="padding:8px 14px; font-size:12px; text-decoration:none; white-space:nowrap;">📝 AI Resume Builder</a>
+                        </div>
+                    </div>
+                `;
             }
-            const missingPills = missingList.map(s => `<span class="overlap-pill-missing">⚡ ${escapeHtml(s)}</span>`).join('');
 
             const detailHtml = `
                 <!-- Top Bar: Title & Action Icons -->
@@ -1715,54 +1775,8 @@ unset($j);
                     </button>
                 </div>
 
-                <!-- AI Match Evaluation Breakdown Card -->
-                <div class="ai-eval-breakdown-card">
-                    <div class="ai-eval-header-row">
-                        <div class="ai-eval-title-block">
-                            <div class="ai-eval-title-line">
-                                <span>🎴</span>
-                                <span>AI Match Evaluation Breakdown</span>
-                            </div>
-                            <div class="ai-eval-subtitle">
-                                Personalized Candidate Fit Analysis
-                            </div>
-                        </div>
-                        <div class="ai-eval-score-block">
-                            <span class="ai-eval-score-num" style="color:${scoreColor};">${scoreNum}%</span>
-                            <div>
-                                <span class="ai-eval-score-label">MATCH SCORE</span>
-                                <span class="ai-eval-info-icon" title="Evaluated against candidate skills, verified background & qualifications">ⓘ</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="ai-eval-progress-bar">
-                        <div class="ai-eval-progress-fill" style="width:${scoreNum}%; background:${scoreBg};"></div>
-                    </div>
-
-                    <div class="ai-eval-metrics-grid">
-                        <div class="ai-metric-item-card">
-                            <div class="ai-metric-title">🎯 Skill Match</div>
-                            <div class="ai-metric-val" style="color:#EF4444;">${scoreData.skills_match || 10}%</div>
-                        </div>
-                        <div class="ai-metric-item-card">
-                            <div class="ai-metric-title">💼 Experience Fit</div>
-                            <div class="ai-metric-val" style="color:#16A34A;">${scoreData.exp_match || 90}%</div>
-                        </div>
-                        <div class="ai-metric-item-card">
-                            <div class="ai-metric-title">🎓 Education Fit</div>
-                            <div class="ai-metric-val" style="color:#D97706;">${scoreData.edu_match || 60}%</div>
-                        </div>
-                    </div>
-
-                    <div class="ai-overlap-section">
-                        <div class="ai-overlap-heading">Keywords & Skill Overlap</div>
-                        <div class="ai-overlap-pills-wrap">
-                            ${matchedPills}
-                            ${missingPills}
-                        </div>
-                    </div>
-                </div>
+                <!-- AI Match Breakdown Card -->
+                ${aiScoreHtml}
 
                 <!-- Job Description Section -->
                 <div class="job-desc-section-wrapper">
