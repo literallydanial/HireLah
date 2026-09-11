@@ -565,7 +565,7 @@ if ($user['role'] === 'candidate') {
         </div>
     </header>
 
-    <main style="max-width:1180px; margin:36px auto; padding:0 24px;">
+    <main style="max-width:1180px; width:100%; box-sizing:border-box; margin:36px auto; padding:0 24px;">
         <?php if(isset($_SESSION['toast'])): ?>
             <div class="toast-notification">
                 <span class="toast-icon-badge">🌿</span>
@@ -1018,6 +1018,29 @@ if ($user['role'] === 'candidate') {
             <?php endif; ?>
         </div>
     </main>
+
+    <!-- FOOTER -->
+    <footer class="keria-footer">
+        <div class="footer-inner">
+            <a href="index.php" class="keria-logo">
+                <img src="logo/logo_white.png?v=<?php echo @filemtime(__DIR__.'/logo/logo_white.png'); ?>" alt="keria" class="keria-logo-img" style="height:40px; mix-blend-mode:normal;">
+            </a>
+
+            <div class="footer-nav-links" style="display:flex; gap:28px; align-items:center; flex-wrap:wrap;">
+                <a href="jobs.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Jobs</a>
+                <a href="resume_check.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">AI Resume Check</a>
+                <a href="resume_builder.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Resume Builder</a>
+                <a href="register.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">For Employers</a>
+                <a href="terms.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Terms & Conditions</a>
+            </div>
+        </div>
+
+        <div class="footer-bottom-copy">
+            <p style="margin:0;">&copy; <?= date('Y') ?> keria. All rights reserved.</p>
+            <p style="margin:0;">Made with ❤️ in Kuala Lumpur, Malaysia</p>
+        </div>
+    </footer>
+
 
     <!-- Resume PDF Preview Popup Modal Overlay -->
     <div id="resumePreviewModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); backdrop-filter:blur(10px); z-index:9000; align-items:center; justify-content:center; padding:20px;">

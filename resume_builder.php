@@ -258,7 +258,7 @@ try {
                top margin in earlier attempts). #printArea is left in normal
                document flow — once everything before it is removed, it
                naturally renders at the top with no positioning hack needed. */
-            .bg-watermark-logo, header, #resumeIntroPanel, #resumeResultHeader, #pastResumesPanel { display: none !important; }
+            .bg-watermark-logo, header, #resumeIntroPanel, #resumeResultHeader, #pastResumesPanel, footer, .keria-footer { display: none !important; }
             /* .rb-glow-1/.rb-glow-2 are decorative blurred background orbs;
                body > button is the light/dark theme toggle theme.js injects
                directly onto <body> — neither lives inside main/header, so
@@ -806,5 +806,28 @@ function askAi(btn) {
 }
 </script>
 </main>
+
+<!-- FOOTER -->
+<footer class="keria-footer">
+    <div class="footer-inner">
+        <a href="index.php" class="keria-logo">
+            <img src="logo/logo_white.png?v=<?php echo @filemtime(__DIR__.'/logo/logo_white.png'); ?>" alt="keria" class="keria-logo-img" style="height:40px; mix-blend-mode:normal;">
+        </a>
+
+        <div class="footer-nav-links" style="display:flex; gap:28px; align-items:center; flex-wrap:wrap;">
+            <a href="jobs.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Jobs</a>
+            <a href="resume_check.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">AI Resume Check</a>
+            <a href="resume_builder.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Resume Builder</a>
+            <a href="register.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">For Employers</a>
+            <a href="terms.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Terms & Conditions</a>
+        </div>
+    </div>
+
+    <div class="footer-bottom-copy">
+        <p style="margin:0;">&copy; <?= date('Y') ?> keria. All rights reserved.</p>
+        <p style="margin:0;">Made with ❤️ in Kuala Lumpur, Malaysia</p>
+    </div>
+</footer>
+
 <script src="theme.js"></script></body>
 </html>

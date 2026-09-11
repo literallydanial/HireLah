@@ -157,10 +157,17 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             background-color: var(--keria-bg, #F8FAF8);
             color: var(--keria-dark, #0A0A0A);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
             overflow-x: hidden;
         }
+
+        .keria-main-container {
+            flex: 1 0 auto;
+        }
+
 
         /* Screen-filling Header Width */
         header .header-inner {
@@ -1506,6 +1513,29 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         <?php endif; ?>
 
     </main>
+
+    <!-- FOOTER -->
+    <footer class="keria-footer">
+        <div class="footer-inner">
+            <a href="index.php" class="keria-logo">
+                <img src="logo/logo_white.png?v=<?php echo @filemtime(__DIR__.'/logo/logo_white.png'); ?>" alt="keria" class="keria-logo-img" style="height:40px; mix-blend-mode:normal;">
+            </a>
+
+            <div class="footer-nav-links" style="display:flex; gap:28px; align-items:center; flex-wrap:wrap;">
+                <a href="jobs.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Jobs</a>
+                <a href="resume_check.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">AI Resume Check</a>
+                <a href="resume_builder.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Resume Builder</a>
+                <a href="register.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">For Employers</a>
+                <a href="terms.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Terms & Conditions</a>
+            </div>
+        </div>
+
+        <div class="footer-bottom-copy">
+            <p style="margin:0;">&copy; <?= date('Y') ?> keria. All rights reserved.</p>
+            <p style="margin:0;">Made with ❤️ in Kuala Lumpur, Malaysia</p>
+        </div>
+    </footer>
+
 
     <!-- Mobile Job Details Modal Popup -->
     <div id="mobileJobModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(6px); z-index:99999; align-items:center; justify-content:center; padding:16px;">

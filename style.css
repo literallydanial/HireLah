@@ -90,10 +90,17 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   transition: background 0.3s ease, color 0.3s ease;
   line-height: 1.5;
   position: relative;
 }
+
+main, .keria-main-container {
+  flex: 1 0 auto;
+}
+
 
 h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.025em;
@@ -1087,4 +1094,92 @@ input:focus, select:focus, textarea:focus {
   color: #FF8C42;
   border: 1px solid rgba(255, 140, 66, 0.3);
 }
+
+/* ================= KERIA FOOTER ================= */
+.keria-footer {
+  background: #0A0A0A;
+  color: #FFFFFF;
+  padding: 50px 32px 30px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  z-index: 20;
+  margin-top: auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.keria-footer .footer-inner {
+  max-width: 1560px;
+  margin: 0 auto 36px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.keria-footer .keria-logo-img {
+  height: 40px;
+  mix-blend-mode: normal;
+  display: block;
+}
+
+.keria-footer .footer-nav-links {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.keria-footer .footer-nav-links a {
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.keria-footer .footer-nav-links a:hover {
+  color: #FFFFFF;
+}
+
+.keria-footer .footer-bottom-copy {
+  max-width: 1560px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.keria-footer .footer-bottom-copy p {
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .keria-footer {
+    padding: 36px 20px 24px;
+  }
+  .keria-footer .footer-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  .keria-footer .footer-nav-links {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .keria-footer .footer-bottom-copy {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}
+
 
