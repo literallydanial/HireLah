@@ -1255,19 +1255,6 @@ if (file_exists('db.php')) {
             background: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(255, 255, 255, 0.2) 35%, rgba(255, 255, 255, 0.65) 100%);
         }
 
-        .final-cta-doodle-left {
-            position: absolute;
-            top: 36px;
-            left: 48px;
-            font-family: var(--font-hand);
-            font-size: 26px;
-            line-height: 1.15;
-            color: #0A0A0A;
-            transform: rotate(-5deg);
-            user-select: none;
-            z-index: 5;
-            text-shadow: 0 1px 4px rgba(255, 255, 255, 0.8);
-        }
 
         .final-cta-content {
             position: relative;
@@ -1339,25 +1326,6 @@ if (file_exists('db.php')) {
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
         }
 
-        .final-cta-doodle-right {
-            position: absolute;
-            top: 36px;
-            right: 40px;
-            font-family: var(--font-hand);
-            font-size: 26px;
-            line-height: 1.15;
-            color: #0A0A0A;
-            transform: rotate(4deg);
-            user-select: none;
-            z-index: 5;
-            text-align: center;
-        }
-
-        .doodle-sparkle-rays-cta {
-            position: absolute;
-            bottom: -16px;
-            right: 20px;
-        }
 
         /* Footer */
         .keria-footer {
@@ -1402,7 +1370,6 @@ if (file_exists('db.php')) {
             .live-jobs-mascot-wrap { justify-content: center; padding-top: 10px; }
             .live-jobs-sub { max-width: 100%; }
             .live-jobs-bottom-doodle { display: none; }
-            .final-cta-doodle-right { display: none; }
         }
 
         @media (max-width: 860px) {
@@ -1443,7 +1410,6 @@ if (file_exists('db.php')) {
             .live-job-item-right { width: 100%; justify-content: space-between; border-top: 1px solid #F0F4EE; padding-top: 10px; }
             .live-job-alerts-banner { flex-direction: column; align-items: flex-start; gap: 14px; }
             .btn-create-job-alert { width: 100%; text-align: center; }
-            .final-cta-doodle-left { display: none; }
             .keria-final-cta-card { justify-content: center; padding: 40px 20px; }
             .final-cta-content { margin-right: 0; text-align: center; }
             .final-cta-buttons { justify-content: center; flex-wrap: wrap; }
@@ -1962,11 +1928,6 @@ if (file_exists('db.php')) {
                     <div class="final-cta-overlay"></div>
                 </div>
 
-                <!-- Left Doodle: work towards a happier you :) -->
-                <div class="final-cta-doodle-left">
-                    work<br>towards<br>a happier<br>you ☺
-                </div>
-
                 <!-- Center/Right Content -->
                 <div class="final-cta-content">
                     <h2 class="final-cta-title">Ready for what's next?</h2>
@@ -1980,14 +1941,6 @@ if (file_exists('db.php')) {
                             Browse jobs
                         </a>
                     </div>
-                </div>
-
-                <!-- Right Doodle: find your fit with keria :) -->
-                <div class="final-cta-doodle-right">
-                    find<br>your fit<br>with keria ☺
-                    <svg class="doodle-sparkle-rays-cta" viewBox="0 0 30 30" width="28" height="28">
-                        <path d="M6 14 L2 14 M8 8 L4 4 M14 6 L14 2 M20 8 L24 4 M22 14 L26 14" stroke="#D2FF3A" stroke-width="3.5" stroke-linecap="round"/>
-                    </svg>
                 </div>
             </div>
 
@@ -2161,16 +2114,6 @@ if (file_exists('db.php')) {
                 easing: 'easeInOutSine'
             });
 
-            // Final CTA doodle float
-            anime({
-                targets: '.final-cta-doodle-left',
-                translateY: [-4, 4],
-                rotate: [-6, -3],
-                duration: 3500,
-                direction: 'alternate',
-                loop: true,
-                easing: 'easeInOutSine'
-            });
 
             // ================= 3. SCROLL-TRIGGERED REVEAL OBSERVERS =================
             const observerOptions = { threshold: 0.15 };
