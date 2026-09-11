@@ -1092,6 +1092,44 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             margin-bottom: 6px;
         }
 
+        /* Company Culture Gallery Section */
+        .company-gallery-section {
+            margin-top: 28px;
+            padding-top: 24px;
+            border-top: 1px solid #E5E7EB;
+        }
+
+        .company-gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            grid-auto-rows: 115px;
+            gap: 12px;
+        }
+
+        .company-gallery-tile {
+            display: block;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #F9FAFB;
+            border: 1px solid #E5E7EB;
+            transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            text-decoration: none;
+        }
+
+        .company-gallery-tile:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.09);
+            border-color: #CBD5E1;
+        }
+
+        .company-gallery-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
         /* Toast Popup */
         .keria-toast {
             position: fixed;
@@ -1553,7 +1591,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             } else if (max) {
                 return `Up to RM ${max.toLocaleString()} / month`;
             }
-            return 'RM 4,500 – RM 7,500 / month';
+            return 'Salary Undisclosed';
         }
 
         function parseResponsibilities(job) {
@@ -1715,6 +1753,34 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 `;
             }
 
+            // Company Culture Gallery
+            let galleryHtml = '';
+            if (job.company_media && Array.isArray(job.company_media) && job.company_media.length > 0) {
+                const tiles = job.company_media.map((m, idx) => {
+                    const spanStyle = (idx === 0 && job.company_media.length > 2) ? 'grid-column: span 2; grid-row: span 2;' : '';
+                    return `
+                        <a href="${escapeHtml(m.file_path)}" target="_blank" rel="noopener" class="company-gallery-tile" style="${spanStyle}" title="View image">
+                            <img src="${escapeHtml(m.file_path)}" alt="Company Photo" class="company-gallery-img">
+                        </a>
+                    `;
+                }).join('');
+
+                galleryHtml = `
+                    <div class="company-gallery-section">
+                        <div class="job-desc-header-row" style="margin-bottom: 14px;">
+                            <div class="job-desc-main-title">
+                                <span>🏢</span>
+                                <span>Company Culture & Gallery</span>
+                            </div>
+                            <span class="job-desc-subtext">Photos from the workplace, team and office environment.</span>
+                        </div>
+                        <div class="company-gallery-grid">
+                            ${tiles}
+                        </div>
+                    </div>
+                `;
+            }
+
             const detailHtml = `
                 <!-- Top Bar: Title & Action Icons -->
                 <div class="detail-top-bar">
@@ -1747,7 +1813,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 </div>
 
                 <!-- Salary Display -->
-                <div class="detail-salary-text">
+                <div class="detail-salary-text" style="${salaryText === 'Salary Undisclosed' ? 'color:#6B7280; font-size:16px; font-weight:700;' : ''}">
                     <span>💰</span>
                     <span>${salaryText}</span>
                 </div>
@@ -1788,7 +1854,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                         <span class="job-desc-subtext">Key details, responsibilities and requirements for this role.</span>
                     </div>
 
-                    <p class="job-desc-paragraph">${escapeHtml(job.description || 'We are looking for a motivated Network Engineer to join our team. You will be responsible for designing, implementing, and maintaining our network infrastructure to ensure optimal performance, security and reliability.')}</p>
+                    <p class="job-desc-paragraph">${escapeHtml(job.description || 'We are looking for a motivated professional to join our team. You will be responsible for executing key deliverables, collaborating across teams, and contributing to company growth.')}</p>
 
                     <div>
                         <h4 class="job-spec-block-title">Key Responsibilities</h4>
@@ -1804,6 +1870,9 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                         </ul>
                     </div>
                 </div>
+
+                <!-- Company Culture Gallery (Under Job Description) -->
+                ${galleryHtml}
             `;
 
             const preview = document.getElementById('jobDetailPreview');
