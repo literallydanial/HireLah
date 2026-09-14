@@ -98,6 +98,22 @@ $actions_list = $pdo->query("SELECT DISTINCT action FROM admin_logs ORDER BY act
         .act-toggle_job_status {
             background: rgba(245, 158, 11, 0.15); color: var(--gold); border: 1px solid rgba(245, 158, 11, 0.3);
         }
+        .header-inner {
+            max-width: 100% !important;
+            padding: 0 36px !important;
+            box-sizing: border-box;
+        }
+        main {
+            max-width: 100% !important;
+            width: 100% !important;
+            padding: 24px 36px 40px !important;
+            margin: 0 auto !important;
+            box-sizing: border-box !important;
+        }
+        @media (max-width: 1024px) {
+            .header-inner { padding: 0 16px !important; }
+            main { padding: 16px 16px 32px !important; }
+        }
     </style>
 </head>
 <body>
@@ -112,7 +128,8 @@ $actions_list = $pdo->query("SELECT DISTINCT action FROM admin_logs ORDER BY act
             </div>
 
             <nav style="display:flex; gap:4px; margin-left:24px">
-                <a href="admin_dashboard.php">&larr; Admin Dashboard</a>
+                <a href="admin_dashboard.php">🛡️ Admin Dashboard</a>
+                <a href="admin_resumes.php">📄 Resumes & Export</a>
                 <a href="admin_logs.php" class="active">📜 Audit Logs</a>
             </nav>
 
@@ -123,7 +140,7 @@ $actions_list = $pdo->query("SELECT DISTINCT action FROM admin_logs ORDER BY act
         </div>
     </header>
 
-    <main style="max-width:1200px;">
+    <main>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:16px;">
             <div>
                 <h1 style="font-size:24px; font-weight:800; color:var(--txt); margin:0;">📜 Read-Only System Audit Logs</h1>

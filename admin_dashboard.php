@@ -393,7 +393,21 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             color: #fff !important;
             border-color: transparent !important;
         }
+        .header-inner {
+            max-width: 100% !important;
+            padding: 0 36px !important;
+            box-sizing: border-box;
+        }
+        main {
+            max-width: 100% !important;
+            width: 100% !important;
+            padding: 24px 36px 40px !important;
+            margin: 0 auto !important;
+            box-sizing: border-box !important;
+        }
         @media (max-width: 1024px) {
+            .header-inner { padding: 0 16px !important; }
+            main { padding: 16px 16px 32px !important; }
             .stats-summary-grid { grid-template-columns: 1fr 1fr; }
             .health-grid { grid-template-columns: 1fr; }
             .admin-tr { grid-template-columns: 1fr 1.2fr 100px 110px; }
@@ -414,6 +428,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
 
             <nav style="display:flex; gap:4px; margin-left:24px">
                 <a href="admin_dashboard.php" class="active">🛡️ Admin Control Panel</a>
+                <a href="admin_resumes.php">📄 Resumes & Export</a>
                 <a href="admin_logs.php">📜 Audit Logs</a>
                 <a href="profile.php">⚙️ Settings</a>
             </nav>
@@ -425,7 +440,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         </div>
     </header>
 
-    <main style="max-width:1300px; padding:28px 20px;">
+    <main>
         <?php if(isset($_SESSION['toast'])): ?>
             <div class="toast-notification">
                 <span class="toast-icon-badge">🌿</span>
@@ -448,9 +463,14 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 <h1 style="font-size:26px; font-weight:800; color:var(--txt); margin:0;">🛡️ System Administration & Diagnostics</h1>
                 <p style="font-size:13px; color:var(--mut); margin-top:4px; margin-bottom:0;">Monitor user accounts, database integrity, and Google Gemini AI resume screening engine health.</p>
             </div>
-            <button type="button" onclick="openAddUserModal()" class="btn-primary" style="padding:11px 22px; font-size:14px; width:auto; display:inline-flex; gap:8px; align-items:center; border-radius:10px; cursor:pointer;">
-                <span>+ Add User / Admin</span>
-            </button>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <a href="admin_resumes.php" class="btn-secondary" style="padding:11px 20px; font-size:13.5px; width:auto; display:inline-flex; gap:8px; align-items:center; border-radius:10px; cursor:pointer; font-weight:700; border:1px solid var(--bdr); background:var(--surf); text-decoration:none;">
+                    <span>📄 Resumes & Export Hub</span>
+                </a>
+                <button type="button" onclick="openAddUserModal()" class="btn-primary" style="padding:11px 22px; font-size:14px; width:auto; display:inline-flex; gap:8px; align-items:center; border-radius:10px; cursor:pointer;">
+                    <span>+ Add User / Admin</span>
+                </button>
+            </div>
         </div>
 
         <!-- Metric Overview Banner -->
@@ -822,12 +842,145 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         </div>
     </div>
 
+    <!-- Modal: Export Resumes ZIP with Exact / Range Date -->
+    <div id="exportResumesModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:4000; align-items:center; justify-content:center; padding:20px;">
+        <div class="panel" style="max-width:520px; width:100%; position:relative; border-radius:18px; box-shadow:var(--shadow-lg);">
+            <button type="button" onclick="closeExportResumesModal()" style="position:absolute; top:20px; right:20px; background:none; border:none; color:var(--mut); font-size:22px; cursor:pointer; line-height:1;">✕</button>
+            
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                <div style="font-size:24px;">📦</div>
+                <div>
+                    <div style="font-size:20px; font-weight:800; color:var(--txt);">Export Candidate Resumes</div>
+                    <div style="font-size:11px; color:var(--mut);">Package resumes into a ZIP archive with ATS manifest</div>
+                </div>
+            </div>
+
+            <form method="GET" action="export_resumes.php" style="margin-top:16px;">
+                
+                <!-- Date Filter Mode Selector -->
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:8px; font-weight:700;">Select Date Criteria</label>
+                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; background:var(--dim); padding:4px; border-radius:12px; border:1px solid var(--bdr);">
+                        <button type="button" id="btnDateModeAll" onclick="setExportDateMode('all')" style="padding:8px 10px; font-size:12px; font-weight:700; border-radius:8px; border:none; cursor:pointer; background:var(--surf); color:var(--txt); box-shadow:var(--shadow-xs); transition:all 0.2s;">
+                            🌐 All Time
+                        </button>
+                        <button type="button" id="btnDateModeExact" onclick="setExportDateMode('exact')" style="padding:8px 10px; font-size:12px; font-weight:700; border-radius:8px; border:none; cursor:pointer; background:transparent; color:var(--mut); transition:all 0.2s;">
+                            📅 Exact Date
+                        </button>
+                        <button type="button" id="btnDateModeRange" onclick="setExportDateMode('range')" style="padding:8px 10px; font-size:12px; font-weight:700; border-radius:8px; border:none; cursor:pointer; background:transparent; color:var(--mut); transition:all 0.2s;">
+                            🗓️ Date Range
+                        </button>
+                    </div>
+                    <input type="hidden" name="date_mode" id="exportDateModeInput" value="all">
+                </div>
+
+                <!-- Exact Date Picker Container -->
+                <div id="exactDateContainer" style="display:none; margin-bottom:16px; background:var(--surf); border:1px solid var(--bdr); border-radius:12px; padding:14px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Exact Application Date</label>
+                    <input type="date" name="exact_date" id="exportExactDateInput" value="<?= date('Y-m-d') ?>" style="padding:10px 14px; font-size:13px; margin:0;">
+                    <div style="font-size:11px; color:var(--mut); margin-top:6px;">Exports candidates who submitted their resume on this specific date.</div>
+                </div>
+
+                <!-- Date Range Pickers Container -->
+                <div id="rangeDateContainer" style="display:none; margin-bottom:16px; background:var(--surf); border:1px solid var(--bdr); border-radius:12px; padding:14px;">
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                        <div>
+                            <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">From Date (Start)</label>
+                            <input type="date" name="start_date" id="exportStartDateInput" value="<?= date('Y-m-01') ?>" style="padding:10px 14px; font-size:13px; margin:0;">
+                        </div>
+                        <div>
+                            <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">To Date (End)</label>
+                            <input type="date" name="end_date" id="exportEndDateInput" value="<?= date('Y-m-d') ?>" style="padding:10px 14px; font-size:13px; margin:0;">
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:var(--mut); margin-top:8px;">Exports candidates who applied within this inclusive date window.</div>
+                </div>
+
+                <!-- Job Filter Dropdown -->
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Job Position Filter</label>
+                    <select name="job_id" style="padding:10px 12px; font-size:13px; margin:0;">
+                        <option value="all">📁 All Job Openings (Platform-wide)</option>
+                        <?php foreach($jobs_list as $job_opt): ?>
+                            <option value="<?= $job_opt['id'] ?>">💼 <?= htmlspecialchars($job_opt['job_title']) ?> (<?= htmlspecialchars($job_opt['employer_name'] ?? 'Direct') ?>)</option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <!-- Archive Package Contents Info Box -->
+                <div style="background:var(--dim); border:1px solid var(--bdr); border-radius:12px; padding:12px 14px; margin-bottom:20px; font-size:11.5px; color:var(--mut);">
+                    <div style="font-weight:700; color:var(--txt); margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                        <span>📦 Included in Archive</span>
+                    </div>
+                    <ul style="margin:4px 0 0 16px; padding:0; line-height:1.5;">
+                        <li>Candidate Resume files (<code>.pdf</code>) organized and clearly labeled</li>
+                        <li><code>resume_export_manifest.csv</code> (ATS scores, contact & candidate info)</li>
+                        <li><code>README.txt</code> with export parameters and timestamp</li>
+                    </ul>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" onclick="closeExportResumesModal()" class="btn-secondary" style="padding:10px 18px; font-size:13px;">Cancel</button>
+                    <button type="submit" class="btn-primary" style="padding:10px 22px; width:auto; font-size:13px; border-radius:10px; display:inline-flex; align-items:center; gap:8px;">
+                        <span>📥 Download ZIP Archive &rarr;</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function openAddUserModal() {
             document.getElementById('addUserModal').style.display = 'flex';
         }
         function closeAddUserModal() {
             document.getElementById('addUserModal').style.display = 'none';
+        }
+
+        function openExportResumesModal() {
+            document.getElementById('exportResumesModal').style.display = 'flex';
+        }
+        function closeExportResumesModal() {
+            document.getElementById('exportResumesModal').style.display = 'none';
+        }
+
+        function setExportDateMode(mode) {
+            document.getElementById('exportDateModeInput').value = mode;
+            
+            var btnAll = document.getElementById('btnDateModeAll');
+            var btnExact = document.getElementById('btnDateModeExact');
+            var btnRange = document.getElementById('btnDateModeRange');
+
+            var exactBox = document.getElementById('exactDateContainer');
+            var rangeBox = document.getElementById('rangeDateContainer');
+
+            // Reset buttons styling
+            [btnAll, btnExact, btnRange].forEach(btn => {
+                btn.style.background = 'transparent';
+                btn.style.color = 'var(--mut)';
+                btn.style.boxShadow = 'none';
+            });
+
+            if (mode === 'exact') {
+                btnExact.style.background = 'var(--surf)';
+                btnExact.style.color = 'var(--txt)';
+                btnExact.style.boxShadow = 'var(--shadow-xs)';
+                exactBox.style.display = 'block';
+                rangeBox.style.display = 'none';
+            } else if (mode === 'range') {
+                btnRange.style.background = 'var(--surf)';
+                btnRange.style.color = 'var(--txt)';
+                btnRange.style.boxShadow = 'var(--shadow-xs)';
+                exactBox.style.display = 'none';
+                rangeBox.style.display = 'block';
+            } else {
+                btnAll.style.background = 'var(--surf)';
+                btnAll.style.color = 'var(--txt)';
+                btnAll.style.boxShadow = 'var(--shadow-xs)';
+                exactBox.style.display = 'none';
+                rangeBox.style.display = 'none';
+            }
         }
 
         function switchAdminTab(tabId, btn) {
@@ -859,7 +1012,10 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         }
 
         window.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeAddUserModal();
+            if (e.key === 'Escape') {
+                closeAddUserModal();
+                closeExportResumesModal();
+            }
         });
     </script>
     <script src="theme.js"></script>
