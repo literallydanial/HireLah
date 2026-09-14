@@ -1629,11 +1629,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 const lines = job.responsibilities.split('\n').map(l => l.trim()).filter(l => l.length > 0);
                 return lines.map(l => `<li>${escapeHtml(l.replace(/^[•\-\*]\s*/, ''))}</li>`).join('');
             }
-            return `
-                <li>Design, configure and maintain network systems and infrastructure</li>
-                <li>Monitor network performance and troubleshoot issues</li>
-                <li>Implement security measures and ensure network reliability</li>
-            `;
+            return '';
         }
 
         function parseRequirements(job) {
@@ -1641,11 +1637,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 const lines = job.requirements.split('\n').map(l => l.trim()).filter(l => l.length > 0);
                 return lines.map(l => `<li>${escapeHtml(l.replace(/^[•\-\*]\s*/, ''))}</li>`).join('');
             }
-            return `
-                <li>Bachelor's degree in Computer Science, IT, or related field</li>
-                <li>Experience with routing protocols, firewall management, and cloud infrastructure</li>
-                <li>Strong analytical and problem-solving mindset</li>
-            `;
+            return '';
         }
 
         function selectJob(jobId) {
@@ -1811,6 +1803,33 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 `;
             }
 
+            const respList = parseResponsibilities(job);
+            const reqList = parseRequirements(job);
+            
+            let respHtml = '';
+            if (respList) {
+                respHtml = `
+                    <div style="margin-top:16px;">
+                        <h4 class="job-spec-block-title">Key Responsibilities</h4>
+                        <ul class="job-bullet-list">
+                            ${respList}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            let reqHtml = '';
+            if (reqList) {
+                reqHtml = `
+                    <div style="margin-top:16px;">
+                        <h4 class="job-spec-block-title">Requirements & Qualifications</h4>
+                        <ul class="job-bullet-list">
+                            ${reqList}
+                        </ul>
+                    </div>
+                `;
+            }
+
             const detailHtml = `
                 <!-- Top Bar: Title & Action Icons -->
                 <div class="detail-top-bar">
@@ -1884,21 +1903,9 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                         <span class="job-desc-subtext">Key details, responsibilities and requirements for this role.</span>
                     </div>
 
-                    <p class="job-desc-paragraph">${escapeHtml(job.description || 'We are looking for a motivated professional to join our team. You will be responsible for executing key deliverables, collaborating across teams, and contributing to company growth.')}</p>
-
-                    <div>
-                        <h4 class="job-spec-block-title">Key Responsibilities</h4>
-                        <ul class="job-bullet-list">
-                            ${parseResponsibilities(job)}
-                        </ul>
-                    </div>
-
-                    <div>
-                        <h4 class="job-spec-block-title">Requirements & Qualifications</h4>
-                        <ul class="job-bullet-list">
-                            ${parseRequirements(job)}
-                        </ul>
-                    </div>
+                    ${job.description ? `<p class="job-desc-paragraph">${escapeHtml(job.description)}</p>` : ''}
+                    ${respHtml}
+                    ${reqHtml}
                 </div>
 
                 <!-- Company Culture Gallery (Under Job Description) -->
