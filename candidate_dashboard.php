@@ -802,22 +802,43 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
                             </div>
                         </div>
 
-                        <!-- Questionnaire Action Banner -->
+                        <!-- Questionnaire Action Banner (Latest Only) -->
                         <?php if(!empty($app_q_reqs)): ?>
-                            <div style="margin-top:16px; padding:12px 16px; background:#FEFCE8; border:1px solid #FEF08A; border-radius:12px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                            <?php 
+                                // Prioritize latest pending request, otherwise latest submitted request
+                                $latest_q = $app_q_reqs[0];
+                                foreach ($app_q_reqs as $q_item) {
+                                    if ($q_item['status'] === 'Pending') {
+                                        $latest_q = $q_item;
+                                        break;
+                                    }
+                                }
+                                $is_pending_q = ($latest_q['status'] === 'Pending');
+                            ?>
+                            <div style="margin-top:16px; padding:12px 18px; background:<?= $is_pending_q ? '#FEFCE8' : '#F0FDF4' ?>; border:1px solid <?= $is_pending_q ? '#FEF08A' : '#BBF7D0' ?>; border-radius:12px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
                                 <div>
-                                    <div style="font-size:13px; font-weight:800; color:#854D0E;">📋 Screening Questionnaire Notification</div>
-                                    <div style="font-size:12px; color:#713F12;">The hiring team requested you to complete a brief questionnaire for this role.</div>
+                                    <div style="font-size:13px; font-weight:800; color:<?= $is_pending_q ? '#854D0E' : '#166534' ?>; display:flex; align-items:center; gap:6px;">
+                                        <span>📋</span>
+                                        <span>Screening Questionnaire</span>
+                                        <?php if(!empty($latest_q['title'])): ?>
+                                            <span style="font-weight:600; color:<?= $is_pending_q ? '#A16207' : '#15803D' ?>;">— <?= htmlspecialchars($latest_q['title']) ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div style="font-size:12px; color:<?= $is_pending_q ? '#713F12' : '#14532D' ?>; margin-top:2px;">
+                                        <?= $is_pending_q ? 'The hiring team requested you to complete a brief screening questionnaire for this position.' : 'You have submitted your answers for this screening questionnaire.' ?>
+                                    </div>
                                 </div>
-                                <?php foreach($app_q_reqs as $q_req): ?>
-                                    <?php if($q_req['status'] === 'Pending'): ?>
-                                        <a href="answer_questionnaire.php?token=<?= $q_req['id'] ?>" class="btn-banner-explore" style="padding:6px 14px; font-size:11.5px;">
-                                            Answer Screening Questions &rarr;
+                                <div>
+                                    <?php if($is_pending_q): ?>
+                                        <a href="answer_questionnaire.php?token=<?= htmlspecialchars($latest_q['id']) ?>" class="btn-banner-explore" style="padding:7px 16px; font-size:12px; font-weight:700; border-radius:8px; display:inline-flex; align-items:center; gap:6px; text-decoration:none; white-space:nowrap;">
+                                            <span>Answer Screening Questions &rarr;</span>
                                         </a>
                                     <?php else: ?>
-                                        <span style="font-size:12px; color:#15803D; font-weight:800;">✓ Questionnaire Submitted</span>
+                                        <span style="font-size:12px; color:#15803D; font-weight:800; display:inline-flex; align-items:center; gap:6px; padding:5px 12px; background:#DCFCE7; border-radius:8px; border:1px solid #86EFAC; white-space:nowrap;">
+                                            ✓ Questionnaire Submitted
+                                        </span>
                                     <?php endif; ?>
-                                <?php endforeach; ?>
+                                </div>
                             </div>
                         <?php endif; ?>
 
