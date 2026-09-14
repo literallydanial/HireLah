@@ -84,6 +84,46 @@ if (!function_exists('getCompanyLogoHtml')) {
     }
 }
 
+if (!function_exists('getCategoryMeta')) {
+    function getCategoryMeta($category_name) {
+        $c = strtolower(trim((string)$category_name));
+        if (strpos($c, 'tech') !== false || strpos($c, 'software') !== false || strpos($c, 'engineer') !== false || strpos($c, 'developer') !== false || strpos($c, 'it') !== false || strpos($c, 'network') !== false) {
+            return ['icon' => '💻', 'class' => 'cat-tech', 'bg' => '#EAF2FF', 'color' => '#1D4ED8'];
+        }
+        if (strpos($c, 'market') !== false || strpos($c, 'content') !== false || strpos($c, 'growth') !== false || strpos($c, 'seo') !== false || strpos($c, 'media') !== false) {
+            return ['icon' => '📢', 'class' => 'cat-marketing', 'bg' => '#FFF0EB', 'color' => '#EA580C'];
+        }
+        if (strpos($c, 'finan') !== false || strpos($c, 'account') !== false || strpos($c, 'audit') !== false || strpos($c, 'tax') !== false || strpos($c, 'bank') !== false) {
+            return ['icon' => '📊', 'class' => 'cat-finance', 'bg' => '#E8F8F5', 'color' => '#0D9488'];
+        }
+        if (strpos($c, 'design') !== false || strpos($c, 'ui') !== false || strpos($c, 'ux') !== false || strpos($c, 'creative') !== false || strpos($c, 'art') !== false || strpos($c, 'graphic') !== false) {
+            return ['icon' => '🎨', 'class' => 'cat-design', 'bg' => '#FDEEF4', 'color' => '#E11D48'];
+        }
+        if (strpos($c, 'operat') !== false || strpos($c, 'admin') !== false || strpos($c, 'logist') !== false || strpos($c, 'supply') !== false) {
+            return ['icon' => '⚙️', 'class' => 'cat-ops', 'bg' => '#F0EDFF', 'color' => '#7C3AED'];
+        }
+        if (strpos($c, 'sale') !== false || strpos($c, 'business') !== false || strpos($c, 'bd') !== false || strpos($c, 'revenue') !== false || strpos($c, 'account exec') !== false) {
+            return ['icon' => '🤝', 'class' => 'cat-sales', 'bg' => '#FFF7E6', 'color' => '#D97706'];
+        }
+        if (strpos($c, 'hr') !== false || strpos($c, 'human') !== false || strpos($c, 'people') !== false || strpos($c, 'talent') !== false || strpos($c, 'recruit') !== false) {
+            return ['icon' => '👥', 'class' => 'cat-hr', 'bg' => '#F3EDFF', 'color' => '#6D28D9'];
+        }
+        if (strpos($c, 'intern') !== false || strpos($c, 'trainee') !== false || strpos($c, 'grad') !== false) {
+            return ['icon' => '🎓', 'class' => 'cat-intern', 'bg' => '#EBF3FF', 'color' => '#2563EB'];
+        }
+        if (strpos($c, 'customer') !== false || strpos($c, 'support') !== false || strpos($c, 'service') !== false || strpos($c, 'help') !== false) {
+            return ['icon' => '🎧', 'class' => 'cat-ops', 'bg' => '#F0FDFA', 'color' => '#0D9488'];
+        }
+        if (strpos($c, 'legal') !== false || strpos($c, 'compliance') !== false || strpos($c, 'law') !== false) {
+            return ['icon' => '⚖️', 'class' => 'cat-ops', 'bg' => '#FEFCE8', 'color' => '#CA8A04'];
+        }
+        if (strpos($c, 'health') !== false || strpos($c, 'medic') !== false || strpos($c, 'nurse') !== false) {
+            return ['icon' => '🩺', 'class' => 'cat-marketing', 'bg' => '#FDF2F8', 'color' => '#BE185D'];
+        }
+        return ['icon' => '💼', 'class' => 'cat-tech', 'bg' => '#F3F4F6', 'color' => '#4B5563'];
+    }
+}
+
 if (file_exists('db.php')) {
     try {
         require_once 'db.php';
@@ -109,6 +149,119 @@ if (file_exists('db.php')) {
         $resumes_screened = (int) $pdo->query("SELECT COUNT(*) FROM candidates")->fetchColumn();
         $strong_hires = (int) $pdo->query("SELECT COUNT(*) FROM candidates WHERE recommendation LIKE '%Hire%'")->fetchColumn();
         $departments_hiring = (int) $pdo->query("SELECT COUNT(DISTINCT department) FROM jobs WHERE department IS NOT NULL AND department <> ''")->fetchColumn();
+
+        // Dynamic Job Categories: Top 8 categories by most active jobs, tie-broken by latest job
+        $deptCountsStmt = $pdo->query("
+            SELECT TRIM(department) as department_name, 
+                   COUNT(*) as cnt,
+                   MAX(created_at) as latest_date,
+                   MAX(id) as latest_id
+            FROM jobs 
+            WHERE (status = 'Active' OR status IS NULL) AND department IS NOT NULL AND TRIM(department) <> ''
+            GROUP BY TRIM(department) 
+            ORDER BY cnt DESC, latest_date DESC, latest_id DESC
+        ");
+        $dept_rows = $deptCountsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Check for active internships count and latest date
+        $internStmt = $pdo->query("
+            SELECT COUNT(*) as cnt,
+                   MAX(created_at) as latest_date,
+                   MAX(id) as latest_id
+            FROM jobs 
+            WHERE (status = 'Active' OR status IS NULL) AND LOWER(TRIM(employment_type)) = 'internship'
+        ");
+        $intern_row = $internStmt->fetch(PDO::FETCH_ASSOC);
+        $intern_count = (int) ($intern_row['cnt'] ?? 0);
+
+        $display_categories = [];
+        $seen_cats = [];
+
+        // 1. Add all active departments from job postings
+        foreach ($dept_rows as $row) {
+            $name = $row['department_name'];
+            $cnt = (int) $row['cnt'];
+            $key = strtolower($name);
+            $seen_cats[$key] = true;
+            $display_categories[] = [
+                'name' => $name,
+                'count' => $cnt,
+                'latest_date' => $row['latest_date'] ?? '1970-01-01 00:00:00',
+                'latest_id' => (int) ($row['latest_id'] ?? 0),
+                'url' => 'jobs.php?search=' . urlencode($name),
+                'meta' => getCategoryMeta($name)
+            ];
+        }
+
+        // 2. Add internships if present and not already listed
+        if ($intern_count > 0 && !isset($seen_cats['internship']) && !isset($seen_cats['internships'])) {
+            $display_categories[] = [
+                'name' => 'Internships',
+                'count' => $intern_count,
+                'latest_date' => $intern_row['latest_date'] ?? '1970-01-01 00:00:00',
+                'latest_id' => (int) ($intern_row['latest_id'] ?? 0),
+                'url' => 'jobs.php?type=Internship',
+                'meta' => getCategoryMeta('Internships')
+            ];
+            $seen_cats['internships'] = true;
+        }
+
+        // 3. Populate remaining slots up to 8 with standard industry categories and their real job counts
+        $standard_defaults = [
+            'Technology', 'Marketing', 'Finance', 'Design', 
+            'Operations', 'Sales', 'Human Resources', 'Internships'
+        ];
+
+        foreach ($standard_defaults as $def_name) {
+            $key = strtolower($def_name);
+            if (!isset($seen_cats[$key])) {
+                if ($def_name === 'Internships') {
+                    $cnt = $intern_count;
+                    $lat_date = $intern_row['latest_date'] ?? '1970-01-01 00:00:00';
+                    $lat_id = (int) ($intern_row['latest_id'] ?? 0);
+                    $url = 'jobs.php?type=Internship';
+                } else {
+                    $defCountStmt = $pdo->prepare("
+                        SELECT COUNT(*) as cnt, MAX(created_at) as latest_date, MAX(id) as latest_id
+                        FROM jobs 
+                        WHERE (status = 'Active' OR status IS NULL) 
+                        AND (department LIKE ? OR job_title LIKE ? OR description LIKE ?)
+                    ");
+                    $term = '%' . $def_name . '%';
+                    $defCountStmt->execute([$term, $term, $term]);
+                    $row_def = $defCountStmt->fetch(PDO::FETCH_ASSOC);
+                    $cnt = (int) ($row_def['cnt'] ?? 0);
+                    $lat_date = $row_def['latest_date'] ?? '1970-01-01 00:00:00';
+                    $lat_id = (int) ($row_def['latest_id'] ?? 0);
+                    $url = 'jobs.php?search=' . urlencode($def_name);
+                }
+
+                $display_categories[] = [
+                    'name' => $def_name,
+                    'count' => $cnt,
+                    'latest_date' => $lat_date ?: '1970-01-01 00:00:00',
+                    'latest_id' => $lat_id,
+                    'url' => $url,
+                    'meta' => getCategoryMeta($def_name)
+                ];
+                $seen_cats[$key] = true;
+            }
+        }
+
+        // Sort by: 1) Most jobs available (count DESC), 2) Latest job posting date (DESC), 3) Latest job ID (DESC)
+        usort($display_categories, function($a, $b) {
+            if ($b['count'] !== $a['count']) {
+                return $b['count'] <=> $a['count'];
+            }
+            $date_cmp = strcmp((string)($b['latest_date'] ?? ''), (string)($a['latest_date'] ?? ''));
+            if ($date_cmp !== 0) {
+                return $date_cmp;
+            }
+            return ($b['latest_id'] ?? 0) <=> ($a['latest_id'] ?? 0);
+        });
+
+        // Limit strictly to top 8
+        $display_categories = array_slice($display_categories, 0, 8);
     } catch (\Throwable $e) {
         // Fallback gracefully if database or table is not ready yet
         $total_live_roles = 0;
@@ -117,6 +270,7 @@ if (file_exists('db.php')) {
         $resumes_screened = 0;
         $strong_hires = 0;
         $departments_hiring = 0;
+        $display_categories = [];
     }
 }
 ?>
@@ -1697,71 +1851,40 @@ if (file_exists('db.php')) {
             </div>
 
             <div class="keria-categories-grid">
-                
-                <a href="jobs.php?search=Technology" class="category-card-item">
-                    <div class="category-card-icon cat-tech">
-                        💻
-                    </div>
-                    <div class="category-card-name">Technology</div>
-                    <div class="category-card-count">1,200+ jobs</div>
-                </a>
-
-                <a href="jobs.php?search=Marketing" class="category-card-item">
-                    <div class="category-card-icon cat-marketing">
-                        📢
-                    </div>
-                    <div class="category-card-name">Marketing</div>
-                    <div class="category-card-count">980+ jobs</div>
-                </a>
-
-                <a href="jobs.php?search=Finance" class="category-card-item">
-                    <div class="category-card-icon cat-finance">
-                        📊
-                    </div>
-                    <div class="category-card-name">Finance</div>
-                    <div class="category-card-count">650+ jobs</div>
-                </a>
-
-                <a href="jobs.php?search=Design" class="category-card-item">
-                    <div class="category-card-icon cat-design">
-                        🎨
-                    </div>
-                    <div class="category-card-name">Design</div>
-                    <div class="category-card-count">420+ jobs</div>
-                </a>
-
-                <a href="jobs.php?search=Operations" class="category-card-item">
-                    <div class="category-card-icon cat-ops">
-                        ⚙️
-                    </div>
-                    <div class="category-card-name">Operations</div>
-                    <div class="category-card-count">800+ jobs</div>
-                </a>
-
-                <a href="jobs.php?search=Sales" class="category-card-item">
-                    <div class="category-card-icon cat-sales">
-                        🤝
-                    </div>
-                    <div class="category-card-name">Sales</div>
-                    <div class="category-card-count">760+ jobs</div>
-                </a>
-
-                <a href="jobs.php?search=Human+Resources" class="category-card-item">
-                    <div class="category-card-icon cat-hr">
-                        👥
-                    </div>
-                    <div class="category-card-name">Human Resources</div>
-                    <div class="category-card-count">320+ jobs</div>
-                </a>
-
-                <a href="jobs.php?type=Internship" class="category-card-item">
-                    <div class="category-card-icon cat-intern">
-                        🎓
-                    </div>
-                    <div class="category-card-name">Internships</div>
-                    <div class="category-card-count">510+ jobs</div>
-                </a>
-
+                <?php if(!empty($display_categories)): ?>
+                    <?php foreach($display_categories as $cat): ?>
+                        <a href="<?= htmlspecialchars($cat['url']) ?>" class="category-card-item">
+                            <div class="category-card-icon <?= htmlspecialchars($cat['meta']['class']) ?>" style="background:<?= htmlspecialchars($cat['meta']['bg']) ?>; color:<?= htmlspecialchars($cat['meta']['color']) ?>;">
+                                <?= $cat['meta']['icon'] ?>
+                            </div>
+                            <div class="category-card-name"><?= htmlspecialchars($cat['name']) ?></div>
+                            <div class="category-card-count">
+                                <?= $cat['count'] === 1 ? '1 open role' : ($cat['count'] > 0 ? number_format($cat['count']) . ' open roles' : '0 open roles') ?>
+                            </div>
+                        </a>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <a href="jobs.php?search=Technology" class="category-card-item">
+                        <div class="category-card-icon cat-tech">💻</div>
+                        <div class="category-card-name">Technology</div>
+                        <div class="category-card-count">Explore roles</div>
+                    </a>
+                    <a href="jobs.php?search=Marketing" class="category-card-item">
+                        <div class="category-card-icon cat-marketing">📢</div>
+                        <div class="category-card-name">Marketing</div>
+                        <div class="category-card-count">Explore roles</div>
+                    </a>
+                    <a href="jobs.php?search=Finance" class="category-card-item">
+                        <div class="category-card-icon cat-finance">📊</div>
+                        <div class="category-card-name">Finance</div>
+                        <div class="category-card-count">Explore roles</div>
+                    </a>
+                    <a href="jobs.php?search=Design" class="category-card-item">
+                        <div class="category-card-icon cat-design">🎨</div>
+                        <div class="category-card-name">Design</div>
+                        <div class="category-card-count">Explore roles</div>
+                    </a>
+                <?php endif; ?>
             </div>
 
         </div>
