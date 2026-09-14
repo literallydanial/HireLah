@@ -16,6 +16,13 @@ $stmt->execute([$user_id]);
 $user = $stmt->fetch();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Handle oversized post payload before PHP discards $_POST
+    if (empty($_POST) && empty($_FILES) && isset($_SERVER['CONTENT_LENGTH']) && (int)$_SERVER['CONTENT_LENGTH'] > 0) {
+        $_SESSION['error'] = "Uploaded file was too large for the server. Please select a smaller photo or retry with auto-compression.";
+        header("Location: profile.php");
+        exit;
+    }
+
     $action = $_POST['action'] ?? '';
     
     if ($action === 'update_profile') {
@@ -128,30 +135,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
     elseif ($action === 'upload_picture') {
+        $base64_data = $_POST['profile_picture_base64'] ?? '';
         $file = $_FILES['profile_picture'] ?? null;
-        if (!$file || $file['error'] === UPLOAD_ERR_INI_SIZE || ($file['size'] ?? 0) > 10 * 1024 * 1024) {
-            $_SESSION['error'] = "Uploaded image exceeds the maximum allowed size limit (10MB).";
-        } elseif ($file && $file['error'] === UPLOAD_ERR_OK) {
-            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
-                $upload_dir = 'uploads/profiles/';
-                if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
-                
-                if (!is_dir($upload_dir) || !is_writable($upload_dir)) {
-                    $_SESSION['error'] = "Directory 'uploads/profiles/' is not writable. Please check FTP permissions.";
-                } else {
-                    $path = $upload_dir . uniqid() . '.' . $ext;
-                    if (move_uploaded_file($file['tmp_name'], $path)) {
-                        $stmt = $pdo->prepare("UPDATE users SET profile_picture = ? WHERE id = ?");
-                        $stmt->execute([$path, $user_id]);
-                        $_SESSION['toast'] = "Profile picture updated.";
+        
+        if (!empty($base64_data)) {
+            // Handled via client-side compressed image payload
+            if (preg_match('/^data:image\/(\w+);base64,/', $base64_data, $type)) {
+                $base64_clean = substr($base64_data, strpos($base64_data, ',') + 1);
+                $decoded = base64_decode($base64_clean);
+                if ($decoded !== false) {
+                    $ext = strtolower($type[1]);
+                    if ($ext === 'jpeg') $ext = 'jpg';
+                    if (!in_array($ext, ['jpg', 'png', 'webp'])) $ext = 'jpg';
+                    
+                    $upload_dir = 'uploads/profiles/';
+                    if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
+                    
+                    if (!is_dir($upload_dir) || !is_writable($upload_dir)) {
+                        $_SESSION['error'] = "Directory 'uploads/profiles/' is not writable. Please check permissions.";
                     } else {
-                        $_SESSION['error'] = "Failed to save profile picture.";
+                        $path = $upload_dir . uniqid() . '.' . $ext;
+                        if (file_put_contents($path, $decoded)) {
+                            // Remove previous custom avatar if exists
+                            if (!empty($user['profile_picture']) && file_exists($user['profile_picture']) && strpos($user['profile_picture'], 'uploads/profiles/') === 0) {
+                                @unlink($user['profile_picture']);
+                            }
+                            $stmt = $pdo->prepare("UPDATE users SET profile_picture = ? WHERE id = ?");
+                            $stmt->execute([$path, $user_id]);
+                            $_SESSION['toast'] = "Profile picture updated successfully!";
+                        } else {
+                            $_SESSION['error'] = "Failed to save profile picture.";
+                        }
                     }
+                } else {
+                    $_SESSION['error'] = "Invalid image data received.";
                 }
             } else {
-                $_SESSION['error'] = "Invalid image format. Use JPG, PNG or WEBP.";
+                $_SESSION['error'] = "Invalid image format received.";
             }
+        } elseif ($file && $file['error'] === UPLOAD_ERR_OK) {
+            if (($file['size'] ?? 0) > 10 * 1024 * 1024) {
+                $_SESSION['error'] = "Uploaded image exceeds the maximum allowed size limit (10MB).";
+            } else {
+                $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                    $upload_dir = 'uploads/profiles/';
+                    if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
+                    
+                    if (!is_dir($upload_dir) || !is_writable($upload_dir)) {
+                        $_SESSION['error'] = "Directory 'uploads/profiles/' is not writable. Please check permissions.";
+                    } else {
+                        $path = $upload_dir . uniqid() . '.' . $ext;
+                        if (move_uploaded_file($file['tmp_name'], $path)) {
+                            // Remove previous custom avatar if exists
+                            if (!empty($user['profile_picture']) && file_exists($user['profile_picture']) && strpos($user['profile_picture'], 'uploads/profiles/') === 0) {
+                                @unlink($user['profile_picture']);
+                            }
+                            $stmt = $pdo->prepare("UPDATE users SET profile_picture = ? WHERE id = ?");
+                            $stmt->execute([$path, $user_id]);
+                            $_SESSION['toast'] = "Profile picture updated successfully!";
+                        } else {
+                            $_SESSION['error'] = "Failed to save profile picture.";
+                        }
+                    }
+                } else {
+                    $_SESSION['error'] = "Invalid image format. Use JPG, PNG or WEBP.";
+                }
+            }
+        } elseif ($file && $file['error'] === UPLOAD_ERR_INI_SIZE) {
+            $_SESSION['error'] = "Uploaded image exceeds the server upload limit.";
+        } else {
+            $_SESSION['error'] = "Please select a valid image file.";
         }
         header("Location: profile.php");
         exit;
@@ -596,9 +650,10 @@ if ($user['role'] === 'candidate') {
                             </div>
                         <?php endif; ?>
                         
-                        <form method="POST" enctype="multipart/form-data" style="position:absolute; bottom:-4px; right:-4px;">
+                        <form id="avatarForm" method="POST" enctype="multipart/form-data" style="position:absolute; bottom:-4px; right:-4px;">
                             <input type="hidden" name="action" value="upload_picture">
-                            <input type="file" name="profile_picture" id="pic_input" accept="image/png, image/jpeg, image/webp" style="display:none" onchange="this.form.submit()">
+                            <input type="hidden" name="profile_picture_base64" id="pic_base64">
+                            <input type="file" name="profile_picture" id="pic_input" accept="image/png, image/jpeg, image/webp" style="display:none" onchange="handleAvatarUpload(this)">
                             <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-md);" onclick="document.getElementById('pic_input').click()" title="Change Avatar">📷</button>
                         </form>
                     </div>
@@ -1140,6 +1195,64 @@ if ($user['role'] === 'candidate') {
                     document.querySelectorAll('.unread-dot').forEach(el => el.remove());
                 }
             }).catch(err => console.error(err));
+        }
+
+        // Automatic client-side image compression for avatar uploads
+        function handleAvatarUpload(input) {
+            if (!input.files || !input.files[0]) return;
+            const file = input.files[0];
+
+            if (!file.type.match(/^image\/(png|jpeg|jpg|webp)$/i)) {
+                alert('Please select a valid PNG, JPG, or WEBP image.');
+                input.value = '';
+                return;
+            }
+
+            // Read and compress image client-side to max 800x800 JPEG (approx 60KB-120KB)
+            // Eliminates 413 Request Entity Too Large and makes uploads instantaneous
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const maxDim = 800;
+
+                    if (width > maxDim || height > maxDim) {
+                        if (width > height) {
+                            height = Math.round((height * maxDim) / width);
+                            width = maxDim;
+                        } else {
+                            width = Math.round((width * maxDim) / height);
+                            height = maxDim;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.88);
+                    const base64Input = document.getElementById('pic_base64');
+                    if (base64Input) {
+                        base64Input.value = compressedBase64;
+                    }
+
+                    // Clear the raw file input so the browser doesn't send raw multi-MB stream
+                    input.value = '';
+
+                    // Submit form
+                    document.getElementById('avatarForm').submit();
+                };
+                img.onerror = function() {
+                    // Fallback to direct submit
+                    document.getElementById('avatarForm').submit();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
         }
     </script>
     <script src="theme.js"></script>

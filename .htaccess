@@ -19,3 +19,22 @@ Options -Indexes
 
 # Set UTF-8 Default Charset
 AddDefaultCharset UTF-8
+
+# Allow larger uploads and avoid 413 Request Entity Too Large (100MB)
+LimitRequestBody 104857600
+
+<IfModule mod_php.c>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 64M
+    php_value memory_limit 256M
+</IfModule>
+<IfModule mod_php7.c>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 64M
+    php_value memory_limit 256M
+</IfModule>
+<IfModule mod_php8.c>
+    php_value upload_max_filesize 64M
+    php_value post_max_size 64M
+    php_value memory_limit 256M
+</IfModule>
