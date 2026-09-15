@@ -113,6 +113,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // Action: Edit Job Posting (admin override — bypasses edit_job.php's
+    // require_role('employer') gate, which would otherwise lock admins out)
+    if ($action === 'admin_edit_job') {
+        $job_id = (int)($_POST['job_id'] ?? 0);
+        $new_title = trim($_POST['job_title'] ?? '');
+        $new_dept = trim($_POST['department'] ?? '');
+        $new_status = trim($_POST['status'] ?? 'Active');
+        if (!in_array($new_status, ['Active', 'Closed'], true)) {
+            $new_status = 'Active';
+        }
+        if ($job_id > 0 && $new_title !== '') {
+            $upd = $pdo->prepare("UPDATE jobs SET job_title = ?, department = ?, status = ? WHERE id = ?");
+            $upd->execute([$new_title, $new_dept, $new_status, $job_id]);
+
+            log_admin_action($pdo, $admin_id, $admin_name, 'edit_job', 'job', $job_id, "Edited job posting '$new_title'");
+            $_SESSION['toast'] = "Job posting updated successfully.";
+        } else {
+            $_SESSION['error'] = "Job title is required.";
+        }
+        header("Location: admin_dashboard.php");
+        exit;
+    }
+
     // Action: Delete Job Posting
     if ($action === 'delete_job') {
         $job_id = (int)($_POST['job_id'] ?? 0);
@@ -161,6 +184,10 @@ $total_candidates_role = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role
 $total_employers_role = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'employer'")->fetchColumn();
 $total_admins_role = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE role = 'admin'")->fetchColumn();
 $unverified_users = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE is_verified = 0")->fetchColumn();
+// New signups in the last 48 hours — surfaced as a stat tile plus a "New"
+// badge on each row so admins can spot fresh registrations at a glance
+// without any email/SMTP dependency.
+$new_signups_48h = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL 48 HOUR")->fetchColumn();
 
 $total_jobs = (int)$pdo->query("SELECT COUNT(*) FROM jobs")->fetchColumn();
 $active_jobs = (int)$pdo->query("SELECT COUNT(*) FROM jobs WHERE status = 'Active'")->fetchColumn();
@@ -211,7 +238,7 @@ $admin_funnel = [
 
 // Query candidate status breakdown per job for platform-wide monitoring
 $admin_job_funnels = $pdo->query("
-    SELECT j.id as job_id, j.job_title, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name,
+    SELECT j.id as job_id, j.job_title, j.department, j.status as job_status, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name,
            COUNT(c.id) as applied,
            SUM(CASE WHEN LOWER(COALESCE(c.status, '')) IN ('review', 'under review', 'reviewing', 'new', '') THEN 1 ELSE 0 END) as review,
            SUM(CASE WHEN LOWER(COALESCE(c.status, '')) IN ('shortlisted', 'shortlist') THEN 1 ELSE 0 END) as shortlisted,
@@ -220,7 +247,7 @@ $admin_job_funnels = $pdo->query("
     FROM jobs j
     LEFT JOIN users u ON j.employer_id = u.id
     LEFT JOIN candidates c ON c.job_id = j.id
-    GROUP BY j.id, j.job_title, u.name, u.company_name
+    GROUP BY j.id, j.job_title, j.department, j.status, u.name, u.company_name
     ORDER BY applied DESC, j.created_at DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -286,7 +313,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         }
         .stats-summary-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 16px;
             margin-bottom: 28px;
         }
@@ -320,6 +347,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         }
         .tab-controls {
             display: flex;
+            flex-wrap: wrap;
             gap: 8px;
             margin-bottom: 20px;
             padding-bottom: 4px;
@@ -491,6 +519,10 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 <div class="logo-box">⏳</div>
                 <div><div class="stat-val"><?= $unverified_users ?></div><div class="stat-lbl">Pending OTP Users</div></div>
             </div>
+            <div class="stat-box" style="border-left:3px solid #EC4899;">
+                <div class="logo-box">🆕</div>
+                <div><div class="stat-val"><?= $new_signups_48h ?></div><div class="stat-lbl">New Signups (48h)</div></div>
+            </div>
         </div>
 
         <!-- System Health & Engine Diagnostics Panel -->
@@ -573,14 +605,16 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             </div>
         </div>
 
-        <!-- Section Tabs: User Management vs Job Moderation -->
+        <!-- Section Tabs: User Management vs Job Moderation vs Funnel Analytics -->
         <div class="tab-controls">
-            <button type="button" class="tab-btn active" onclick="switchAdminTab('usersTab', this)">👥 Registered Accounts (<?= count($users_list) ?>)</button>
+            <button type="button" class="tab-btn active" onclick="switchAdminTab('usersTab', this)">👥 Registered Accounts (<?= count($users_list) ?>)<?php if($new_signups_48h > 0): ?> <span style="background:#EC4899; color:#fff; border-radius:8px; padding:1px 7px; font-size:10px; font-weight:800; margin-left:4px;">🆕 <?= $new_signups_48h ?> new</span><?php endif; ?></button>
             <button type="button" class="tab-btn" onclick="switchAdminTab('jobsTab', this)">💼 Job Postings Moderation (<?= count($jobs_list) ?>)</button>
+            <button type="button" class="tab-btn" onclick="switchAdminTab('funnelTab', this)">🔻 Platform-Wide Hiring Funnel Analytics</button>
         </div>
 
-        <!-- Platform Hiring Funnel Analytics Panel -->
-        <div class="panel admin-tab-pane" style="margin-bottom:24px;">
+        <!-- Platform Hiring Funnel Analytics Panel (its own tab now, toggled via
+             switchAdminTab() just like Registered Accounts / Job Postings Moderation) -->
+        <div id="funnelTab" class="panel admin-tab-pane" style="margin-bottom:24px; display:none;">
             <div style="font-size:16px; font-weight:800; color:var(--txt); margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;">
                 <div style="display:flex; align-items:center; gap:8px;">
                     <span>🔻 Platform-Wide Hiring Funnel Analytics</span>
@@ -665,8 +699,18 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                                     <td style="padding:10px 14px; text-align:center; color:var(--grn); font-weight:700;"><?= (int)$ajf['shortlisted'] ?></td>
                                     <td style="padding:10px 14px; text-align:center; color:var(--pur); font-weight:700;"><?= (int)$ajf['interviewing'] ?></td>
                                     <td style="padding:10px 14px; text-align:center; color:var(--red); font-weight:700;"><?= (int)$ajf['rejected'] ?></td>
-                                    <td style="padding:10px 14px; text-align:center;">
-                                        <a href="compare_candidates.php?job_id=<?= $ajf['job_id'] ?>" class="btn-secondary" style="padding:4px 8px; font-size:11px; text-decoration:none;">⚖️ Compare</a>
+                                    <td style="padding:10px 14px; text-align:center; white-space:nowrap;">
+                                        <button type="button" onclick='openEditJobModal(<?= json_encode([
+                                            "job_id" => $ajf["job_id"],
+                                            "job_title" => $ajf["job_title"],
+                                            "department" => $ajf["department"],
+                                            "status" => $ajf["job_status"],
+                                        ]) ?>)' class="btn-secondary" style="padding:4px 8px; font-size:11px; margin-right:6px;">✏️ Edit</button>
+                                        <form method="POST" style="display:inline;" onsubmit="return confirm('Permanently delete the job posting &quot;<?= htmlspecialchars(addslashes($ajf['job_title'])) ?>&quot; and all its candidate data?');">
+                                            <input type="hidden" name="action" value="delete_job">
+                                            <input type="hidden" name="job_id" value="<?= $ajf['job_id'] ?>">
+                                            <button type="submit" style="background:rgba(255, 77, 106, 0.12); border:1px solid rgba(255, 77, 106, 0.35); border-radius:6px; color:var(--red); padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer;">🗑️ Delete</button>
+                                        </form>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -707,12 +751,16 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                         <?php
                             $u_accent = $u['role'] === 'admin' ? 'accent-red' : ($u['role'] === 'employer' ? 'accent-amber' : 'accent-green');
                             $u_grad = $u['role'] === 'admin' ? 'var(--grad-red)' : ($u['role'] === 'employer' ? 'var(--grad-amber)' : 'var(--grad-green)');
+                            $u_is_new = strtotime($u['created_at']) >= strtotime('-48 hours');
                         ?>
-                        <div class="admin-tr user-row-item <?= $u_accent ?>" data-search="<?= strtolower(htmlspecialchars($u['name'] . ' ' . $u['email'] . ' ' . $u['role'])) ?>" data-role="<?= htmlspecialchars($u['role']) ?>">
+                        <div class="admin-tr user-row-item <?= $u_accent ?>" data-search="<?= strtolower(htmlspecialchars($u['name'] . ' ' . $u['email'] . ' ' . $u['role'])) ?>" data-role="<?= htmlspecialchars($u['role']) ?>" <?= $u_is_new ? 'style="background:rgba(236, 72, 153, 0.05);"' : '' ?>>
                             <div style="font-weight:700; color:var(--mut);">#<?= $u['id'] ?></div>
                             <div style="font-weight:800; color:var(--txt); display:flex; align-items:center; gap:8px;">
                                 <span class="avatar-chip" style="background:<?= $u_grad ?>;"><?= strtoupper(substr($u['name'] ?: 'U', 0, 1)) ?></span>
                                 <span><?= htmlspecialchars($u['name']) ?></span>
+                                <?php if($u_is_new): ?>
+                                    <span title="Registered in the last 48 hours" style="background:#EC4899; color:#fff; border-radius:7px; padding:1px 6px; font-size:9px; font-weight:800; letter-spacing:0.3px;">🆕 NEW</span>
+                                <?php endif; ?>
                             </div>
                             <div style="color:var(--mut); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><?= htmlspecialchars($u['email']) ?></div>
                             <div>
@@ -788,6 +836,44 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             </div>
         </div>
     </main>
+
+    <!-- Modal: Edit Job Posting (admin override) -->
+    <div id="editJobModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:4000; align-items:center; justify-content:center; padding:20px;">
+        <div class="panel" style="max-width:440px; width:100%; position:relative; border-radius:18px; box-shadow:var(--shadow-lg);">
+            <button type="button" onclick="closeEditJobModal()" style="position:absolute; top:20px; right:20px; background:none; border:none; color:var(--mut); font-size:22px; cursor:pointer; line-height:1;">✕</button>
+
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                <div style="font-size:22px;">✏️</div>
+                <div style="font-size:20px; font-weight:800; color:var(--txt);">Edit Job Posting</div>
+            </div>
+            <p style="font-size:12px; color:var(--mut); margin-bottom:20px;">Admin override — updates this job posting directly.</p>
+
+            <form method="POST">
+                <input type="hidden" name="action" value="admin_edit_job">
+                <input type="hidden" name="job_id" id="editJobId" value="">
+
+                <div style="margin-bottom:14px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Job Title</label>
+                    <input type="text" name="job_title" id="editJobTitle" required style="padding:10px 14px; font-size:13px;">
+                </div>
+
+                <div style="margin-bottom:14px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Department</label>
+                    <input type="text" name="department" id="editJobDepartment" placeholder="e.g. Engineering" style="padding:10px 14px; font-size:13px;">
+                </div>
+
+                <div style="margin-bottom:20px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Status</label>
+                    <select name="status" id="editJobStatus" style="padding:10px 14px; font-size:13px; width:100%;">
+                        <option value="Active">Active</option>
+                        <option value="Closed">Closed</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn-primary" style="padding:11px; font-size:13.5px; width:100%; border-radius:10px;">Save Changes</button>
+            </form>
+        </div>
+    </div>
 
     <!-- Modal: Add New User or Admin -->
     <div id="addUserModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:4000; align-items:center; justify-content:center; padding:20px;">
@@ -931,6 +1017,17 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
     </div>
 
     <script>
+        function openEditJobModal(job) {
+            document.getElementById('editJobId').value = job.job_id || '';
+            document.getElementById('editJobTitle').value = job.job_title || '';
+            document.getElementById('editJobDepartment').value = job.department || '';
+            document.getElementById('editJobStatus').value = (job.status === 'Closed') ? 'Closed' : 'Active';
+            document.getElementById('editJobModal').style.display = 'flex';
+        }
+        function closeEditJobModal() {
+            document.getElementById('editJobModal').style.display = 'none';
+        }
+
         function openAddUserModal() {
             document.getElementById('addUserModal').style.display = 'flex';
         }

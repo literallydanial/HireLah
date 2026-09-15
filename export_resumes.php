@@ -57,6 +57,7 @@ $filter_desc_parts[] = "Source: " . ucfirst(str_replace('_', ' ', $source_filter
 $candidates = [];
 $builder_records = [];
 $checker_records = [];
+$default_records = [];
 
 // A. Job Applications (candidates table)
 if ($source_filter === 'all' || $source_filter === 'job_apply') {
@@ -143,7 +144,34 @@ if ($source_filter === 'all' || $source_filter === 'resume_checker') {
     } catch (\Throwable $e) {}
 }
 
-$total_found = count($candidates) + count($builder_records) + count($checker_records);
+// D. Saved Default Resumes (users.default_resume). No dedicated upload
+// timestamp exists on `users`, so date filters fall back to account
+// creation date as the closest available proxy — same caveat as the admin
+// resume hub page.
+if ($source_filter === 'all' || $source_filter === 'default_resume') {
+    try {
+        $sql = "SELECT u.id, u.name as user_name, u.email as user_email, u.default_resume, u.created_at
+                FROM users u
+                WHERE u.default_resume IS NOT NULL AND u.default_resume != ''";
+        $params = [];
+
+        if ($date_mode === 'exact') {
+            $sql .= " AND DATE(u.created_at) = ?";
+            $params[] = $exact_date;
+        } elseif ($date_mode === 'range') {
+            $sql .= " AND DATE(u.created_at) BETWEEN ? AND ?";
+            $params[] = $start_date;
+            $params[] = $end_date;
+        }
+
+        $sql .= " ORDER BY u.created_at DESC";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $default_records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (\Throwable $e) {}
+}
+
+$total_found = count($candidates) + count($builder_records) + count($checker_records) + count($default_records);
 
 if ($total_found === 0) {
     $_SESSION['error'] = "No resume documents found matching: " . implode(', ', $filter_desc_parts) . ".";
@@ -426,6 +454,83 @@ foreach ($checker_records as $r) {
     ]);
 }
 
+// ----------------------------------------------------
+// PACK 4: SAVED DEFAULT RESUMES (Candidate Profile PDFs)
+// ----------------------------------------------------
+foreach ($default_records as $d) {
+    $raw_path = $d['default_resume'];
+    $default_file_path = null;
+    $possible_paths = [
+        $raw_path,
+        __DIR__ . '/' . ltrim($raw_path, '/\\'),
+        __DIR__ . '/uploads/resumes/' . basename($raw_path)
+    ];
+
+    foreach ($possible_paths as $p) {
+        if (file_exists($p) && is_file($p)) {
+            $default_file_path = $p;
+            break;
+        }
+    }
+
+    $saved_date = date('Y-m-d', strtotime($d['created_at']));
+    $clean_name = sanitize_zip_name($d['user_name'] ?: 'Candidate');
+    $orig_name = sanitize_zip_name(basename($raw_path));
+
+    if (!$default_file_path) {
+        fputcsv($csv_handle, [
+            'User Resume',
+            'default_' . $d['id'],
+            $d['user_name'] ?: 'Unknown',
+            $d['user_email'] ?: 'N/A',
+            'N/A',
+            'Saved User Resume',
+            'Candidate Profile',
+            'Candidate Profile',
+            $d['created_at'],
+            'N/A',
+            'Saved',
+            basename($raw_path),
+            '[FILE NOT FOUND ON SERVER DISK]'
+        ]);
+        continue;
+    }
+
+    $ext = pathinfo($default_file_path, PATHINFO_EXTENSION) ?: 'pdf';
+    $base_zip_entry = "default_resumes/[{$saved_date}] {$clean_name} - {$orig_name}";
+    if (!str_ends_with(strtolower($base_zip_entry), '.' . strtolower($ext))) {
+        $base_zip_entry .= '.' . $ext;
+    }
+
+    $zip_entry_name = $base_zip_entry;
+    $counter = 1;
+    while (isset($used_filenames[$zip_entry_name])) {
+        $name_part = pathinfo($base_zip_entry, PATHINFO_FILENAME);
+        $zip_entry_name = "default_resumes/{$name_part}_({$counter}).{$ext}";
+        $counter++;
+    }
+    $used_filenames[$zip_entry_name] = true;
+
+    $zip->addFile($default_file_path, 'resumes/' . $zip_entry_name);
+    $added_count++;
+
+    fputcsv($csv_handle, [
+        'User Resume',
+        'default_' . $d['id'],
+        $d['user_name'] ?: 'Unknown',
+        $d['user_email'] ?: 'N/A',
+        'N/A',
+        'Saved User Resume',
+        'Candidate Profile',
+        'Candidate Profile',
+        $d['created_at'],
+        'N/A',
+        'Saved',
+        basename($raw_path),
+        'resumes/' . $zip_entry_name
+    ]);
+}
+
 // Rewind and add manifest CSV
 rewind($csv_handle);
 $csv_content = stream_get_contents($csv_handle);
@@ -443,6 +548,7 @@ $readme .= "Archive Structure:\r\n";
 $readme .= " - resumes/job_applications/ : Resumes submitted by candidates for job postings\r\n";
 $readme .= " - resumes/resume_builder/   : Resumes crafted using the AI Resume Builder (HTML format)\r\n";
 $readme .= " - resumes/resume_checker/   : Resumes audited by the AI Resume Quality Checker\r\n";
+$readme .= " - resumes/default_resumes/ : Candidates' saved user resumes (from their Profile page)\r\n";
 $readme .= " - resume_export_manifest.csv: Complete spreadsheet with candidate details, scores, and file paths\r\n";
 
 $zip->addFromString('README.txt', $readme);

@@ -83,9 +83,9 @@ $builder_resumes = $pdo->query("
 
 // C. Resume Checker (resume_reviews table)
 $checker_resumes = $pdo->query("
-    SELECT r.id, COALESCE(u.name, 'Guest / Candidate') as candidate_name, 
+    SELECT r.id, COALESCE(u.name, 'Guest / Candidate') as candidate_name,
            COALESCE(u.email, 'Direct Upload') as candidate_email, '' as phone,
-           r.filename, r.created_at, r.overall_score, 
+           r.filename, r.full_text, r.summary, r.created_at, r.overall_score,
            COALESCE(r.rating_label, 'Evaluated') as status,
            'ATS Audited' as recommendation, NULL as job_id,
            'Resume Review Feedback' as job_title,
@@ -96,9 +96,47 @@ $checker_resumes = $pdo->query("
     LEFT JOIN users u ON r.user_id = u.id
     ORDER BY r.created_at DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
+// The original PDF is saved as uploads/<uniqid>_<original filename> and is
+// never deleted (see resume_check.php) — locate it on disk the same way
+// export_resumes.php does, so admins can open the actual file.
+foreach ($checker_resumes as &$cr) {
+    $cr['resume_path'] = null;
+    if (!empty($cr['filename'])) {
+        $matches = glob(__DIR__ . '/uploads/*' . basename($cr['filename']));
+        if (!empty($matches) && is_file($matches[0])) {
+            // Store the web-relative path (e.g. "uploads/6a7..._resume.pdf") so
+            // it can be used directly as an <a href>, same convention as the
+            // Job Application source's resume_path.
+            $cr['resume_path'] = 'uploads/' . basename($matches[0]);
+        }
+    }
+}
+unset($cr);
+
+// D. Saved Default Resumes (users.default_resume — the "Saved Default Resume"
+// PDF a candidate uploads once on their Profile page for 1-click job
+// applications). There's no dedicated "when was this uploaded" timestamp on
+// `users`, so we sort/display by account creation date as the best available
+// proxy and label the column honestly below.
+$default_resumes = $pdo->query("
+    SELECT u.id, u.name as candidate_name, u.email as candidate_email, '' as phone,
+           u.default_resume as resume_path,
+           u.created_at, NULL as overall_score, 'Saved' as status, 'Profile Default' as recommendation, NULL as job_id,
+           'Saved User Resume' as job_title,
+           'Candidate Profile' as employer_name,
+           'default_resume' as source_type,
+           'User Resume' as source_label
+    FROM users u
+    WHERE u.default_resume IS NOT NULL AND u.default_resume != ''
+    ORDER BY u.created_at DESC
+")->fetchAll(PDO::FETCH_ASSOC);
+foreach ($default_resumes as &$dr) {
+    $dr['filename'] = $dr['resume_path'] ? basename($dr['resume_path']) : 'resume.pdf';
+}
+unset($dr);
 
 // Combined List
-$all_resumes = array_merge($job_resumes, $builder_resumes, $checker_resumes);
+$all_resumes = array_merge($job_resumes, $builder_resumes, $checker_resumes, $default_resumes);
 
 // Sort combined list by created_at DESC
 usort($all_resumes, function($a, $b) {
@@ -111,6 +149,7 @@ $jobs_list = $pdo->query("SELECT j.id, j.job_title, COALESCE(NULLIF(u.company_na
 $count_job_apply = count($job_resumes);
 $count_builder = count($builder_resumes);
 $count_checker = count($checker_resumes);
+$count_default = count($default_resumes);
 $count_total = count($all_resumes);
 ?>
 <!DOCTYPE html>
@@ -142,7 +181,7 @@ $count_total = count($all_resumes);
         }
         .stats-summary-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 16px;
             margin-bottom: 24px;
         }
@@ -229,6 +268,11 @@ $count_total = count($all_resumes);
             color: var(--gold);
             border: 1px solid rgba(245, 158, 11, 0.3);
         }
+        .badge-source-default {
+            background: rgba(236, 72, 153, 0.12);
+            color: #EC4899;
+            border: 1px solid rgba(236, 72, 153, 0.3);
+        }
         .export-card {
             background: var(--surf);
             border: 1px solid var(--bdr);
@@ -253,7 +297,7 @@ $count_total = count($all_resumes);
         @media (max-width: 1024px) {
             .header-inner { padding: 0 16px !important; }
             main { padding: 16px 16px 32px !important; }
-            .stats-summary-grid { grid-template-columns: 1fr 1fr; }
+            .stats-summary-grid { grid-template-columns: repeat(2, 1fr); }
             .admin-tr { grid-template-columns: 120px 1fr 1fr 100px 90px; }
             .admin-th-hide-mobile { display: none; }
         }
@@ -304,7 +348,7 @@ $count_total = count($all_resumes);
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:16px;">
             <div>
                 <h1 style="font-size:26px; font-weight:800; color:var(--txt); margin:0;">📄 Centralized Resume Hub & Bulk Export</h1>
-                <p style="font-size:13px; color:var(--mut); margin-top:4px; margin-bottom:0;">Browse all candidate resumes collected across Job Applications, AI Resume Builder, and AI Resume Checker, and export them into a ZIP archive.</p>
+                <p style="font-size:13px; color:var(--mut); margin-top:4px; margin-bottom:0;">Browse all candidate resumes collected across Job Applications, AI Resume Builder, AI Resume Checker, and User Resumes, and export them into a ZIP archive.</p>
             </div>
             <a href="#exportSection" class="btn-primary" style="padding:11px 22px; font-size:13.5px; width:auto; text-decoration:none; display:inline-flex; align-items:center; gap:8px; border-radius:10px;">
                 <span>📥 Go to Export Controls &darr;</span>
@@ -329,6 +373,10 @@ $count_total = count($all_resumes);
                 <div class="logo-box">🔍</div>
                 <div><div class="stat-val"><?= $count_checker ?></div><div class="stat-lbl">Resume Checker</div></div>
             </div>
+            <div class="stat-box" style="border-left:3px solid #EC4899;">
+                <div class="logo-box">📌</div>
+                <div><div class="stat-val"><?= $count_default ?></div><div class="stat-lbl">User Resume</div></div>
+            </div>
         </div>
 
         <!-- List Section -->
@@ -341,6 +389,7 @@ $count_total = count($all_resumes);
                     <button type="button" class="tab-btn" onclick="filterBySource('job_apply', this)">💼 Job Applications (<?= $count_job_apply ?>)</button>
                     <button type="button" class="tab-btn" onclick="filterBySource('resume_builder', this)">🛠️ Resume Builder (<?= $count_builder ?>)</button>
                     <button type="button" class="tab-btn" onclick="filterBySource('resume_checker', this)">🔍 Resume Checker (<?= $count_checker ?>)</button>
+                    <button type="button" class="tab-btn" onclick="filterBySource('default_resume', this)">📌 User Resume (<?= $count_default ?>)</button>
                 </div>
 
                 <!-- Instant Search Input -->
@@ -364,9 +413,13 @@ $count_total = count($all_resumes);
                 <?php else: ?>
                     <?php foreach($all_resumes as $r): ?>
                         <?php
-                            $source_badge_class = $r['source_type'] === 'job_apply' ? 'badge-source-job' : ($r['source_type'] === 'resume_builder' ? 'badge-source-builder' : 'badge-source-checker');
-                            $source_icon = $r['source_type'] === 'job_apply' ? '💼' : ($r['source_type'] === 'resume_builder' ? '🛠️' : '🔍');
-                            $accent_border = $r['source_type'] === 'job_apply' ? '#10B981' : ($r['source_type'] === 'resume_builder' ? '#6366F1' : '#F59E0B');
+                            $source_style_map = [
+                                'job_apply'      => ['badge-source-job',     '💼', '#10B981'],
+                                'resume_builder' => ['badge-source-builder', '🛠️', '#6366F1'],
+                                'resume_checker' => ['badge-source-checker', '🔍', '#F59E0B'],
+                                'default_resume' => ['badge-source-default', '📌', '#EC4899'],
+                            ];
+                            [$source_badge_class, $source_icon, $accent_border] = $source_style_map[$r['source_type']] ?? $source_style_map['resume_checker'];
                         ?>
                         <div class="admin-tr resume-row-item" 
                              style="border-left-color: <?= $accent_border ?>;"
@@ -401,15 +454,19 @@ $count_total = count($all_resumes);
                             </div>
 
                             <!-- Date Created -->
-                            <div style="color:var(--mut); font-size:11.5px; white-space:nowrap;">
+                            <div style="color:var(--mut); font-size:11.5px; white-space:nowrap;" <?= $r['source_type'] === 'default_resume' ? 'title="Account creation date — this source has no dedicated upload timestamp"' : '' ?>>
                                 <?= date('M j, Y', strtotime($r['created_at'])) ?>
                             </div>
 
                             <!-- Match / Score -->
                             <div style="text-align:center;">
-                                <span style="font-weight:800; color:<?= (int)$r['overall_score'] >= 70 ? 'var(--grn)' : ((int)$r['overall_score'] >= 50 ? 'var(--gold)' : 'var(--red)') ?>;">
-                                    <?= (int)$r['overall_score'] ?>%
-                                </span>
+                                <?php if($r['source_type'] === 'default_resume'): ?>
+                                    <span style="font-size:11px; color:var(--mut);">—</span>
+                                <?php else: ?>
+                                    <span style="font-weight:800; color:<?= (int)$r['overall_score'] >= 70 ? 'var(--grn)' : ((int)$r['overall_score'] >= 50 ? 'var(--gold)' : 'var(--red)') ?>;">
+                                        <?= (int)$r['overall_score'] ?>%
+                                    </span>
+                                <?php endif; ?>
                             </div>
 
                             <!-- Action -->
@@ -426,6 +483,24 @@ $count_total = count($all_resumes);
                                     <button type="button" onclick="openBuilderPreview(<?= htmlspecialchars(json_encode($r)) ?>)" class="btn-secondary" style="padding:4px 9px; font-size:11px;">
                                         👁️ View Build
                                     </button>
+                                <?php elseif($r['source_type'] === 'default_resume'): ?>
+                                    <?php if(!empty($r['resume_path']) && file_exists($r['resume_path'])): ?>
+                                        <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 9px; font-size:11px; text-decoration:none;" title="View Saved User Resume PDF">
+                                            📄 View PDF
+                                        </a>
+                                    <?php else: ?>
+                                        <span style="font-size:11px; color:var(--mut);">File Missing</span>
+                                    <?php endif; ?>
+                                <?php elseif($r['source_type'] === 'resume_checker'): ?>
+                                    <?php if(!empty($r['resume_path']) && file_exists(__DIR__ . '/' . $r['resume_path'])): ?>
+                                        <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 9px; font-size:11px; text-decoration:none;" title="View Uploaded PDF">
+                                            📄 View PDF
+                                        </a>
+                                    <?php else: ?>
+                                        <button type="button" onclick="openCheckerPreview(<?= htmlspecialchars(json_encode($r)) ?>)" class="btn-secondary" style="padding:4px 9px; font-size:11px;" title="Original file no longer on disk — view the extracted resume text instead">
+                                            👁️ View Report
+                                        </button>
+                                    <?php endif; ?>
                                 <?php else: ?>
                                     <span style="font-size:11px; color:var(--mut);">Audited</span>
                                 <?php endif; ?>
@@ -464,6 +539,7 @@ $count_total = count($all_resumes);
                             <option value="job_apply">💼 Job Applications Only (<?= $count_job_apply ?> resumes)</option>
                             <option value="resume_builder">🛠️ AI Resume Builder Only (<?= $count_builder ?> builds)</option>
                             <option value="resume_checker">🔍 AI Resume Checker Only (<?= $count_checker ?> reviews)</option>
+                            <option value="default_resume">📌 User Resumes Only (<?= $count_default ?> saved)</option>
                         </select>
                         <div style="font-size:11px; color:var(--mut); margin-top:8px;">Choose whether to download platform-wide resumes or a specific pipeline source.</div>
                     </div>
@@ -535,7 +611,7 @@ $count_total = count($all_resumes);
                     <div id="modalBuilderUser" style="font-size:12px; color:var(--mut);">Candidate Build Preview</div>
                 </div>
             </div>
-            <div id="modalBuilderContent" style="background:var(--dim); padding:16px; border-radius:12px; font-size:12.5px; line-height:1.6; white-space:pre-wrap; border:1px solid var(--bdr);"></div>
+            <div id="modalBuilderContent" style="background:var(--dim); padding:18px 20px; border-radius:12px; font-size:12.5px; line-height:1.6; border:1px solid var(--bdr); color:var(--txt);"></div>
         </div>
     </div>
 
@@ -610,29 +686,98 @@ $count_total = count($all_resumes);
             }
         }
 
+        function escapeHtml(str) {
+            return (str === null || str === undefined ? '' : String(str))
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function builderSectionLabel(label) {
+            return '<div style="font-size:10.5px; font-weight:800; letter-spacing:0.8px; text-transform:uppercase; color:var(--mut); margin-bottom:7px;">' + label + '</div>';
+        }
+
         function openBuilderPreview(item) {
             document.getElementById('modalBuilderTitle').textContent = item.job_title || 'Generated Resume';
             document.getElementById('modalBuilderUser').textContent = (item.candidate_name || 'Candidate') + ' • ' + (item.candidate_email || '');
-            
-            var text = '';
+
+            var html = '';
             try {
                 var data = JSON.parse(item.generated_content);
-                if (typeof data === 'object') {
-                    if (data.summary) text += "SUMMARY:\n" + data.summary + "\n\n";
-                    if (data.skills) text += "SKILLS:\n" + (Array.isArray(data.skills) ? data.skills.join(', ') : data.skills) + "\n\n";
-                    if (data.experience) text += "EXPERIENCE:\n" + JSON.stringify(data.experience, null, 2) + "\n\n";
-                    if (data.education) text += "EDUCATION:\n" + JSON.stringify(data.education, null, 2) + "\n\n";
+                if (data && typeof data === 'object' && (data.summary || data.experience || data.education || data.skills)) {
+
+                    if (data.summary) {
+                        html += '<div style="margin-bottom:18px;">' + builderSectionLabel('Summary') +
+                                '<div>' + escapeHtml(data.summary) + '</div></div>';
+                    }
+
+                    if (data.skills && (Array.isArray(data.skills) ? data.skills.length : String(data.skills).trim())) {
+                        var skillsStr = Array.isArray(data.skills) ? data.skills.join(', ') : data.skills;
+                        html += '<div style="margin-bottom:18px;">' + builderSectionLabel('Skills') +
+                                '<div>' + escapeHtml(skillsStr) + '</div></div>';
+                    }
+
+                    if (Array.isArray(data.experience) && data.experience.length) {
+                        html += '<div style="margin-bottom:18px;">' + builderSectionLabel('Experience');
+                        data.experience.forEach(function(exp) {
+                            var heading = [exp.role, exp.company].filter(Boolean).map(escapeHtml).join(' — ');
+                            html += '<div style="margin-bottom:12px;">';
+                            if (heading) html += '<div style="font-weight:700; color:var(--txt);">' + heading + '</div>';
+                            if (exp.duration) html += '<div style="font-size:11px; color:var(--mut); margin-bottom:4px;">' + escapeHtml(exp.duration) + '</div>';
+                            if (Array.isArray(exp.bullets) && exp.bullets.length) {
+                                html += '<ul style="margin:4px 0 0 18px; padding:0;">';
+                                exp.bullets.forEach(function(b) { html += '<li style="margin-bottom:3px;">' + escapeHtml(b) + '</li>'; });
+                                html += '</ul>';
+                            } else if (exp.notes) {
+                                html += '<div>' + escapeHtml(exp.notes) + '</div>';
+                            }
+                            html += '</div>';
+                        });
+                        html += '</div>';
+                    }
+
+                    if (Array.isArray(data.education) && data.education.length) {
+                        html += '<div>' + builderSectionLabel('Education');
+                        data.education.forEach(function(edu) {
+                            var heading = [edu.degree, edu.school].filter(Boolean).map(escapeHtml).join(' — ');
+                            html += '<div style="margin-bottom:8px;">';
+                            if (heading) html += '<div style="font-weight:700; color:var(--txt);">' + heading + '</div>';
+                            if (edu.year) html += '<div style="font-size:11px; color:var(--mut);">' + escapeHtml(edu.year) + '</div>';
+                            html += '</div>';
+                        });
+                        html += '</div>';
+                    }
                 }
             } catch(e) {
-                text = item.generated_content || item.raw_input || 'No preview content available.';
+                // Not JSON (or unrecognized shape) — fall back to showing the raw text.
             }
 
-            document.getElementById('modalBuilderContent').textContent = text || 'No preview text.';
+            if (!html) {
+                var raw = item.generated_content || item.raw_input || 'No preview content available.';
+                html = '<div style="white-space:pre-wrap;">' + escapeHtml(raw) + '</div>';
+            }
+
+            document.getElementById('modalBuilderContent').innerHTML = html;
             document.getElementById('builderPreviewModal').style.display = 'flex';
         }
 
         function closeBuilderPreview() {
             document.getElementById('builderPreviewModal').style.display = 'none';
+        }
+
+        function openCheckerPreview(item) {
+            document.getElementById('modalBuilderTitle').textContent = 'Resume Checker Report';
+            document.getElementById('modalBuilderUser').textContent = (item.candidate_name || 'Candidate') + ' • ' + (item.candidate_email || '') + ' • ' + (item.filename || 'resume.pdf');
+
+            var html = '';
+            if (item.summary) {
+                html += '<div style="margin-bottom:18px;">' + builderSectionLabel('AI Summary') +
+                        '<div>' + escapeHtml(item.summary) + '</div></div>';
+            }
+            var extracted = item.full_text || '';
+            html += '<div>' + builderSectionLabel('Extracted Resume Text (original file no longer on disk)') +
+                    '<div style="white-space:pre-wrap;">' + (extracted ? escapeHtml(extracted) : 'No extracted text saved for this review.') + '</div></div>';
+
+            document.getElementById('modalBuilderContent').innerHTML = html;
+            document.getElementById('builderPreviewModal').style.display = 'flex';
         }
 
         window.addEventListener('keydown', function(e) {
