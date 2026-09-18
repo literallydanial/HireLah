@@ -91,6 +91,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // Action: Edit User Account (Name, Email, Password, Role, Verification)
+    if ($action === 'edit_user') {
+        $target_id = (int)($_POST['user_id'] ?? 0);
+        $name = trim($_POST['name'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $role = $_POST['role'] ?? 'candidate';
+        $is_verified = isset($_POST['is_verified']) ? 1 : 0;
+
+        if ($target_id <= 0 || empty($name) || empty($email)) {
+            $_SESSION['error'] = "User ID, Name, and Email are required.";
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $_SESSION['error'] = "Invalid email format.";
+        } else {
+            // Check if email belongs to another user
+            $chk = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+            $chk->execute([$email, $target_id]);
+            if ($chk->fetch()) {
+                $_SESSION['error'] = "The email address '$email' is already in use by another account.";
+            } else {
+                $prev_stmt = $pdo->prepare("SELECT name, email, role, is_verified FROM users WHERE id = ?");
+                $prev_stmt->execute([$target_id]);
+                $prev_user = $prev_stmt->fetch();
+
+                if (!$prev_user) {
+                    $_SESSION['error'] = "Account not found.";
+                } else {
+                    $updates = ["name = ?", "email = ?", "is_verified = ?"];
+                    $params = [$name, $email, $is_verified];
+
+                    if (in_array($role, ['candidate', 'employer', 'admin'], true)) {
+                        $updates[] = "role = ?";
+                        $params[] = $role;
+                    }
+
+                    $pw_changed = false;
+                    if (!empty($password)) {
+                        $updates[] = "password_hash = ?";
+                        $params[] = password_hash($password, PASSWORD_DEFAULT);
+                        $pw_changed = true;
+                    }
+
+                    $params[] = $target_id;
+                    $upd = $pdo->prepare("UPDATE users SET " . implode(", ", $updates) . " WHERE id = ?");
+                    $upd->execute($params);
+
+                    // If admin edited their own account, synchronize active session
+                    if ($target_id === (int)$_SESSION['user_id']) {
+                        $_SESSION['user_name'] = $name;
+                        $_SESSION['user_email'] = $email;
+                        if (in_array($role, ['candidate', 'employer', 'admin'], true)) {
+                            $_SESSION['user_role'] = $role;
+                        }
+                    }
+
+                    $log_detail = "Edited account #$target_id for '$name' ($email)" . ($pw_changed ? " with password update" : "");
+                    log_admin_action($pdo, $admin_id, $admin_name, 'edit_user', 'user', $target_id, $log_detail);
+                    $_SESSION['toast'] = "Account for '$name' updated successfully" . ($pw_changed ? " (password updated)" : "") . "!";
+                }
+            }
+        }
+        header("Location: admin_dashboard.php");
+        exit;
+    }
+
     // Action: Delete User Account
     if ($action === 'delete_user') {
         $target_id = (int)($_POST['user_id'] ?? 0);
@@ -408,7 +473,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         }
         .admin-tr {
             display: grid;
-            grid-template-columns: 34px 60px 1.4fr 1.6fr 110px 110px 120px 140px;
+            grid-template-columns: 34px 60px 1.4fr 1.6fr 110px 110px 120px 175px;
             gap: 8px;
             padding: 12px 16px;
             align-items: center;
@@ -430,6 +495,36 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         }
         .admin-tr:not(.admin-th):hover {
             background: var(--dim);
+        }
+        .user-selection-bar {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            background: var(--surf);
+            border: 1px solid var(--acc);
+            border-radius: 12px;
+            padding: 10px 16px;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 18px rgba(107, 138, 0, 0.12);
+            transition: all 0.2s ease;
+            backdrop-filter: var(--glass-blur);
+            -webkit-backdrop-filter: var(--glass-blur);
+        }
+        .admin-tr.user-row-item {
+            cursor: pointer;
+            transition: background 0.15s ease, box-shadow 0.15s ease;
+        }
+        .admin-tr.user-row-item.is-selected {
+            background: rgba(107, 138, 0, 0.08) !important;
+            border-left-color: var(--acc) !important;
+            box-shadow: inset 0 0 0 1px rgba(107, 138, 0, 0.35);
+        }
+        [data-theme="dark"] .admin-tr.user-row-item.is-selected {
+            background: rgba(217, 255, 79, 0.08) !important;
+            border-left-color: var(--acc) !important;
+            box-shadow: inset 0 0 0 1px rgba(217, 255, 79, 0.3);
         }
         .admin-tr.accent-red   { border-left-color: #F43F5E; }
         .admin-tr.accent-amber { border-left-color: #F59E0B; }
@@ -460,6 +555,18 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             padding: 24px 36px 40px !important;
             margin: 0 auto !important;
             box-sizing: border-box !important;
+        }
+        .toast-notification {
+            top: 86px !important;
+            z-index: 999999 !important;
+        }
+        @media (max-width: 640px) {
+            .toast-notification {
+                top: 80px !important;
+                right: 16px !important;
+                left: 16px !important;
+                max-width: calc(100vw - 32px) !important;
+            }
         }
         @media (max-width: 1024px) {
             .header-inner { padding: 0 16px !important; }
@@ -496,16 +603,16 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         </div>
     </header>
 
-    <main>
-        <?php if(isset($_SESSION['toast'])): ?>
-            <div class="toast-notification">
-                <span class="toast-icon-badge">🌿</span>
-                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
-                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
-                <?php unset($_SESSION['toast']); ?>
-            </div>
-        <?php endif; ?>
+    <?php if(isset($_SESSION['toast'])): ?>
+        <div class="toast-notification">
+            <span class="toast-icon-badge">🌿</span>
+            <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
+            <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
+            <?php unset($_SESSION['toast']); ?>
+        </div>
+    <?php endif; ?>
 
+    <main>
         <?php if(isset($_SESSION['error'])): ?>
             <div style="background:rgba(255, 77, 106, 0.1); border:1px solid rgba(255, 77, 106, 0.35); border-radius:12px; padding:11px 18px; margin-bottom:20px; color:var(--red); font-size:13px;">
                 ⚠️ <?= htmlspecialchars($_SESSION['error']) ?>
@@ -764,11 +871,39 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                     </div>
                 </div>
 
-                <!-- Bulk Delete Toolbar -->
-                <form method="POST" id="bulkDeleteForm" onsubmit="return confirmBulkDelete();" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px 14px; margin-bottom:12px;">
+                <!-- Account Selection Action Bar (Appears when admin selects account) -->
+                <div id="userSelectionToolbar" class="user-selection-bar">
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <span id="bulkSelectedCount" style="font-size:12px; font-weight:800; background:var(--dim); border:1px solid var(--bdr); border-radius:20px; padding:4px 12px; color:var(--txt);">0 selected</span>
+                        <div id="selectedUserPreview" style="display:none; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--txt);">
+                            <span id="selectedUserAvatar" class="avatar-chip" style="width:24px; height:24px; font-size:10px; background:var(--grad-purple);"></span>
+                            <span id="selectedUserName"></span>
+                            <span id="selectedUserEmail" style="color:var(--mut); font-weight:500; font-size:11.5px;"></span>
+                            <span id="selectedUserRoleBadge" class="chip" style="font-size:9.5px; padding:2px 8px;"></span>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <!-- Edit Account Button (visible when 1 account is selected) -->
+                        <button type="button" id="editSelectedUserBtn" onclick="editSelectedAccount()" class="btn-primary" style="padding:7px 15px; font-size:12px; border-radius:8px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:700; width:auto; margin:0;">
+                            ✏️ Edit Account
+                        </button>
+
+                        <!-- Delete Account Button (active when account(s) selected) -->
+                        <button type="button" id="deleteSelectedUserBtn" onclick="confirmDeleteSelectedAccounts()" style="background:rgba(255, 77, 106, 0.12); border:1px solid rgba(255, 77, 106, 0.35); border-radius:8px; color:var(--red); padding:7px 15px; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                            🗑️ Delete Account
+                        </button>
+
+                        <!-- Clear Selection Button -->
+                        <button type="button" onclick="clearUserSelection()" class="btn-secondary" style="padding:7px 12px; font-size:12px; border-radius:8px;" title="Clear Selection">
+                            ✕ Deselect
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Hidden form for bulk or single delete submission -->
+                <form method="POST" id="bulkDeleteForm" style="display:none;">
                     <input type="hidden" name="action" value="bulk_delete_users">
-                    <span id="bulkSelectedCount" style="font-size:12px; font-weight:700; color:var(--mut);">0 selected</span>
-                    <button type="submit" id="bulkDeleteBtn" disabled style="background:rgba(255, 77, 106, 0.12); border:1px solid rgba(255, 77, 106, 0.35); border-radius:6px; color:var(--red); padding:6px 14px; font-size:11px; font-weight:700; cursor:pointer; opacity:0.5;">🗑️ Delete Selected</button>
                 </form>
 
                 <div class="admin-table">
@@ -790,11 +925,26 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                             $u_is_new = strtotime($u['created_at']) >= strtotime('-48 hours');
                             $u_is_self = (int)$u['id'] === (int)$_SESSION['user_id'];
                         ?>
-                        <div class="admin-tr user-row-item <?= $u_accent ?>" data-search="<?= strtolower(htmlspecialchars($u['name'] . ' ' . $u['email'] . ' ' . $u['role'])) ?>" data-role="<?= htmlspecialchars($u['role']) ?>" <?= $u_is_new ? 'style="background:rgba(236, 72, 153, 0.05);"' : '' ?>>
-                            <div>
-                                <?php if(!$u_is_self): ?>
-                                    <input type="checkbox" class="user-select-checkbox" value="<?= $u['id'] ?>" onclick="updateBulkSelection()" style="width:15px; height:15px; cursor:pointer;">
-                                <?php endif; ?>
+                        <div class="admin-tr user-row-item <?= $u_accent ?>"
+                             data-user-id="<?= $u['id'] ?>"
+                             data-user-name="<?= htmlspecialchars($u['name'], ENT_QUOTES) ?>"
+                             data-user-email="<?= htmlspecialchars($u['email'], ENT_QUOTES) ?>"
+                             data-user-role="<?= htmlspecialchars($u['role'], ENT_QUOTES) ?>"
+                             data-user-verified="<?= $u['is_verified'] ? '1' : '0' ?>"
+                             data-is-self="<?= $u_is_self ? '1' : '0' ?>"
+                             data-search="<?= strtolower(htmlspecialchars($u['name'] . ' ' . $u['email'] . ' ' . $u['role'])) ?>"
+                             data-role="<?= htmlspecialchars($u['role']) ?>"
+                             onclick="handleUserRowClick(event, this)"
+                             <?= $u_is_new ? 'style="background:rgba(236, 72, 153, 0.05);"' : '' ?>>
+                            <div onclick="event.stopPropagation()">
+                                <input type="checkbox" class="user-select-checkbox" value="<?= $u['id'] ?>"
+                                       data-user-id="<?= $u['id'] ?>"
+                                       data-user-name="<?= htmlspecialchars($u['name'], ENT_QUOTES) ?>"
+                                       data-user-email="<?= htmlspecialchars($u['email'], ENT_QUOTES) ?>"
+                                       data-user-role="<?= htmlspecialchars($u['role'], ENT_QUOTES) ?>"
+                                       data-user-verified="<?= $u['is_verified'] ? '1' : '0' ?>"
+                                       data-is-self="<?= $u_is_self ? '1' : '0' ?>"
+                                       onclick="event.stopPropagation(); updateBulkSelection();" style="width:15px; height:15px; cursor:pointer;">
                             </div>
                             <div style="font-weight:700; color:var(--mut);">#<?= $u['id'] ?></div>
                             <div style="font-weight:800; color:var(--txt); display:flex; align-items:center; gap:8px;">
@@ -818,7 +968,19 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                                 <?php endif; ?>
                             </div>
                             <div class="admin-th-hide-mobile" style="color:var(--mut); font-size:11px;"><?= date('M j, Y', strtotime($u['created_at'])) ?></div>
-                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;" onclick="event.stopPropagation()">
+                                <!-- Edit Account Button -->
+                                <button type="button" onclick='openEditUserModal(<?= json_encode([
+                                    "id" => $u["id"],
+                                    "name" => $u["name"],
+                                    "email" => $u["email"],
+                                    "role" => $u["role"],
+                                    "is_verified" => (int)$u["is_verified"],
+                                    "is_self" => $u_is_self
+                                ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' class="btn-secondary" style="padding:4px 8px; font-size:10px;" title="Edit Account Name, Email, or Password">
+                                    ✏️ Edit
+                                </button>
+
                                 <!-- Toggle Verify Form -->
                                 <form method="POST" style="display:inline;">
                                     <input type="hidden" name="action" value="toggle_verify">
@@ -829,8 +991,8 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                                 </form>
 
                                 <!-- Delete Account Form -->
-                                <?php if((int)$u['id'] !== (int)$_SESSION['user_id']): ?>
-                                    <form method="POST" style="display:inline;" onsubmit="return confirm('Permanently delete account for <?= htmlspecialchars($u['name']) ?>?');">
+                                <?php if(!$u_is_self): ?>
+                                    <form method="POST" style="display:inline;" onsubmit="return confirm('Permanently delete account for <?= htmlspecialchars(addslashes($u['name'])) ?>?');">
                                         <input type="hidden" name="action" value="delete_user">
                                         <input type="hidden" name="user_id" value="<?= $u['id'] ?>">
                                         <button type="submit" style="background:rgba(255, 77, 106, 0.12); border:1px solid rgba(255, 77, 106, 0.35); border-radius:6px; color:var(--red); padding:4px 8px; font-size:10px; font-weight:700; cursor:pointer;" title="Delete User Account">🗑️</button>
@@ -965,6 +1127,68 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 <div style="display:flex; justify-content:flex-end; gap:10px;">
                     <button type="button" onclick="closeAddUserModal()" class="btn-secondary" style="padding:10px 18px; font-size:13px;">Cancel</button>
                     <button type="submit" class="btn-primary" style="padding:10px 22px; width:auto; font-size:13px; border-radius:10px;">Create Account &rarr;</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Edit User Account (Name, Email, Password, Role) -->
+    <div id="editUserModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:4000; align-items:center; justify-content:center; padding:20px;">
+        <div class="panel" style="max-width:490px; width:100%; position:relative; border-radius:18px; box-shadow:var(--shadow-lg);">
+            <button type="button" onclick="closeEditUserModal()" style="position:absolute; top:20px; right:20px; background:none; border:none; color:var(--mut); font-size:22px; cursor:pointer; line-height:1;">✕</button>
+            
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                <div style="font-size:22px;">✏️</div>
+                <div>
+                    <div style="font-size:20px; font-weight:800; color:var(--txt);">Edit User Account</div>
+                    <div id="editModalSubTitle" style="font-size:12px; color:var(--mut);">Update account name, email and password credentials</div>
+                </div>
+            </div>
+
+            <form method="POST" style="margin-top:16px;">
+                <input type="hidden" name="action" value="edit_user">
+                <input type="hidden" name="user_id" id="editUserId" value="">
+
+                <div style="margin-bottom:14px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Account Name</label>
+                    <input type="text" name="name" id="editUserName" placeholder="Full Name" required style="padding:10px 14px; font-size:13px;">
+                </div>
+
+                <div style="margin-bottom:14px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Email Address</label>
+                    <input type="email" name="email" id="editUserEmail" placeholder="user@domain.com" required style="padding:10px 14px; font-size:13px;">
+                </div>
+
+                <div style="margin-bottom:14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <label style="font-size:12px; color:var(--mut); font-weight:700;">Password</label>
+                        <span style="font-size:11px; color:var(--mut);">Leave blank to keep unchanged</span>
+                    </div>
+                    <div style="position:relative;">
+                        <input type="password" name="password" id="editUserPassword" placeholder="Enter new password (optional)" autocomplete="new-password" style="padding:10px 42px 10px 14px; font-size:13px; margin:0;">
+                        <button type="button" onclick="toggleEditPasswordVisibility()" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--mut); font-size:15px; cursor:pointer; padding:4px;" title="Toggle password visibility">👁️</button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom:14px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Account Role</label>
+                    <select name="role" id="editUserRole" required style="padding:10px 12px; font-size:13px;">
+                        <option value="candidate">Candidate</option>
+                        <option value="employer">Employer</option>
+                        <option value="admin">System Admin</option>
+                    </select>
+                </div>
+
+                <div style="margin-bottom:20px; padding:10px 14px; background:var(--dim); border-radius:10px; display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" name="is_verified" id="editUserVerified" value="1" style="width:18px; height:18px; cursor:pointer;">
+                    <label for="editUserVerified" style="font-size:12px; font-weight:600; color:var(--txt); cursor:pointer;">
+                        ✓ Mark Account Email as Verified
+                    </label>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" onclick="closeEditUserModal()" class="btn-secondary" style="padding:10px 18px; font-size:13px;">Cancel</button>
+                    <button type="submit" class="btn-primary" style="padding:10px 22px; width:auto; font-size:13px; border-radius:10px;">💾 Save Changes &rarr;</button>
                 </div>
             </form>
         </div>
@@ -1164,44 +1388,196 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             updateBulkSelection();
         }
 
+        function openEditUserModal(user) {
+            document.getElementById('editUserId').value = user.id || '';
+            document.getElementById('editUserName').value = user.name || '';
+            document.getElementById('editUserEmail').value = user.email || '';
+            document.getElementById('editUserPassword').value = '';
+            document.getElementById('editUserRole').value = user.role || 'candidate';
+            document.getElementById('editUserVerified').checked = (user.is_verified == 1);
+
+            var subTitle = document.getElementById('editModalSubTitle');
+            if (subTitle) {
+                subTitle.textContent = 'Editing ' + (user.name || 'Account') + ' (ID #' + user.id + ')';
+            }
+            document.getElementById('editUserModal').style.display = 'flex';
+        }
+
+        function closeEditUserModal() {
+            document.getElementById('editUserModal').style.display = 'none';
+        }
+
+        function toggleEditPasswordVisibility() {
+            var pwd = document.getElementById('editUserPassword');
+            if (pwd) {
+                pwd.type = pwd.type === 'password' ? 'text' : 'password';
+            }
+        }
+
+        function handleUserRowClick(event, row) {
+            var tag = event.target.tagName.toLowerCase();
+            if (tag === 'button' || tag === 'input' || tag === 'a' || tag === 'select' || event.target.closest('form') || event.target.closest('button')) {
+                return;
+            }
+            var cb = row.querySelector('.user-select-checkbox');
+            if (cb) {
+                cb.checked = !cb.checked;
+                updateBulkSelection();
+            }
+        }
+
+        function editSelectedAccount() {
+            var checked = document.querySelectorAll('.user-select-checkbox:checked');
+            if (checked.length !== 1) return;
+            var cb = checked[0];
+            openEditUserModal({
+                id: cb.getAttribute('data-user-id'),
+                name: cb.getAttribute('data-user-name'),
+                email: cb.getAttribute('data-user-email'),
+                role: cb.getAttribute('data-user-role'),
+                is_verified: cb.getAttribute('data-user-verified'),
+                is_self: cb.getAttribute('data-is-self') === '1'
+            });
+        }
+
+        function confirmDeleteSelectedAccounts() {
+            var checked = document.querySelectorAll('.user-select-checkbox:checked');
+            if (checked.length === 0) return;
+
+            var selfSelected = false;
+            checked.forEach(function(cb) {
+                if (cb.getAttribute('data-is-self') === '1') selfSelected = true;
+            });
+
+            if (selfSelected && checked.length === 1) {
+                alert('You cannot delete your own admin account while logged in.');
+                return;
+            }
+
+            var msg = '';
+            if (checked.length === 1) {
+                var name = checked[0].getAttribute('data-user-name') || 'this account';
+                msg = 'Permanently delete account for "' + name + '"? This cannot be undone.';
+            } else {
+                msg = 'Permanently delete ' + checked.length + ' selected accounts? This cannot be undone.';
+            }
+
+            if (!confirm(msg)) return;
+
+            var form = document.getElementById('bulkDeleteForm');
+            form.innerHTML = '<input type="hidden" name="action" value="bulk_delete_users">';
+            checked.forEach(function(cb) {
+                if (cb.getAttribute('data-is-self') !== '1') {
+                    var hidden = document.createElement('input');
+                    hidden.type = 'hidden';
+                    hidden.name = 'user_ids[]';
+                    hidden.value = cb.value;
+                    form.appendChild(hidden);
+                }
+            });
+            form.submit();
+        }
+
+        function clearUserSelection() {
+            var checkboxes = document.querySelectorAll('.user-select-checkbox');
+            checkboxes.forEach(function(cb) { cb.checked = false; });
+            var selectAll = document.getElementById('selectAllUsers');
+            if (selectAll) selectAll.checked = false;
+            updateBulkSelection();
+        }
+
         function updateBulkSelection() {
             var checked = document.querySelectorAll('.user-select-checkbox:checked');
+            var toolbar = document.getElementById('userSelectionToolbar');
             var countEl = document.getElementById('bulkSelectedCount');
-            var btn = document.getElementById('bulkDeleteBtn');
+            var previewEl = document.getElementById('selectedUserPreview');
+            var editBtn = document.getElementById('editSelectedUserBtn');
+            var deleteBtn = document.getElementById('deleteSelectedUserBtn');
 
-            countEl.textContent = checked.length + ' selected';
-            btn.disabled = checked.length === 0;
-            btn.style.opacity = checked.length === 0 ? '0.5' : '1';
+            // Synchronize visual selected state on rows
+            var allRows = document.querySelectorAll('.user-row-item');
+            allRows.forEach(function(row) {
+                var cb = row.querySelector('.user-select-checkbox');
+                if (cb && cb.checked) {
+                    row.classList.add('is-selected');
+                } else {
+                    row.classList.remove('is-selected');
+                }
+            });
 
-            // Keep the header "select all" checkbox in sync
+            // Synchronize master checkbox
             var allBoxes = document.querySelectorAll('.user-select-checkbox');
             var selectAll = document.getElementById('selectAllUsers');
             if (selectAll) {
                 selectAll.checked = allBoxes.length > 0 && checked.length === allBoxes.length;
             }
-        }
 
-        function confirmBulkDelete() {
-            var checked = document.querySelectorAll('.user-select-checkbox:checked');
-            if (checked.length === 0) return false;
+            if (checked.length === 0) {
+                if (toolbar) toolbar.style.display = 'none';
+                return;
+            }
 
-            var form = document.getElementById('bulkDeleteForm');
-            form.querySelectorAll('input[name="user_ids[]"]').forEach(function(el) { el.remove(); });
+            if (toolbar) toolbar.style.display = 'flex';
 
-            checked.forEach(function(cb) {
-                var hidden = document.createElement('input');
-                hidden.type = 'hidden';
-                hidden.name = 'user_ids[]';
-                hidden.value = cb.value;
-                form.appendChild(hidden);
-            });
+            if (checked.length === 1) {
+                var cb = checked[0];
+                var name = cb.getAttribute('data-user-name') || 'User';
+                var email = cb.getAttribute('data-user-email') || '';
+                var role = cb.getAttribute('data-user-role') || 'candidate';
+                var isSelf = cb.getAttribute('data-is-self') === '1';
 
-            return confirm('Permanently delete ' + checked.length + ' selected account' + (checked.length === 1 ? '' : 's') + '? This cannot be undone.');
+                if (countEl) countEl.textContent = '1 Selected';
+                if (previewEl) {
+                    previewEl.style.display = 'flex';
+                    var avatar = document.getElementById('selectedUserAvatar');
+                    var nameEl = document.getElementById('selectedUserName');
+                    var emailEl = document.getElementById('selectedUserEmail');
+                    var roleEl = document.getElementById('selectedUserRoleBadge');
+
+                    if (avatar) avatar.textContent = (name.charAt(0) || 'U').toUpperCase();
+                    if (nameEl) nameEl.textContent = name;
+                    if (emailEl) emailEl.textContent = '(' + email + ')';
+                    if (roleEl) {
+                        roleEl.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+                        roleEl.className = 'chip ' + (role === 'admin' ? 'chip-rejected' : (role === 'employer' ? 'chip-review' : 'chip-shortlisted'));
+                    }
+                }
+
+                if (editBtn) {
+                    editBtn.style.display = 'inline-flex';
+                    editBtn.title = 'Edit name, email, or password for ' + name;
+                }
+
+                if (deleteBtn) {
+                    deleteBtn.textContent = '🗑️ Delete Account';
+                    if (isSelf) {
+                        deleteBtn.style.opacity = '0.4';
+                        deleteBtn.style.cursor = 'not-allowed';
+                        deleteBtn.title = 'Cannot delete your own admin account while logged in';
+                    } else {
+                        deleteBtn.style.opacity = '1';
+                        deleteBtn.style.cursor = 'pointer';
+                        deleteBtn.title = 'Permanently delete this account';
+                    }
+                }
+            } else {
+                if (countEl) countEl.textContent = checked.length + ' Selected';
+                if (previewEl) previewEl.style.display = 'none';
+                if (editBtn) editBtn.style.display = 'none';
+
+                if (deleteBtn) {
+                    deleteBtn.textContent = '🗑️ Delete Selected (' + checked.length + ')';
+                    deleteBtn.style.opacity = '1';
+                    deleteBtn.style.cursor = 'pointer';
+                    deleteBtn.title = 'Delete selected accounts';
+                }
+            }
         }
 
         window.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeAddUserModal();
+                closeEditUserModal();
                 closeExportResumesModal();
             }
         });

@@ -738,9 +738,9 @@ input:focus, select:focus, textarea:focus {
    ========================================================================== */
 .toast-notification {
   position: fixed;
-  top: 24px;
+  top: 86px;
   right: 24px;
-  z-index: 99999;
+  z-index: 999999;
   background: var(--toast-bg);
   border: 1px solid var(--toast-bdr);
   border-radius: 14px;
@@ -757,6 +757,15 @@ input:focus, select:focus, textarea:focus {
   max-width: 480px;
   animation: toastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+@media (max-width: 640px) {
+  .toast-notification {
+    top: 80px;
+    right: 16px;
+    left: 16px;
+    max-width: calc(100vw - 32px);
+  }
 }
 
 .toast-notification.hiding {
