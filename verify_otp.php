@@ -160,9 +160,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
             </div>
             <h1 style="font-size:22px; font-weight:800; color:var(--txt); margin-bottom:6px;">Email Verification</h1>
-            <p style="font-size:13px; color:var(--mut); margin-bottom:20px;">
+            <p style="font-size:13px; color:var(--mut); margin-bottom:8px;">
                 We emailed a 6-digit verification code to:<br>
                 <strong style="color:var(--txt);"><?= htmlspecialchars($user['email']) ?></strong>
+            </p>
+            <p style="font-size:12px; color:var(--mut); margin-bottom:20px;">
+                💡 Don't see it? Check your <strong>Spam/Junk folder</strong> too.
             </p>
 
             <?php if(isset($error)): ?>

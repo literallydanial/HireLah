@@ -148,3 +148,75 @@ function get_company_members($pdo, $company_id) {
     $stmt->execute([$company_id]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+// Works out what deleting this employer's account would do to each company
+// they belong to. Used both to preview the impact before they confirm
+// deletion, and to drive process_employer_departure() afterwards. Per
+// company, exactly one of three things happens:
+//  - 'delete_company': they're the only member left, so the whole company
+//    (and its jobs) is deleted along with them.
+//  - 'promote_successor': they're the sole admin but teammates remain, so
+//    the earliest-joined teammate is auto-promoted to admin and inherits
+//    any jobs this admin personally posted.
+//  - 'leave_team': they're a regular HR member (or another admin already
+//    exists), so they simply leave; any jobs they personally posted are
+//    handed to the company's admin.
+function get_employer_deletion_impact($pdo, $user_id) {
+    $companies = get_user_companies($pdo, $user_id);
+    $impact = [];
+
+    foreach ($companies as $c) {
+        $members = get_company_members($pdo, $c['id']);
+        $others = array_values(array_filter($members, fn($m) => (int)$m['id'] !== (int)$user_id));
+
+        if (empty($others)) {
+            $impact[] = ['id' => $c['id'], 'name' => $c['name'], 'member_count' => count($members), 'action' => 'delete_company'];
+            continue;
+        }
+
+        $other_admin = null;
+        $earliest_hr = null;
+        foreach ($others as $m) {
+            if ($m['role'] === 'admin' && !$other_admin) $other_admin = $m;
+            if ($m['role'] !== 'admin' && !$earliest_hr) $earliest_hr = $m;
+        }
+
+        if ($c['role'] === 'admin' && !$other_admin) {
+            // Sole admin, teammates remain — earliest-joined teammate takes over.
+            $impact[] = ['id' => $c['id'], 'name' => $c['name'], 'member_count' => count($members), 'action' => 'promote_successor', 'successor_id' => $earliest_hr['id'], 'successor_name' => $earliest_hr['name']];
+        } else {
+            $admin_id = $other_admin['id'] ?? $earliest_hr['id'];
+            $impact[] = ['id' => $c['id'], 'name' => $c['name'], 'member_count' => count($members), 'action' => 'leave_team', 'admin_id' => $admin_id];
+        }
+    }
+
+    return $impact;
+}
+
+// Performs the company-side cleanup described by $impact (from
+// get_employer_deletion_impact()) for every company this employer belongs
+// to. Must run BEFORE the `users` row itself is deleted — company_members
+// removes this user's own memberships automatically via ON DELETE CASCADE
+// once that happens.
+function process_employer_departure($pdo, $user_id, $impact) {
+    foreach ($impact as $row) {
+        if ($row['action'] === 'delete_company') {
+            $logo_stmt = $pdo->prepare("SELECT logo FROM companies WHERE id = ?");
+            $logo_stmt->execute([$row['id']]);
+            $logo = $logo_stmt->fetchColumn();
+            if (!empty($logo) && file_exists($logo)) @unlink($logo);
+
+            $pdo->prepare("DELETE FROM jobs WHERE company_id = ?")->execute([$row['id']]);
+            $pdo->prepare("DELETE FROM companies WHERE id = ?")->execute([$row['id']]);
+        } elseif ($row['action'] === 'promote_successor') {
+            $pdo->prepare("UPDATE company_members SET role = 'admin' WHERE company_id = ? AND user_id = ?")->execute([$row['id'], $row['successor_id']]);
+            $pdo->prepare("UPDATE jobs SET employer_id = ? WHERE company_id = ? AND employer_id = ?")->execute([$row['successor_id'], $row['id'], $user_id]);
+        } else { // leave_team
+            $pdo->prepare("UPDATE jobs SET employer_id = ? WHERE company_id = ? AND employer_id = ?")->execute([$row['admin_id'], $row['id'], $user_id]);
+        }
+    }
+
+    // Legacy jobs that never migrated into a company workspace — personal
+    // to this employer, nobody else can manage them, safe to remove.
+    $pdo->prepare("DELETE FROM jobs WHERE company_id IS NULL AND employer_id = ?")->execute([$user_id]);
+}

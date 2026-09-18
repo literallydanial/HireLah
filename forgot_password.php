@@ -69,6 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php if(!empty($info)): ?>
             <div style="background:var(--toast-bg); border:1px solid var(--toast-bdr); border-radius:10px; padding:14px; margin-bottom:20px; color:var(--toast-txt); font-size:13px; text-align:left; line-height:1.5;">
                 ✉️ <?= $info ?>
+                <br><br>💡 Don't see it? Check your <strong>Spam/Junk folder</strong> too.
             </div>
         <?php endif; ?>
 

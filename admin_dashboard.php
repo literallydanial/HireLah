@@ -113,6 +113,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // Action: Bulk Delete User Accounts
+    if ($action === 'bulk_delete_users') {
+        $target_ids = $_POST['user_ids'] ?? [];
+        $target_ids = array_unique(array_map('intval', (array)$target_ids));
+        $target_ids = array_filter($target_ids, fn($id) => $id > 0 && $id !== (int)$_SESSION['user_id']);
+
+        if (empty($target_ids)) {
+            $_SESSION['error'] = "No valid accounts selected for deletion.";
+        } else {
+            $placeholders = implode(',', array_fill(0, count($target_ids), '?'));
+            $u_stmt = $pdo->prepare("SELECT id, name, email FROM users WHERE id IN ($placeholders)");
+            $u_stmt->execute(array_values($target_ids));
+            $target_users = $u_stmt->fetchAll();
+
+            $del = $pdo->prepare("DELETE FROM users WHERE id IN ($placeholders)");
+            $del->execute(array_values($target_ids));
+
+            foreach ($target_users as $target_user) {
+                log_admin_action($pdo, $admin_id, $admin_name, 'delete_user', 'user', $target_user['id'], "Deleted user account '{$target_user['name']}' ({$target_user['email']}) via bulk delete");
+            }
+
+            $count = count($target_users);
+            $_SESSION['toast'] = "$count user account" . ($count === 1 ? '' : 's') . " deleted successfully.";
+        }
+        header("Location: admin_dashboard.php");
+        exit;
+    }
+
     // Action: Edit Job Posting (admin override — bypasses edit_job.php's
     // require_role('employer') gate, which would otherwise lock admins out)
     if ($action === 'admin_edit_job') {
@@ -380,7 +408,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         }
         .admin-tr {
             display: grid;
-            grid-template-columns: 60px 1.4fr 1.6fr 110px 110px 120px 140px;
+            grid-template-columns: 34px 60px 1.4fr 1.6fr 110px 110px 120px 140px;
             gap: 8px;
             padding: 12px 16px;
             align-items: center;
@@ -438,7 +466,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             main { padding: 16px 16px 32px !important; }
             .stats-summary-grid { grid-template-columns: 1fr 1fr; }
             .health-grid { grid-template-columns: 1fr; }
-            .admin-tr { grid-template-columns: 1fr 1.2fr 100px 110px; }
+            .admin-tr { grid-template-columns: 30px 1fr 1.2fr 100px 110px; }
             .admin-th-hide-mobile { display: none; }
         }
     </style>
@@ -736,8 +764,16 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                     </div>
                 </div>
 
+                <!-- Bulk Delete Toolbar -->
+                <form method="POST" id="bulkDeleteForm" onsubmit="return confirmBulkDelete();" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background:var(--dim); border:1px solid var(--bdr); border-radius:10px; padding:10px 14px; margin-bottom:12px;">
+                    <input type="hidden" name="action" value="bulk_delete_users">
+                    <span id="bulkSelectedCount" style="font-size:12px; font-weight:700; color:var(--mut);">0 selected</span>
+                    <button type="submit" id="bulkDeleteBtn" disabled style="background:rgba(255, 77, 106, 0.12); border:1px solid rgba(255, 77, 106, 0.35); border-radius:6px; color:var(--red); padding:6px 14px; font-size:11px; font-weight:700; cursor:pointer; opacity:0.5;">🗑️ Delete Selected</button>
+                </form>
+
                 <div class="admin-table">
                     <div class="admin-tr admin-th">
+                        <div><input type="checkbox" id="selectAllUsers" onclick="toggleSelectAllUsers(this)" title="Select All" style="width:15px; height:15px; cursor:pointer;"></div>
                         <div>ID</div>
                         <div>Name</div>
                         <div>Email</div>
@@ -752,8 +788,14 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                             $u_accent = $u['role'] === 'admin' ? 'accent-red' : ($u['role'] === 'employer' ? 'accent-amber' : 'accent-green');
                             $u_grad = $u['role'] === 'admin' ? 'var(--grad-red)' : ($u['role'] === 'employer' ? 'var(--grad-amber)' : 'var(--grad-green)');
                             $u_is_new = strtotime($u['created_at']) >= strtotime('-48 hours');
+                            $u_is_self = (int)$u['id'] === (int)$_SESSION['user_id'];
                         ?>
                         <div class="admin-tr user-row-item <?= $u_accent ?>" data-search="<?= strtolower(htmlspecialchars($u['name'] . ' ' . $u['email'] . ' ' . $u['role'])) ?>" data-role="<?= htmlspecialchars($u['role']) ?>" <?= $u_is_new ? 'style="background:rgba(236, 72, 153, 0.05);"' : '' ?>>
+                            <div>
+                                <?php if(!$u_is_self): ?>
+                                    <input type="checkbox" class="user-select-checkbox" value="<?= $u['id'] ?>" onclick="updateBulkSelection()" style="width:15px; height:15px; cursor:pointer;">
+                                <?php endif; ?>
+                            </div>
                             <div style="font-weight:700; color:var(--mut);">#<?= $u['id'] ?></div>
                             <div style="font-weight:800; color:var(--txt); display:flex; align-items:center; gap:8px;">
                                 <span class="avatar-chip" style="background:<?= $u_grad ?>;"><?= strtoupper(substr($u['name'] ?: 'U', 0, 1)) ?></span>
@@ -1104,8 +1146,57 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                     rows[i].style.display = 'grid';
                 } else {
                     rows[i].style.display = 'none';
+                    // Deselect any hidden row so it doesn't get included in a bulk delete unseen
+                    var cb = rows[i].querySelector('.user-select-checkbox');
+                    if (cb) cb.checked = false;
                 }
             }
+            updateBulkSelection();
+        }
+
+        function toggleSelectAllUsers(sourceCheckbox) {
+            var rows = document.getElementsByClassName('user-row-item');
+            for (var i = 0; i < rows.length; i++) {
+                if (rows[i].style.display === 'none') continue; // respect active search/filter
+                var cb = rows[i].querySelector('.user-select-checkbox');
+                if (cb) cb.checked = sourceCheckbox.checked;
+            }
+            updateBulkSelection();
+        }
+
+        function updateBulkSelection() {
+            var checked = document.querySelectorAll('.user-select-checkbox:checked');
+            var countEl = document.getElementById('bulkSelectedCount');
+            var btn = document.getElementById('bulkDeleteBtn');
+
+            countEl.textContent = checked.length + ' selected';
+            btn.disabled = checked.length === 0;
+            btn.style.opacity = checked.length === 0 ? '0.5' : '1';
+
+            // Keep the header "select all" checkbox in sync
+            var allBoxes = document.querySelectorAll('.user-select-checkbox');
+            var selectAll = document.getElementById('selectAllUsers');
+            if (selectAll) {
+                selectAll.checked = allBoxes.length > 0 && checked.length === allBoxes.length;
+            }
+        }
+
+        function confirmBulkDelete() {
+            var checked = document.querySelectorAll('.user-select-checkbox:checked');
+            if (checked.length === 0) return false;
+
+            var form = document.getElementById('bulkDeleteForm');
+            form.querySelectorAll('input[name="user_ids[]"]').forEach(function(el) { el.remove(); });
+
+            checked.forEach(function(cb) {
+                var hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'user_ids[]';
+                hidden.value = cb.value;
+                form.appendChild(hidden);
+            });
+
+            return confirm('Permanently delete ' + checked.length + ' selected account' + (checked.length === 1 ? '' : 's') + '? This cannot be undone.');
         }
 
         window.addEventListener('keydown', function(e) {

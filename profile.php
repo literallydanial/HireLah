@@ -434,17 +434,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     elseif ($action === 'delete_account') {
         $confirm_text = trim($_POST['confirm_delete'] ?? '');
         if ($confirm_text === 'DELETE') {
-            // Unlink candidate profile picture if exists
+            // Unlink profile picture, common to every role
             if (!empty($user['profile_picture']) && file_exists($user['profile_picture'])) {
                 @unlink($user['profile_picture']);
             }
-            // Unlink candidate default resume if exists
-            if (!empty($user['default_resume']) && file_exists($user['default_resume'])) {
-                @unlink($user['default_resume']);
+
+            if ($user['role'] === 'candidate') {
+                // Unlink candidate default resume if exists
+                if (!empty($user['default_resume']) && file_exists($user['default_resume'])) {
+                    @unlink($user['default_resume']);
+                }
+                // Delete candidate applications
+                $del_cand = $pdo->prepare("DELETE FROM candidates WHERE user_id = ? OR (email = ? AND email IS NOT NULL AND email != '')");
+                $del_cand->execute([$user_id, $user['email']]);
+            } elseif ($user['role'] === 'employer') {
+                // This employer's own Company Culture Gallery uploads always
+                // go with them; a surviving company's logo is handled inside
+                // process_employer_departure() only when it's fully wiped.
+                $media_stmt = $pdo->prepare("SELECT file_path FROM company_media WHERE user_id = ?");
+                $media_stmt->execute([$user_id]);
+                foreach ($media_stmt->fetchAll(PDO::FETCH_COLUMN) as $media_path) {
+                    if (!empty($media_path) && file_exists($media_path)) @unlink($media_path);
+                }
+
+                // Reassign/clean up jobs and company membership BEFORE the
+                // user row disappears — see company_helpers.php for the
+                // per-company policy (delete solo companies, auto-promote a
+                // successor if they're the sole admin, or just leave a team
+                // they don't run).
+                $impact = get_employer_deletion_impact($pdo, $user_id);
+                process_employer_departure($pdo, $user_id, $impact);
             }
-            // Delete candidate applications
-            $del_cand = $pdo->prepare("DELETE FROM candidates WHERE user_id = ? OR (email = ? AND email IS NOT NULL AND email != '')");
-            $del_cand->execute([$user_id, $user['email']]);
 
             // Delete user record from users table
             $del_user = $pdo->prepare("DELETE FROM users WHERE id = ?");
@@ -454,7 +474,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             session_unset();
             session_destroy();
             session_start();
-            $_SESSION['toast'] = "Your candidate account has been permanently deleted.";
+            $_SESSION['toast'] = "Your account has been permanently deleted.";
             header("Location: index.php");
             exit;
         } else {
@@ -916,6 +936,51 @@ if ($user['role'] === 'candidate') {
                             </div>
                         <?php endforeach; ?>
                     </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if($user['role'] === 'employer'): ?>
+                <?php $deletion_impact = get_employer_deletion_impact($pdo, $user_id); ?>
+                <!-- Danger Zone: Account Deletion Panel -->
+                <div class="panel" style="grid-column: 1 / -1; border-color: rgba(255, 77, 106, 0.35); background: rgba(255, 77, 106, 0.03); padding:32px;">
+                    <div class="panel-title" style="color: var(--red); display:flex; align-items:center; gap:8px;">
+                        <span>⚠️</span> Danger Zone: Account Deletion
+                    </div>
+                    <p style="font-size:13px; color:var(--mut); margin-bottom:16px; line-height:1.5;">
+                        Deleting your employer account will permanently remove your profile and Company Culture Gallery uploads.
+                        <strong>This operation is permanent and non-reversible.</strong>
+                    </p>
+
+                    <?php if(!empty($deletion_impact)): ?>
+                        <div style="background:var(--surf); border:1px solid var(--bdr); border-radius:10px; padding:14px 18px; margin-bottom:20px;">
+                            <div style="font-size:11.5px; font-weight:700; color:var(--mut); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">What happens to your companies</div>
+                            <ul style="margin:0; padding-left:18px; font-size:12.5px; color:var(--txt); line-height:1.7;">
+                                <?php foreach($deletion_impact as $imp): ?>
+                                    <li>
+                                        <strong><?= htmlspecialchars($imp['name']) ?></strong> &mdash;
+                                        <?php if($imp['action'] === 'delete_company'): ?>
+                                            you're its only member, so it will be <strong style="color:var(--red);">permanently deleted</strong> along with its job postings.
+                                        <?php elseif($imp['action'] === 'promote_successor'): ?>
+                                            you're the sole admin; <strong><?= htmlspecialchars($imp['successor_name']) ?></strong> will automatically become admin and inherit any jobs you posted.
+                                        <?php else: ?>
+                                            you'll simply be removed from the team; the company and its jobs carry on normally.
+                                        <?php endif; ?>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    <?php endif; ?>
+
+                    <form method="POST" onsubmit="return confirm('Are you completely sure you want to permanently delete your employer account? This cannot be undone.');">
+                        <input type="hidden" name="action" value="delete_account">
+                        <div style="margin-bottom:18px; max-width:440px;">
+                            <label style="display:block; font-size:11.5px; font-weight:700; color:var(--red); margin-bottom:6px;">Type DELETE to confirm account deletion:</label>
+                            <input type="text" name="confirm_delete" placeholder="DELETE" required style="padding:10px 14px; font-size:13px; font-weight:700; letter-spacing:1px; border-color: rgba(255, 77, 106, 0.4);">
+                        </div>
+                        <button type="submit" class="btn-secondary" style="padding:11px 24px; font-size:13px; font-weight:800; color:var(--red); border-color:rgba(255, 77, 106, 0.5); background:rgba(255, 77, 106, 0.1);">
+                            🗑️ Permanently Delete My Account
+                        </button>
+                    </form>
                 </div>
             <?php endif; ?>
 
