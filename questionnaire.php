@@ -157,6 +157,20 @@ $job_id_param = $_GET['job_id'] ?? null;
             min-width: 0 !important;
             margin: 0 !important;
         }
+        /* Overrides the site-wide "input, select, textarea" rule in
+           style.css, which pads/borders/backgrounds every input for
+           text fields — including checkboxes, blowing this native
+           checkbox up into a big rounded box instead of a normal tick. */
+        .q-item input[type="checkbox"] {
+            flex: 0 0 auto !important;
+            width: 18px !important;
+            height: 18px !important;
+            padding: 0 !important;
+            border-radius: 4px !important;
+            background: var(--surf) !important;
+            box-shadow: none !important;
+            accent-color: var(--acc);
+        }
         .q-item button {
             flex-shrink: 0 !important;
             width: 32px !important;
@@ -254,6 +268,40 @@ $job_id_param = $_GET['job_id'] ?? null;
             }
             .panel {
                 padding: 18px 14px !important;
+            }
+            /* On phones the header row (Q-num + text + type + delete)
+               was squeezing the text input down to a sliver of its real
+               width, so employers couldn't see what they were typing.
+               Reordering it to a metadata row (num/type/delete) on top
+               and a dedicated full-width row for the text input below
+               fixes that without changing desktop layout. */
+            .q-item {
+                flex-direction: column !important;
+                align-items: stretch !important;
+            }
+            .q-item > div:first-child {
+                flex-wrap: wrap !important;
+                row-gap: 10px !important;
+            }
+            .q-item .q-num {
+                order: 1;
+            }
+            .q-item .q-type {
+                order: 2;
+                width: auto !important;
+                flex: 1 1 auto !important;
+            }
+            .q-item > div:first-child > button {
+                order: 3;
+            }
+            .q-item .q-text {
+                order: 4;
+                flex: 1 1 100% !important;
+                width: 100% !important;
+                font-size: 16px !important;
+                padding: 12px 14px !important;
+                min-height: 44px !important;
+                box-sizing: border-box !important;
             }
         }
     </style>

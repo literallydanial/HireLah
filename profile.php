@@ -562,6 +562,21 @@ if ($user['role'] === 'candidate') {
             background: var(--dim);
             box-shadow: var(--shadow-md);
         }
+
+        @media (max-width: 700px) {
+            html, body {
+                overflow-x: hidden !important;
+                width: 100% !important;
+                max-width: 100vw !important;
+            }
+            .settings-grid {
+                grid-template-columns: 1fr !important;
+                gap: 20px !important;
+            }
+            .settings-grid .panel {
+                padding: 20px 18px !important;
+            }
+        }
     </style>
     <link rel="icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
     <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
@@ -700,7 +715,7 @@ if ($user['role'] === 'candidate') {
             </div>
         </div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:28px; align-items:start;">
+        <div class="settings-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap:28px; align-items:start;">
             <!-- Profile Info Form -->
             <div class="panel" style="padding:28px 32px;">
                 <div class="panel-title" style="display:flex; align-items:center; gap:8px;">
