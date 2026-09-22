@@ -413,6 +413,36 @@ if (file_exists('db.php')) {
             display: flex;
             align-items: center;
             gap: 14px;
+            flex-shrink: 0;
+        }
+
+        .keria-mobile-menu-toggle {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            color: #1A1A1A;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+            flex-shrink: 0;
+        }
+        .keria-mobile-menu-toggle:hover {
+            background: #FFFFFF;
+        }
+        .keria-mobile-menu-toggle svg .icon-bar-close {
+            display: none;
+        }
+        .keria-mobile-menu-toggle.is-open svg .icon-bar-open {
+            display: none;
+        }
+        .keria-mobile-menu-toggle.is-open svg .icon-bar-close {
+            display: block;
         }
 
         .btn-round-search {
@@ -990,7 +1020,7 @@ if (file_exists('db.php')) {
 
         .live-jobs-title-wrap {
             position: relative;
-            display: inline-block;
+            display: block;
             margin-bottom: 14px;
         }
 
@@ -1520,22 +1550,121 @@ if (file_exists('db.php')) {
             .keria-categories-grid { grid-template-columns: repeat(4, 1fr); }
             .keria-process-card { flex-direction: column; text-align: center; gap: 24px; padding: 36px 28px; }
             .keria-process-grid { grid-template-columns: repeat(2, 1fr); max-width: 100%; }
-            .keria-live-jobs-card { grid-template-columns: 1fr; gap: 32px; padding: 32px 28px; }
-            .live-jobs-mascot-wrap { justify-content: center; padding-top: 10px; }
+            .keria-live-jobs-card { grid-template-columns: 1fr; gap: 24px; padding: 32px 28px; }
+            .live-jobs-left { gap: 16px; }
             .live-jobs-sub { max-width: 100%; }
             .live-jobs-bottom-doodle { display: none; }
+
+            /* The mascot + hand-drawn speech bubble are composed for the
+               desktop two-column layout, where the bubble sits pinned
+               beside the mascot in a tall left column. Once that column
+               stacks full-width on mobile, the bubble's absolute
+               position (anchored to the now much wider wrapper, not to
+               the mascot itself) leaves it floating disconnected in
+               empty space, and the full-size mascot dominates the
+               screen before any real job content shows. Scaling the
+               mascot down and dropping the now-disconnected bubble (the
+               same treatment already used for .live-jobs-bottom-doodle
+               above) keeps the character as a light accent instead of a
+               giant floating centerpiece. */
+            .live-jobs-mascot-wrap {
+                justify-content: center;
+                margin-top: 0;
+                padding-top: 0;
+            }
+            .mascot-doodle-speech {
+                display: none;
+            }
+            .live-jobs-mascot-img {
+                width: 150px;
+                transform: none;
+            }
+
+            /* Nav collapses to a hamburger menu starting at this wider
+               "tablet" tier rather than waiting until the phone-tuned
+               860px tier below — six links plus the logo and auth
+               buttons start wrapping onto two lines well before then,
+               which looks broken rather than intentional. */
+            .keria-mobile-menu-toggle {
+                display: flex;
+            }
+            .btn-round-search {
+                display: none;
+            }
+            .keria-nav-center {
+                display: none;
+                position: absolute;
+                top: calc(100% + 8px);
+                left: 16px;
+                right: 16px;
+                background: #FFFFFF;
+                border: 1px solid rgba(0, 0, 0, 0.06);
+                border-radius: 20px;
+                box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+                padding: 10px;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 2px;
+                z-index: 60;
+            }
+            .keria-nav-center.is-open {
+                display: flex;
+            }
+            .keria-nav-center .keria-nav-link {
+                padding: 14px 16px;
+                border-radius: 12px;
+                width: 100%;
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+                box-sizing: border-box;
+            }
+            .keria-nav-center .keria-nav-link:hover,
+            .keria-nav-center .keria-nav-link.active {
+                background: rgba(210, 255, 58, 0.35);
+            }
         }
 
         @media (max-width: 860px) {
-            .keria-nav-center { display: none; }
+            .keria-navbar {
+                padding: 16px 20px;
+            }
             .keria-hero-wrapper {
-                background-position: 70% top;
+                min-height: 100svh;
+                background-position: 75% top;
+                background-size: cover;
+            }
+            .keria-hero-wrapper::before {
+                background: linear-gradient(
+                    180deg,
+                    rgba(255, 255, 255, 0.45) 0%,
+                    rgba(255, 255, 255, 0.24) 50%,
+                    rgba(255, 255, 255, 0.08) 100%
+                );
+            }
+            .keria-hero-main {
+                min-height: calc(100svh - 90px);
+                padding: 24px 20px 50px;
+            }
+            .keria-hero-content-left {
+                max-width: 100%;
             }
             .keria-hero-title {
                 font-size: 44px;
             }
             .keria-hero-sub {
                 font-size: 16px;
+                max-width: 100%;
+            }
+            .keria-nav-right {
+                gap: 8px;
+            }
+            .keria-nav-greeting {
+                display: none;
+            }
+            .hero-actions-row a {
+                min-height: 44px;
+                box-sizing: border-box;
             }
             .keria-search-box {
                 flex-direction: column;
@@ -1545,6 +1674,7 @@ if (file_exists('db.php')) {
             }
             .keria-search-input-group {
                 width: 100%;
+                min-width: 0;
             }
             .keria-search-input-group.location-group {
                 padding-left: 0;
@@ -1555,19 +1685,111 @@ if (file_exists('db.php')) {
             .keria-search-btn-submit {
                 width: 100%;
                 border-radius: 14px;
-                height: 44px;
+                height: 48px;
                 margin-left: 0;
                 margin-top: 4px;
+            }
+            .keria-tag-pill {
+                min-height: 36px;
+                box-sizing: border-box;
             }
             .keria-categories-grid { grid-template-columns: repeat(2, 1fr); }
             .live-job-item { flex-direction: column; align-items: flex-start; gap: 12px; }
             .live-job-item-right { width: 100%; justify-content: space-between; border-top: 1px solid #F0F4EE; padding-top: 10px; }
             .live-job-alerts-banner { flex-direction: column; align-items: flex-start; gap: 14px; }
-            .btn-create-job-alert { width: 100%; text-align: center; }
+            .btn-create-job-alert { width: 100%; text-align: center; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
             .keria-final-cta-card { justify-content: center; padding: 40px 20px; }
             .final-cta-content { margin-right: 0; text-align: center; }
             .final-cta-buttons { justify-content: center; flex-wrap: wrap; }
             .keria-bottom-section { padding: 20px 18px; }
+        }
+
+        @media (max-width: 480px) {
+            .keria-navbar {
+                padding: 12px 14px;
+            }
+            .keria-logo-img {
+                height: 34px;
+            }
+            .keria-nav-right {
+                gap: 6px;
+            }
+            .keria-nav-right .btn-nav-login,
+            .keria-nav-right .btn-nav-signup {
+                padding: 9px 14px;
+                font-size: 12.5px;
+            }
+            .keria-mobile-menu-toggle {
+                width: 38px;
+                height: 38px;
+            }
+            .keria-hero-wrapper {
+                background-position: 85% top;
+            }
+            .keria-hero-wrapper::before {
+                background: linear-gradient(
+                    180deg,
+                    rgba(255, 255, 255, 0.5) 0%,
+                    rgba(255, 255, 255, 0.28) 50%,
+                    rgba(255, 255, 255, 0.1) 100%
+                );
+            }
+            .keria-hero-main {
+                padding: 20px 16px 40px;
+            }
+            .keria-hero-title {
+                font-size: 34px;
+                letter-spacing: -1px;
+                margin-bottom: 16px;
+            }
+            .keria-brush-underline {
+                height: 12px;
+                bottom: 2px;
+            }
+            .keria-hero-sub {
+                font-size: 14.5px;
+                margin-bottom: 18px;
+            }
+            .hero-actions-row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }
+            .btn-hero-resume-check,
+            .btn-hero-resume-builder {
+                justify-content: center;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            /* The resume-check pill is the longest single control in the
+               hero — icon + "Free AI Resume Checker" + an "Instant Score"
+               badge. On narrow phones that combination is too wide for a
+               true pill shape, so it's tightened up and allowed to wrap
+               onto a softly-rounded two-line card instead of stretching
+               or clipping. */
+            .btn-hero-resume-check {
+                flex-wrap: wrap;
+                gap: 6px 10px;
+                padding: 12px 18px;
+                font-size: 13.5px;
+                border-radius: 20px;
+            }
+            .keria-popular-searches {
+                gap: 8px;
+            }
+            .keria-tag-pill {
+                padding: 6px 14px;
+                font-size: 12px;
+            }
+            .keria-section-heading {
+                font-size: 24px;
+            }
+            .keria-categories-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .category-card-item { padding: 18px 8px; }
+            .live-jobs-title { font-size: 32px; }
+            .final-cta-title { font-size: 28px; }
+            .final-cta-buttons { flex-direction: column; align-items: stretch; width: 100%; }
+            .btn-final-lime, .btn-final-outline { text-align: center; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
         }
     </style>
 </head>
@@ -1590,7 +1812,7 @@ if (file_exists('db.php')) {
                 <img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="keria" class="keria-logo-img">
             </a>
 
-            <nav class="keria-nav-center">
+            <nav class="keria-nav-center" id="keriaMobileNav">
                 <a href="jobs.php" class="keria-nav-link active">Jobs</a>
                 <a href="jobs.php" class="keria-nav-link">Companies</a>
                 <a href="resume_check.php" class="keria-nav-link" style="color:#0A0A0A; font-weight:700;">✨ Resume Checker</a>
@@ -1608,7 +1830,7 @@ if (file_exists('db.php')) {
                 </a>
 
                 <?php if(isset($_SESSION['user_id'])): ?>
-                    <span style="font-weight:700; font-size:14px; margin-right:4px;">Hi, <?= htmlspecialchars($_SESSION['user_name']) ?></span>
+                    <span class="keria-nav-greeting" style="font-weight:700; font-size:14px; margin-right:4px;">Hi, <?= htmlspecialchars($_SESSION['user_name']) ?></span>
                     <?php if($_SESSION['user_role'] === 'employer'): ?>
                         <a href="employer_dashboard.php" class="btn-nav-signup">Dashboard</a>
                     <?php elseif($_SESSION['user_role'] === 'admin'): ?>
@@ -1621,6 +1843,20 @@ if (file_exists('db.php')) {
                     <a href="login.php" class="btn-nav-login">Log in</a>
                     <a href="register.php" class="btn-nav-signup">Sign up</a>
                 <?php endif; ?>
+
+                <button type="button" class="keria-mobile-menu-toggle" id="keriaMobileNavToggle" onclick="toggleKeriaMobileNav()" aria-expanded="false" aria-controls="keriaMobileNav" aria-label="Toggle menu">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                        <g class="icon-bar-open">
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                        </g>
+                        <g class="icon-bar-close">
+                            <line x1="5" y1="5" x2="19" y2="19"></line>
+                            <line x1="19" y1="5" x2="5" y2="19"></line>
+                        </g>
+                    </svg>
+                </button>
             </div>
         </header>
 
@@ -1930,7 +2166,7 @@ if (file_exists('db.php')) {
                                 <path d="M30 20 L38 22 L35 14" stroke="#0A0A0A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
                             </svg>
                         </div>
-                        <img src="assets/casey_pointing_right.png?v=<?php echo @filemtime(__DIR__.'/assets/casey_pointing_right.png'); ?>" alt="Casey Pointing Mascot" class="live-jobs-mascot-img">
+                        <img src="assets/casey_walking_wink.png?v=<?php echo @filemtime(__DIR__.'/assets/casey_walking_wink.png'); ?>" alt="Casey Walking Mascot" class="live-jobs-mascot-img">
                     </div>
                 </div>
 
@@ -2128,6 +2364,25 @@ if (file_exists('db.php')) {
                 }
             }
         }
+
+        function toggleKeriaMobileNav(forceClose) {
+            const nav = document.getElementById('keriaMobileNav');
+            const toggle = document.getElementById('keriaMobileNavToggle');
+            if (!nav || !toggle) return;
+            const shouldOpen = forceClose === true ? false : !nav.classList.contains('is-open');
+            nav.classList.toggle('is-open', shouldOpen);
+            toggle.classList.toggle('is-open', shouldOpen);
+            toggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+        }
+
+        document.addEventListener('click', function(e) {
+            const nav = document.getElementById('keriaMobileNav');
+            const toggle = document.getElementById('keriaMobileNavToggle');
+            if (!nav || !nav.classList.contains('is-open')) return;
+            if (nav.contains(e.target) && e.target.tagName !== 'A') return;
+            if (toggle.contains(e.target)) return;
+            toggleKeriaMobileNav(true);
+        });
 
         document.addEventListener("DOMContentLoaded", () => {
             if (typeof anime === "undefined") return;

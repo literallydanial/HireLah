@@ -81,6 +81,11 @@
   --toast-shadow: 0 16px 40px -4px rgba(0, 0, 0, 0.6), 0 4px 14px -2px rgba(142, 168, 134, 0.12);
 }
 
+html {
+  overflow-x: hidden;
+  width: 100%;
+}
+
 body {
   margin: 0;
   background: var(--bg-gradient);
@@ -95,6 +100,8 @@ body {
   transition: background 0.3s ease, color 0.3s ease;
   line-height: 1.5;
   position: relative;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 main, .keria-main-container {
@@ -501,7 +508,15 @@ input:focus, select:focus, textarea:focus {
     max-width: 100% !important;
     box-sizing: border-box !important;
   }
-  nav {
+  /* :not(.keria-nav-center) excludes the Keria homepage's own custom
+     hero navbar, which ships its own complete mobile treatment (a
+     slide-down menu) rather than this generic horizontal-scroll-pill
+     nav used by every other page's shared <header>/<nav>. Without this
+     exclusion, this !important block silently forces the homepage's
+     <nav class="keria-nav-center"> to stay visible/flex regardless of
+     what index.php's own responsive CSS says (both are single-class-or-
+     tag selectors, so !important is the only thing that decides it). */
+  nav:not(.keria-nav-center) {
     display: flex !important;
     gap: 6px !important;
     margin-left: 0 !important;
@@ -515,10 +530,10 @@ input:focus, select:focus, textarea:focus {
     order: 3 !important;
     border-top: 1px solid var(--bdr);
   }
-  nav::-webkit-scrollbar {
+  nav:not(.keria-nav-center)::-webkit-scrollbar {
     display: none !important;
   }
-  nav a {
+  nav:not(.keria-nav-center) a {
     padding: 6px 12px !important;
     font-size: 12px !important;
     border-radius: 20px !important;
@@ -526,7 +541,7 @@ input:focus, select:focus, textarea:focus {
     flex-shrink: 0 !important;
     white-space: nowrap !important;
   }
-  nav a.active {
+  nav:not(.keria-nav-center) a.active {
     background: var(--acc) !important;
     color: #FFFFFF !important;
   }
