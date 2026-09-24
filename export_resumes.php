@@ -1,8 +1,201 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+@set_time_limit(300);
+@ini_set('memory_limit', '512M');
+
 require_once 'db.php';
 require_once 'admin_logs_helper.php';
 require_once 'resume_pdf_helper.php';
+
+/**
+ * Standalone pure-PHP ZIP archive generator.
+ * Zero external dependencies — works even when php-zip / ZipArchive is missing on server.
+ */
+class SimpleZipWriter {
+    private $entries = [];
+    private $fileHandle = null;
+    private $filePath = null;
+    private $offset = 0;
+
+    public function __construct($filePath) {
+        $this->filePath = $filePath;
+        $this->fileHandle = fopen($filePath, 'wb+');
+        if (!$this->fileHandle) {
+            throw new \RuntimeException("Cannot open file for writing: " . $filePath);
+        }
+    }
+
+    public function addFile($diskPath, $zipPath) {
+        if (!is_file($diskPath) || !is_readable($diskPath)) {
+            return false;
+        }
+        $data = file_get_contents($diskPath);
+        return $this->addFromString($zipPath, $data);
+    }
+
+    public function addFromString($zipPath, $data) {
+        $zipPath = str_replace('\\', '/', $zipPath);
+        $zipPath = ltrim($zipPath, '/');
+        
+        $uncompressedSize = strlen($data);
+        $crc32 = crc32($data);
+
+        // Try deflate compression if zlib is available
+        $compressedData = function_exists('gzdeflate') ? gzdeflate($data) : false;
+        if ($compressedData !== false && strlen($compressedData) < $uncompressedSize) {
+            $compressionMethod = 8; // DEFLATE
+            $writePayload = $compressedData;
+            $compressedSize = strlen($compressedData);
+        } else {
+            $compressionMethod = 0; // STORE
+            $writePayload = $data;
+            $compressedSize = $uncompressedSize;
+        }
+
+        $modTime = time();
+        $dosTime = $this->unixToDosTime($modTime);
+
+        $localHeaderOffset = $this->offset;
+
+        // Local file header: 30 bytes + name length
+        $localHeader = pack('VvvvVVVVvv',
+            0x04034b50,        // Local file header signature (V)
+            20,                // Version needed to extract (v)
+            0,                 // General purpose bit flag (v)
+            $compressionMethod,// Compression method (v)
+            $dosTime,          // Last mod file time/date (V)
+            $crc32,            // CRC-32 (V)
+            $compressedSize,   // Compressed size (V)
+            $uncompressedSize, // Uncompressed size (V)
+            strlen($zipPath),  // File name length (v)
+            0                  // Extra field length (v)
+        ) . $zipPath;
+
+        fwrite($this->fileHandle, $localHeader);
+        fwrite($this->fileHandle, $writePayload);
+
+        $this->offset += strlen($localHeader) + strlen($writePayload);
+
+        $this->entries[] = [
+            'name' => $zipPath,
+            'compression' => $compressionMethod,
+            'dosTime' => $dosTime,
+            'crc32' => $crc32,
+            'compressedSize' => $compressedSize,
+            'uncompressedSize' => $uncompressedSize,
+            'offset' => $localHeaderOffset
+        ];
+
+        return true;
+    }
+
+    public function close() {
+        if (!$this->fileHandle) return true;
+
+        $cdStartOffset = $this->offset;
+        $cdSize = 0;
+
+        // Write Central Directory headers
+        foreach ($this->entries as $e) {
+            $cdHeader = pack('VvvvvVVVVvvvvvVV',
+                0x02014b50,         // Central directory signature (V)
+                20,                 // Version made by (v)
+                20,                 // Version needed (v)
+                0,                  // Flags (v)
+                $e['compression'],  // Compression method (v)
+                $e['dosTime'],      // Time/date (V)
+                $e['crc32'],        // CRC-32 (V)
+                $e['compressedSize'], // (V)
+                $e['uncompressedSize'], // (V)
+                strlen($e['name']), // File name length (v)
+                0,                  // Extra field length (v)
+                0,                  // Comment length (v)
+                0,                  // Disk number start (v)
+                0,                  // Internal attributes (v)
+                0,                  // External attributes (V)
+                $e['offset']        // Relative offset of local header (V)
+            ) . $e['name'];
+
+            fwrite($this->fileHandle, $cdHeader);
+            $cdSize += strlen($cdHeader);
+            $this->offset += strlen($cdHeader);
+        }
+
+        $totalEntries = count($this->entries);
+
+        // End of central directory record (EOCD): 22 bytes
+        $eocd = pack('VvvvvVVv',
+            0x06054b50,     // EOCD signature (V)
+            0,              // Number of this disk (v)
+            0,              // Disk where CD starts (v)
+            $totalEntries,  // Total entries on this disk (v)
+            $totalEntries,  // Total entries (v)
+            $cdSize,        // Size of CD (V)
+            $cdStartOffset, // Offset of CD start (V)
+            0               // Comment length (v)
+        );
+
+        fwrite($this->fileHandle, $eocd);
+        fclose($this->fileHandle);
+        $this->fileHandle = null;
+
+        return true;
+    }
+
+    private function unixToDosTime($time) {
+        $date = getdate($time);
+        if ($date['year'] < 1980) {
+            return (1 << 21) | (1 << 16);
+        }
+        return (($date['year'] - 1980) << 25)
+            | ($date['mon'] << 21)
+            | ($date['mday'] << 16)
+            | ($date['hours'] << 11)
+            | ($date['minutes'] << 5)
+            | ($date['seconds'] >> 1);
+    }
+}
+
+/**
+ * Universal ZIP Adapter: Uses ZipArchive if available, otherwise seamlessly falls back to SimpleZipWriter.
+ */
+class HireLahZipArchive {
+    private $driver;
+    private $isNative;
+
+    public function __construct($filePath) {
+        if (file_exists($filePath)) {
+            @unlink($filePath);
+        }
+
+        if (class_exists('ZipArchive')) {
+            $za = new ZipArchive();
+            $res = $za->open($filePath, ZipArchive::CREATE);
+            if ($res === true) {
+                $this->driver = $za;
+                $this->isNative = true;
+                return;
+            }
+        }
+
+        $this->driver = new SimpleZipWriter($filePath);
+        $this->isNative = false;
+    }
+
+    public function addFile($diskPath, $zipPath) {
+        return $this->driver->addFile($diskPath, $zipPath);
+    }
+
+    public function addFromString($zipPath, $content) {
+        return $this->driver->addFromString($zipPath, $content);
+    }
+
+    public function close() {
+        return $this->driver->close();
+    }
+}
 
 // Enforce admin privileges
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'admin') {
@@ -175,28 +368,22 @@ if ($source_filter === 'all' || $source_filter === 'default_resume') {
 $total_found = count($candidates) + count($builder_records) + count($checker_records) + count($default_records);
 
 if ($total_found === 0) {
-    $_SESSION['error'] = "No resume documents found matching: " . implode(', ', $filter_desc_parts) . ".";
+    $_SESSION['error'] = "No resume documents found matching: " . implode(', ', $filter_desc_parts) . ". Try selecting 'All Time' or a broader date selection.";
     header("Location: admin_resumes.php");
     exit;
 }
 
-if (!class_exists('ZipArchive')) {
-    $_SESSION['error'] = "ZipArchive PHP extension is not enabled on this server.";
-    header("Location: admin_resumes.php");
-    exit;
-}
-
-// Create temporary zip archive
+// Create temporary zip archive in writable directory
 $temp_dir = sys_get_temp_dir();
-$temp_zip = tempnam($temp_dir, 'hirelah_all_resumes_');
-if (!$temp_zip) {
-    $temp_zip = __DIR__ . '/scratch/export_' . uniqid() . '.zip';
-    if (!is_dir(__DIR__ . '/scratch')) @mkdir(__DIR__ . '/scratch', 0777, true);
+if (!is_dir($temp_dir) || !is_writable($temp_dir)) {
+    $temp_dir = __DIR__ . '/uploads';
 }
+$temp_zip = rtrim($temp_dir, '/\\') . '/hirelah_export_' . uniqid() . '.zip';
 
-$zip = new ZipArchive();
-if ($zip->open($temp_zip, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-    $_SESSION['error'] = "Unable to initialize temporary ZIP archive file.";
+try {
+    $zip = new HireLahZipArchive($temp_zip);
+} catch (\Throwable $e) {
+    $_SESSION['error'] = "Unable to initialize temporary ZIP archive file: " . $e->getMessage();
     header("Location: admin_resumes.php");
     exit;
 }
@@ -254,6 +441,29 @@ foreach ($candidates as $c) {
     $orig_name = sanitize_zip_name($c['filename'] ?: basename($raw_path));
 
     if (!$candidate_file_path) {
+        $note = "JOB APPLICATION RECORD #{$c['id']}\r\n";
+        $note .= "Candidate: " . ($c['name'] ?: 'Unknown') . "\r\n";
+        $note .= "Email: " . ($c['email'] ?: 'N/A') . "\r\n";
+        $note .= "Phone: " . ($c['phone'] ?: 'N/A') . "\r\n";
+        $note .= "Job Title: " . ($c['job_title'] ?: 'General') . "\r\n";
+        $note .= "Department: " . ($c['department'] ?: 'N/A') . "\r\n";
+        $note .= "Employer: " . ($c['employer_name'] ?: 'Direct') . "\r\n";
+        $note .= "Date Applied: " . $c['created_at'] . "\r\n";
+        $note .= "Match Score: " . $c['overall_score'] . "%\r\n";
+        $note .= "Status: " . ($c['status'] ?: 'Review') . "\r\n";
+        $note .= "Original File: " . $orig_name . "\r\n";
+        $note .= "Storage Notice: File attachment not found in server local disk storage.\r\n";
+
+        $zip_entry_name = "job_applications/[{$app_date}] [{$clean_job}] {$clean_name} - {$orig_name}_REF.txt";
+        $counter = 1;
+        while (isset($used_filenames[$zip_entry_name])) {
+            $zip_entry_name = "job_applications/[{$app_date}] [{$clean_job}] {$clean_name} - {$orig_name}_REF_({$counter}).txt";
+            $counter++;
+        }
+        $used_filenames[$zip_entry_name] = true;
+        $zip->addFromString('resumes/' . $zip_entry_name, $note);
+        $added_count++;
+
         fputcsv($csv_handle, [
             'Job Application',
             $c['id'],
@@ -267,7 +477,7 @@ foreach ($candidates as $c) {
             $c['overall_score'] . '%',
             $c['status'] ?: 'Review',
             $c['filename'] ?: basename($raw_path),
-            '[FILE NOT FOUND ON SERVER DISK]'
+            'resumes/' . $zip_entry_name
         ]);
         continue;
     }
@@ -446,6 +656,23 @@ foreach ($default_records as $d) {
     $orig_name = sanitize_zip_name(basename($raw_path));
 
     if (!$default_file_path) {
+        $note = "SAVED USER RESUME RECORD #{$d['id']}\r\n";
+        $note .= "User: " . ($d['user_name'] ?: 'Unknown') . "\r\n";
+        $note .= "Email: " . ($d['user_email'] ?: 'N/A') . "\r\n";
+        $note .= "Date Created: " . $d['created_at'] . "\r\n";
+        $note .= "Original File Name: " . $orig_name . "\r\n";
+        $note .= "Storage Notice: File attachment not found in server local disk storage.\r\n";
+
+        $zip_entry_name = "default_resumes/[{$saved_date}] {$clean_name} - {$orig_name}_REF.txt";
+        $counter = 1;
+        while (isset($used_filenames[$zip_entry_name])) {
+            $zip_entry_name = "default_resumes/[{$saved_date}] {$clean_name} - {$orig_name}_REF_({$counter}).txt";
+            $counter++;
+        }
+        $used_filenames[$zip_entry_name] = true;
+        $zip->addFromString('resumes/' . $zip_entry_name, $note);
+        $added_count++;
+
         fputcsv($csv_handle, [
             'User Resume',
             'default_' . $d['id'],
@@ -459,7 +686,7 @@ foreach ($default_records as $d) {
             'N/A',
             'Saved',
             basename($raw_path),
-            '[FILE NOT FOUND ON SERVER DISK]'
+            'resumes/' . $zip_entry_name
         ]);
         continue;
     }
@@ -514,17 +741,17 @@ $readme .= "Filter Criteria: " . implode(', ', $filter_desc_parts) . "\r\n";
 $readme .= "Total Documents In Archive: " . $added_count . "\r\n\r\n";
 $readme .= "Archive Structure:\r\n";
 $readme .= " - resumes/job_applications/ : Resumes submitted by candidates for job postings\r\n";
-$readme .= " - resumes/resume_builder/   : Resumes crafted using the AI Resume Builder (HTML format)\r\n";
+$readme .= " - resumes/resume_builder/   : Resumes crafted using the AI Resume Builder (PDF & HTML)\r\n";
 $readme .= " - resumes/resume_checker/   : Resumes audited by the AI Resume Quality Checker\r\n";
-$readme .= " - resumes/default_resumes/ : Candidates' saved user resumes (from their Profile page)\r\n";
+$readme .= " - resumes/default_resumes/  : Candidates' saved profile resumes\r\n";
 $readme .= " - resume_export_manifest.csv: Complete spreadsheet with candidate details, scores, and file paths\r\n";
 
 $zip->addFromString('README.txt', $readme);
 $zip->close();
 
-if ($added_count === 0) {
+if (!file_exists($temp_zip) || filesize($temp_zip) === 0) {
     @unlink($temp_zip);
-    $_SESSION['error'] = "No valid resume files were available to package into the ZIP archive.";
+    $_SESSION['error'] = "Failed to construct the ZIP archive file on the server.";
     header("Location: admin_resumes.php");
     exit;
 }
@@ -544,7 +771,9 @@ if ($date_mode === 'exact') {
     $zip_filename = "HireLah_Resumes_{$source_slug}_All_{$timestamp_slug}.zip";
 }
 
-if (ob_get_level()) ob_end_clean();
+while (ob_get_level() > 0) {
+    ob_end_clean();
+}
 
 header('Content-Description: File Transfer');
 header('Content-Type: application/zip');

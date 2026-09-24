@@ -551,9 +551,12 @@ $count_total = count($all_resumes);
                         <div style="font-size:12.5px; color:var(--mut);">Select exact date, date range, or all-time applications, choose resume sources, and download.</div>
                     </div>
                 </div>
-                <div style="display:flex; align-items:center; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <a href="export_resumes.php?source=all&date_mode=all" class="btn-primary" style="padding:9px 18px; font-size:13px; text-decoration:none; display:inline-flex; align-items:center; gap:6px; border-radius:10px; font-weight:800; box-shadow:0 6px 18px rgba(180,214,0,0.3);" title="Instant download of all platform resumes in a ZIP archive">
+                        ⚡ 1-Click Export All (ZIP)
+                    </a>
                     <span class="badge-source badge-source-job">📁 PDF Documents</span>
-                    <span class="badge-source badge-source-builder">📊 Manifest CSV Included</span>
+                    <span class="badge-source badge-source-builder">📊 Manifest CSV</span>
                 </div>
             </div>
 
