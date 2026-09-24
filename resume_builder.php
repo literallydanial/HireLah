@@ -17,6 +17,8 @@ $api_key = get_api_key();
 $error = null;
 $generated = null;
 $is_fresh_grad = false;
+$prefill = null;
+$new_build_id = null;
 
 $stmt = $pdo->prepare("SELECT email, name FROM users WHERE id = ?");
 $stmt->execute([$_SESSION['user_id']]);
@@ -34,6 +36,19 @@ if (isset($_GET['view'])) {
         $generated_meta = ['full_name' => $candidate_name, 'target_title' => $row['target_title']];
         $raw_input = json_decode($row['raw_input'], true);
         $is_fresh_grad = !empty($raw_input['is_fresh_grad']);
+    }
+}
+
+// ---- Edit a previously generated resume: reload its saved answers back
+// into the (currently blank) step-by-step form instead of the read-only
+// "Your Resume is Ready" screen, so the candidate can tweak rather than
+// re-type everything from scratch. ----
+if (isset($_GET['edit'])) {
+    $stmt = $pdo->prepare("SELECT raw_input FROM resume_builds WHERE id = ? AND user_id = ?");
+    $stmt->execute([(int)$_GET['edit'], $_SESSION['user_id']]);
+    $row = $stmt->fetch();
+    if ($row) {
+        $prefill = json_decode($row['raw_input'], true);
     }
 }
 
@@ -92,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'gener
                 json_encode(array_merge($input, ['full_name' => $full_name, 'contact_email' => $contact_email, 'contact_phone' => $contact_phone, 'location' => $location])),
                 json_encode(array_merge($generated, ['full_name' => $full_name, 'contact_email' => $contact_email, 'contact_phone' => $contact_phone, 'location' => $location]))
             ]);
+            $new_build_id = $pdo->lastInsertId();
         } catch (Exception $e) {
             error_log("Resume Builder Error: " . $e->getMessage());
             $error = "Something went wrong generating your resume. Please try again.";
@@ -564,6 +580,7 @@ try {
                 <a href="jobs.php">💼 Job Board</a>
                 <a href="candidate_dashboard.php">📋 My Applications</a>
                 <a href="resume_builder.php" class="active">🪄 AI Resume Builder</a>
+                <a href="resume_check.php">✨ AI Resume Check</a>
                 <a href="profile.php">👤 Profile Settings</a>
             </nav>
 
@@ -608,8 +625,14 @@ try {
                         <button onclick="window.print()" class="btn-primary" style="padding:10px 20px; font-size:13px; width:auto; border-radius:9999px;">
                             📥 Download as PDF
                         </button>
+                        <?php $current_build_id = $new_build_id ?? ($_GET['view'] ?? null); ?>
+                        <?php if ($current_build_id): ?>
+                            <a href="resume_builder.php?edit=<?= (int)$current_build_id ?>" class="btn-secondary" style="padding:10px 18px; font-size:13px; text-decoration:none; border-radius:9999px;">
+                                ✏️ Edit Details
+                            </a>
+                        <?php endif; ?>
                         <a href="resume_builder.php" class="btn-secondary" style="padding:10px 18px; font-size:13px; text-decoration:none; border-radius:9999px;">
-                            ✏️ Edit / Build New
+                            🆕 Build New
                         </a>
                     </div>
                 </div>
@@ -709,32 +732,32 @@ try {
                         <div class="rb-field-grid-3">
                             <div>
                                 <label class="rb-label">Full Name</label>
-                                <input type="text" name="full_name" class="rb-input" value="<?= htmlspecialchars($candidate_name) ?>" placeholder="e.g. Sofea Cho" required>
+                                <input type="text" name="full_name" class="rb-input" value="<?= htmlspecialchars($prefill['full_name'] ?? $candidate_name) ?>" placeholder="e.g. Sofea Cho" required>
                             </div>
                             <div>
                                 <label class="rb-label">Email</label>
-                                <input type="email" name="contact_email" class="rb-input" value="<?= htmlspecialchars($candidate_email) ?>" placeholder="e.g. sofeacho@gmail.com">
+                                <input type="email" name="contact_email" class="rb-input" value="<?= htmlspecialchars($prefill['contact_email'] ?? $candidate_email) ?>" placeholder="e.g. sofeacho@gmail.com">
                             </div>
                             <div>
                                 <label class="rb-label">Phone</label>
-                                <input type="text" name="contact_phone" class="rb-input" placeholder="+60 12-345 6789">
+                                <input type="text" name="contact_phone" class="rb-input" value="<?= htmlspecialchars($prefill['contact_phone'] ?? '') ?>" placeholder="+60 12-345 6789">
                             </div>
                         </div>
 
                         <div class="rb-field-grid-2">
                             <div>
                                 <label class="rb-label">Target Job Title</label>
-                                <input type="text" name="target_title" id="targetTitleInput" class="rb-input" placeholder="e.g. Digital Marketing Executive" required>
+                                <input type="text" name="target_title" id="targetTitleInput" class="rb-input" value="<?= htmlspecialchars($prefill['target_title'] ?? '') ?>" placeholder="e.g. Digital Marketing Executive" required>
                             </div>
                             <div>
                                 <label class="rb-label">Location</label>
-                                <input type="text" name="location" class="rb-input" placeholder="e.g. Kuala Lumpur">
+                                <input type="text" name="location" class="rb-input" value="<?= htmlspecialchars($prefill['location'] ?? '') ?>" placeholder="e.g. Kuala Lumpur">
                             </div>
                         </div>
 
                         <div>
                             <label class="rb-checkbox-wrap">
-                                <input type="checkbox" name="is_fresh_grad" id="freshGradCheck">
+                                <input type="checkbox" name="is_fresh_grad" id="freshGradCheck" <?= !empty($prefill['is_fresh_grad']) ? 'checked' : '' ?>>
                                 <span>I'm a fresh graduate / have little work experience</span>
                             </label>
                         </div>
@@ -785,7 +808,7 @@ try {
                         </div>
 
                         <div>
-                            <input type="text" name="skills" id="skillsInputForm" class="rb-input" placeholder="e.g. Canva, Meta Ads, Excel, Mandarin">
+                            <input type="text" name="skills" id="skillsInputForm" class="rb-input" value="<?= htmlspecialchars($prefill['skills'] ?? '') ?>" placeholder="e.g. Canva, Meta Ads, Excel, Mandarin">
                         </div>
                     </div>
 
@@ -800,7 +823,7 @@ try {
                         </div>
 
                         <div>
-                            <textarea name="extra_notes" class="rb-textarea" rows="3" placeholder="e.g. Google Ads Certified, Fluent in Malay and English, won first place in a marketing case study..."></textarea>
+                            <textarea name="extra_notes" class="rb-textarea" rows="3" placeholder="e.g. Google Ads Certified, Fluent in Malay and English, won first place in a marketing case study..."><?= htmlspecialchars($prefill['extra_notes'] ?? '') ?></textarea>
                         </div>
                     </div>
 
@@ -902,41 +925,67 @@ try {
     </template>
 
     <script>
-    function addExp() {
+    const PREFILL_DATA = <?= $prefill ? json_encode($prefill) : 'null' ?>;
+
+    function addExp(data) {
         const tpl = document.getElementById('expTemplate').content.cloneNode(true);
+        const block = tpl.querySelector('.exp-block');
+        if (data) {
+            block.querySelector('[name="exp_company[]"]').value = data.company || '';
+            block.querySelector('[name="exp_role[]"]').value = data.role || '';
+            block.querySelector('[name="exp_duration[]"]').value = data.duration || '';
+            block.querySelector('[name="exp_notes[]"]').value = data.notes || '';
+        }
         document.getElementById('expContainer').appendChild(tpl);
     }
-    function addEdu() {
+    function addEdu(data) {
         const tpl = document.getElementById('eduTemplate').content.cloneNode(true);
+        const block = tpl.querySelector('.edu-block');
+        if (data) {
+            block.querySelector('[name="edu_degree[]"]').value = data.degree || '';
+            block.querySelector('[name="edu_school[]"]').value = data.school || '';
+            block.querySelector('[name="edu_year[]"]').value = data.year || '';
+        }
         document.getElementById('eduContainer').appendChild(tpl);
     }
-    
+
     document.addEventListener('DOMContentLoaded', function() {
-        if (document.getElementById('expContainer')) {
+        if (!document.getElementById('expContainer')) return;
+        if (PREFILL_DATA && Array.isArray(PREFILL_DATA.experience) && PREFILL_DATA.experience.length > 0) {
+            PREFILL_DATA.experience.forEach(exp => addExp(exp));
+        } else {
             addExp();
+        }
+        if (PREFILL_DATA && Array.isArray(PREFILL_DATA.education) && PREFILL_DATA.education.length > 0) {
+            PREFILL_DATA.education.forEach(edu => addEdu(edu));
+        } else {
             addEdu();
         }
     });
 
     // Fresh-grad toggle handler
+    function applyFreshGradLayout(isChecked) {
+        const formPanelEl = document.getElementById('formPanel');
+        const expPanel = document.getElementById('expPanel');
+        const eduPanel = document.getElementById('eduPanel');
+        const expTitle = document.getElementById('expPanelTitle');
+        const expSubtitle = document.getElementById('expPanelSubtitle');
+        if (isChecked) {
+            if (expTitle) expTitle.textContent = 'Internships / Part-Time Jobs / Projects (Optional)';
+            if (expSubtitle) expSubtitle.textContent = 'Add internships, campus roles, or relevant personal projects.';
+            formPanelEl.insertBefore(eduPanel, expPanel);
+        } else {
+            if (expTitle) expTitle.textContent = 'Work Experience';
+            if (expSubtitle) expSubtitle.textContent = 'Add your work experience, internships, or relevant projects.';
+            formPanelEl.insertBefore(expPanel, eduPanel);
+        }
+    }
     document.addEventListener('DOMContentLoaded', function() {
         const freshGradCheck = document.getElementById('freshGradCheck');
         if (!freshGradCheck) return;
+        if (freshGradCheck.checked) applyFreshGradLayout(true);
         freshGradCheck.addEventListener('change', function() {
-            const formPanelEl = document.getElementById('formPanel');
-            const expPanel = document.getElementById('expPanel');
-            const eduPanel = document.getElementById('eduPanel');
-            const expTitle = document.getElementById('expPanelTitle');
-            const expSubtitle = document.getElementById('expPanelSubtitle');
-            if (this.checked) {
-                if (expTitle) expTitle.textContent = 'Internships / Part-Time Jobs / Projects (Optional)';
-                if (expSubtitle) expSubtitle.textContent = 'Add internships, campus roles, or relevant personal projects.';
-                formPanelEl.insertBefore(eduPanel, expPanel);
-            } else {
-                if (expTitle) expTitle.textContent = 'Work Experience';
-                if (expSubtitle) expSubtitle.textContent = 'Add your work experience, internships, or relevant projects.';
-                formPanelEl.insertBefore(expPanel, eduPanel);
-            }
+            applyFreshGradLayout(this.checked);
         });
     });
 

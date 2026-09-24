@@ -594,6 +594,7 @@ if ($user['role'] === 'candidate') {
                     <a href="jobs.php">📋 Job Board</a>
                     <a href="candidate_dashboard.php">👤 My Applications</a>
                     <a href="resume_builder.php">📝 AI Resume Builder</a>
+                    <a href="resume_check.php">✨ AI Resume Check</a>
                     <a href="profile.php" class="active">⚙️ Profile Settings</a>
                 <?php elseif($user['role'] === 'employer'): ?>
                     <a href="employer_dashboard.php">👥 Applications & Stats</a>
@@ -1154,6 +1155,31 @@ if ($user['role'] === 'candidate') {
         </div>
     </main>
 
+    <!-- Avatar Crop/Preview Modal: lets the person reposition and zoom
+         their photo inside the circle before it's saved, instead of the
+         old behaviour of auto-cropping the center and uploading
+         immediately with no way to fix a bad crop. Kept as a top-level
+         sibling of <main> (not nested inside .panel) because .panel uses
+         backdrop-filter, which makes this modal's position:fixed anchor
+         to that small panel box instead of the full viewport. -->
+    <div class="modal-overlay" id="avatarCropModal" style="display:none;">
+        <div class="modal" style="max-width:380px; text-align:center;">
+            <h3 style="margin:0 0 4px; font-size:18px; font-weight:800; color:var(--txt);">Adjust Your Photo</h3>
+            <p style="margin:0 0 20px; font-size:13px; color:var(--mut);">Drag to reposition, use the slider to zoom.</p>
+
+            <div id="cropFrame" style="position:relative; width:220px; height:220px; margin:0 auto 18px; border-radius:50%; overflow:hidden; background:var(--surf); border:2px solid var(--bdr); cursor:grab;">
+                <img id="cropImg" src="" alt="" style="position:absolute; user-select:none; -webkit-user-drag:none;" draggable="false">
+            </div>
+
+            <input type="range" id="cropZoom" min="100" max="300" value="100" style="width:100%; margin-bottom:20px;">
+
+            <div style="display:flex; gap:10px; justify-content:center;">
+                <button type="button" class="btn-secondary" style="width:auto; padding:10px 22px;" onclick="cancelAvatarCrop()">Cancel</button>
+                <button type="button" class="btn-primary" style="width:auto; padding:10px 22px;" onclick="confirmAvatarCrop()">✓ Use This Photo</button>
+            </div>
+        </div>
+    </div>
+
     <!-- FOOTER -->
     <footer class="keria-footer">
         <div class="footer-inner">
@@ -1277,7 +1303,12 @@ if ($user['role'] === 'candidate') {
             }).catch(err => console.error(err));
         }
 
-        // Automatic client-side image compression for avatar uploads
+        // Avatar crop/preview: instead of auto-cropping the image center and
+        // uploading immediately, open a modal where the person can drag to
+        // reposition and use a slider to zoom, then confirm before it saves.
+        const CROP_FRAME = 220;
+        let cropState = { naturalWidth: 0, naturalHeight: 0, baseScale: 1, scale: 1, offsetX: 0, offsetY: 0, dragging: false, startX: 0, startY: 0, startOffsetX: 0, startOffsetY: 0 };
+
         function handleAvatarUpload(input) {
             if (!input.files || !input.files[0]) return;
             const file = input.files[0];
@@ -1288,51 +1319,111 @@ if ($user['role'] === 'candidate') {
                 return;
             }
 
-            // Read and compress image client-side to max 800x800 JPEG (approx 60KB-120KB)
-            // Eliminates 413 Request Entity Too Large and makes uploads instantaneous
             const reader = new FileReader();
             reader.onload = function(e) {
                 const img = new Image();
                 img.onload = function() {
-                    const canvas = document.createElement('canvas');
-                    let width = img.width;
-                    let height = img.height;
-                    const maxDim = 800;
+                    cropState.naturalWidth = img.naturalWidth;
+                    cropState.naturalHeight = img.naturalHeight;
+                    cropState.baseScale = Math.max(CROP_FRAME / img.naturalWidth, CROP_FRAME / img.naturalHeight);
+                    cropState.scale = cropState.baseScale;
 
-                    if (width > maxDim || height > maxDim) {
-                        if (width > height) {
-                            height = Math.round((height * maxDim) / width);
-                            width = maxDim;
-                        } else {
-                            width = Math.round((width * maxDim) / height);
-                            height = maxDim;
-                        }
-                    }
+                    const cropImg = document.getElementById('cropImg');
+                    cropImg.src = e.target.result;
+                    applyCropTransform();
+                    cropState.offsetX = (CROP_FRAME - cropState.naturalWidth * cropState.scale) / 2;
+                    cropState.offsetY = (CROP_FRAME - cropState.naturalHeight * cropState.scale) / 2;
+                    applyCropTransform();
 
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    const compressedBase64 = canvas.toDataURL('image/jpeg', 0.88);
-                    const base64Input = document.getElementById('pic_base64');
-                    if (base64Input) {
-                        base64Input.value = compressedBase64;
-                    }
-
-                    // Clear the raw file input so the browser doesn't send raw multi-MB stream
-                    input.value = '';
-
-                    // Submit form
-                    document.getElementById('avatarForm').submit();
-                };
-                img.onerror = function() {
-                    // Fallback to direct submit
-                    document.getElementById('avatarForm').submit();
+                    document.getElementById('cropZoom').value = 100;
+                    document.getElementById('avatarCropModal').style.display = 'flex';
                 };
                 img.src = e.target.result;
             };
             reader.readAsDataURL(file);
+        }
+
+        function applyCropTransform() {
+            const cropImg = document.getElementById('cropImg');
+            cropImg.style.width = (cropState.naturalWidth * cropState.scale) + 'px';
+            cropImg.style.height = (cropState.naturalHeight * cropState.scale) + 'px';
+            cropImg.style.left = cropState.offsetX + 'px';
+            cropImg.style.top = cropState.offsetY + 'px';
+        }
+
+        function clampCropOffsets() {
+            const dispW = cropState.naturalWidth * cropState.scale;
+            const dispH = cropState.naturalHeight * cropState.scale;
+            cropState.offsetX = Math.min(0, Math.max(CROP_FRAME - dispW, cropState.offsetX));
+            cropState.offsetY = Math.min(0, Math.max(CROP_FRAME - dispH, cropState.offsetY));
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const frame = document.getElementById('cropFrame');
+            const zoomSlider = document.getElementById('cropZoom');
+            if (!frame || !zoomSlider) return;
+
+            function dragStart(clientX, clientY) {
+                cropState.dragging = true;
+                cropState.startX = clientX;
+                cropState.startY = clientY;
+                cropState.startOffsetX = cropState.offsetX;
+                cropState.startOffsetY = cropState.offsetY;
+                frame.style.cursor = 'grabbing';
+            }
+            function dragMove(clientX, clientY) {
+                if (!cropState.dragging) return;
+                cropState.offsetX = cropState.startOffsetX + (clientX - cropState.startX);
+                cropState.offsetY = cropState.startOffsetY + (clientY - cropState.startY);
+                clampCropOffsets();
+                applyCropTransform();
+            }
+            function dragEnd() {
+                cropState.dragging = false;
+                frame.style.cursor = 'grab';
+            }
+
+            frame.addEventListener('mousedown', e => dragStart(e.clientX, e.clientY));
+            window.addEventListener('mousemove', e => dragMove(e.clientX, e.clientY));
+            window.addEventListener('mouseup', dragEnd);
+
+            frame.addEventListener('touchstart', e => { dragStart(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+            frame.addEventListener('touchmove', e => { dragMove(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+            frame.addEventListener('touchend', dragEnd);
+
+            zoomSlider.addEventListener('input', function() {
+                const centerImgX = (CROP_FRAME / 2 - cropState.offsetX) / cropState.scale;
+                const centerImgY = (CROP_FRAME / 2 - cropState.offsetY) / cropState.scale;
+                cropState.scale = cropState.baseScale * (this.value / 100);
+                cropState.offsetX = CROP_FRAME / 2 - centerImgX * cropState.scale;
+                cropState.offsetY = CROP_FRAME / 2 - centerImgY * cropState.scale;
+                clampCropOffsets();
+                applyCropTransform();
+            });
+        });
+
+        function cancelAvatarCrop() {
+            document.getElementById('avatarCropModal').style.display = 'none';
+            document.getElementById('pic_input').value = '';
+        }
+
+        function confirmAvatarCrop() {
+            const cropImg = document.getElementById('cropImg');
+            const OUTPUT = 500;
+            const cropX = -cropState.offsetX / cropState.scale;
+            const cropY = -cropState.offsetY / cropState.scale;
+            const cropSize = CROP_FRAME / cropState.scale;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = OUTPUT;
+            canvas.height = OUTPUT;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(cropImg, cropX, cropY, cropSize, cropSize, 0, 0, OUTPUT, OUTPUT);
+
+            document.getElementById('pic_base64').value = canvas.toDataURL('image/jpeg', 0.88);
+            document.getElementById('pic_input').value = '';
+            document.getElementById('avatarCropModal').style.display = 'none';
+            document.getElementById('avatarForm').submit();
         }
     </script>
     <script src="theme.js"></script>

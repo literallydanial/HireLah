@@ -201,7 +201,8 @@ function score_color($score) {
                 <?php if(($_SESSION['user_role'] ?? '') === 'candidate'): ?>
                     <a href="jobs.php">📋 Job Board</a>
                     <a href="candidate_dashboard.php">👤 My Applications</a>
-                    <a href="resume_builder.php" class="active">📝 AI Resume Builder</a>
+                    <a href="resume_builder.php">📝 AI Resume Builder</a>
+                    <a href="resume_check.php" class="active">✨ AI Resume Check</a>
                     <a href="profile.php">⚙️ Profile Settings</a>
                 <?php elseif(($_SESSION['user_role'] ?? '') === 'employer'): ?>
                     <a href="employer_dashboard.php">👥 Applications & Stats</a>

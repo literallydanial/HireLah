@@ -547,6 +547,7 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
                 <a href="jobs.php">📋 Job Board</a>
                 <a href="candidate_dashboard.php" class="active">👤 My Applications</a>
                 <a href="resume_builder.php">📝 AI Resume Builder</a>
+                <a href="resume_check.php">✨ AI Resume Check</a>
                 <a href="profile.php">⚙️ Profile Settings</a>
             </nav>
 

@@ -1202,6 +1202,30 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             .keria-main-container {
                 padding: 16px 14px;
             }
+
+            /* The search bar (job title + location + submit) stays a
+               single flex row at every width otherwise, so on a phone
+               the three elements get squeezed down until the input
+               placeholders truncate and the button looks crushed.
+               Stacking it removes that fight for horizontal space. */
+            .search-inputs-row {
+                flex-direction: column;
+                align-items: stretch;
+                padding: 6px;
+                gap: 4px;
+            }
+            .search-input-col.location-col {
+                border-left: none;
+                padding-left: 8px;
+                border-top: 1px solid #E5E7EB;
+                padding-top: 8px;
+            }
+            .btn-search-find {
+                width: 100%;
+                justify-content: center;
+                padding: 12px 20px;
+                margin-top: 2px;
+            }
         }
     </style>
 </head>
@@ -1220,6 +1244,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 <?php if(isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'candidate'): ?>
                     <a href="candidate_dashboard.php">👤 My Applications</a>
                     <a href="resume_builder.php">📝 AI Resume Builder</a>
+                    <a href="resume_check.php">✨ AI Resume Check</a>
                     <a href="profile.php">⚙️ Profile Settings</a>
                 <?php elseif(isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'employer'): ?>
                     <a href="employer_dashboard.php">👥 Applications & Stats</a>
