@@ -315,17 +315,23 @@ foreach ($builder_records as $b) {
     $clean_name = sanitize_zip_name($b['user_name'] ?: 'Candidate');
     $clean_title = sanitize_zip_name($b['target_title'] ?: 'Resume');
 
-    $pdf_content = generate_resume_builder_pdf($b);
+    try {
+        $file_content = generate_resume_builder_pdf($b);
+        $ext = 'pdf';
+    } catch (\Throwable $e) {
+        $file_content = render_resume_builder_html($b);
+        $ext = 'html';
+    }
 
-    $zip_entry_name = "resume_builder/[{$build_date}] [Builder] {$clean_name} - {$clean_title}.pdf";
+    $zip_entry_name = "resume_builder/[{$build_date}] [Builder] {$clean_name} - {$clean_title}.{$ext}";
     $counter = 1;
     while (isset($used_filenames[$zip_entry_name])) {
-        $zip_entry_name = "resume_builder/[{$build_date}] [Builder] {$clean_name} - {$clean_title}_({$counter}).pdf";
+        $zip_entry_name = "resume_builder/[{$build_date}] [Builder] {$clean_name} - {$clean_title}_({$counter}).{$ext}";
         $counter++;
     }
     $used_filenames[$zip_entry_name] = true;
 
-    $zip->addFromString('resumes/' . $zip_entry_name, $pdf_content);
+    $zip->addFromString('resumes/' . $zip_entry_name, $file_content);
     $added_count++;
 
     fputcsv($csv_handle, [

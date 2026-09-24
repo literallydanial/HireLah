@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 require_once 'db.php';
 require_once 'resume_pdf_helper.php';
 
@@ -48,4 +50,10 @@ if (isset($_GET['html']) && $is_admin) {
 
 // Download or inline view
 $download = !empty($_GET['download']) && ($_GET['download'] === '1' || $_GET['download'] === 'true');
-stream_resume_builder_pdf($build, null, $download);
+
+try {
+    stream_resume_builder_pdf($build, null, $download);
+} catch (\Throwable $e) {
+    error_log("Resume PDF Generation Error (build #{$id}): " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+    render_resume_builder_printable_fallback($build, $is_admin ? $e->getMessage() : null);
+}
