@@ -2,6 +2,7 @@
 session_start();
 require_once 'db.php';
 require_once 'admin_logs_helper.php';
+require_once 'resume_pdf_helper.php';
 
 // Enforce admin privileges
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'admin') {
@@ -307,63 +308,24 @@ foreach ($candidates as $c) {
 }
 
 // ----------------------------------------------------
-// PACK 2: RESUME BUILDER (Printable HTML / Text Resume Docs)
+// PACK 2: RESUME BUILDER (Generated PDF Resumes)
 // ----------------------------------------------------
 foreach ($builder_records as $b) {
     $build_date = date('Y-m-d', strtotime($b['created_at']));
     $clean_name = sanitize_zip_name($b['user_name'] ?: 'Candidate');
     $clean_title = sanitize_zip_name($b['target_title'] ?: 'Resume');
 
-    $html_content = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>" . htmlspecialchars($clean_name . ' - ' . $clean_title) . "</title>";
-    $html_content .= "<style>body{font-family:Arial,sans-serif;max-width:800px;margin:30px auto;padding:20px;color:#111;line-height:1.6;} h1{margin-bottom:4px;color:#222;} h2{border-bottom:2px solid #333;padding-bottom:4px;margin-top:24px;font-size:16px;text-transform:uppercase;color:#444;} .contact{font-size:13px;color:#666;margin-bottom:20px;} .item{margin-bottom:14px;} .item-title{font-weight:bold;} .item-meta{font-size:12px;color:#666;}</style></head><body>";
-    $html_content .= "<h1>" . htmlspecialchars($b['user_name'] ?: 'Candidate Resume') . "</h1>";
-    $html_content .= "<div class='contact'>" . htmlspecialchars($b['user_email'] ?: '') . " • Target Role: " . htmlspecialchars($b['target_title'] ?: 'Professional') . " • Created: " . htmlspecialchars($b['created_at']) . "</div>";
+    $pdf_content = generate_resume_builder_pdf($b);
 
-    $gen_data = json_decode($b['generated_content'], true);
-    if (is_array($gen_data)) {
-        if (!empty($gen_data['summary'])) {
-            $html_content .= "<h2>Professional Summary</h2><p>" . nl2br(htmlspecialchars($gen_data['summary'])) . "</p>";
-        }
-        if (!empty($gen_data['skills'])) {
-            $skills_str = is_array($gen_data['skills']) ? implode(', ', $gen_data['skills']) : $gen_data['skills'];
-            $html_content .= "<h2>Core Competencies & Skills</h2><p>" . htmlspecialchars($skills_str) . "</p>";
-        }
-        if (!empty($gen_data['experience']) && is_array($gen_data['experience'])) {
-            $html_content .= "<h2>Professional Experience</h2>";
-            foreach ($gen_data['experience'] as $exp) {
-                $html_content .= "<div class='item'>";
-                $html_content .= "<div class='item-title'>" . htmlspecialchars($exp['role'] ?? '') . " — " . htmlspecialchars($exp['company'] ?? '') . "</div>";
-                $html_content .= "<div class='item-meta'>" . htmlspecialchars($exp['duration'] ?? '') . "</div>";
-                if (!empty($exp['bullets']) && is_array($exp['bullets'])) {
-                    $html_content .= "<ul>";
-                    foreach ($exp['bullets'] as $bullet) $html_content .= "<li>" . htmlspecialchars($bullet) . "</li>";
-                    $html_content .= "</ul>";
-                } elseif (!empty($exp['notes'])) {
-                    $html_content .= "<p>" . nl2br(htmlspecialchars($exp['notes'])) . "</p>";
-                }
-                $html_content .= "</div>";
-            }
-        }
-        if (!empty($gen_data['education']) && is_array($gen_data['education'])) {
-            $html_content .= "<h2>Education & Credentials</h2>";
-            foreach ($gen_data['education'] as $edu) {
-                $html_content .= "<div class='item'><div class='item-title'>" . htmlspecialchars($edu['degree'] ?? '') . " — " . htmlspecialchars($edu['school'] ?? '') . "</div><div class='item-meta'>" . htmlspecialchars($edu['year'] ?? '') . "</div></div>";
-            }
-        }
-    } else {
-        $html_content .= "<h2>Raw Content</h2><pre>" . htmlspecialchars($b['raw_input'] ?: $b['generated_content']) . "</pre>";
-    }
-    $html_content .= "</body></html>";
-
-    $zip_entry_name = "resume_builder/[{$build_date}] [Builder] {$clean_name} - {$clean_title}.html";
+    $zip_entry_name = "resume_builder/[{$build_date}] [Builder] {$clean_name} - {$clean_title}.pdf";
     $counter = 1;
     while (isset($used_filenames[$zip_entry_name])) {
-        $zip_entry_name = "resume_builder/[{$build_date}] [Builder] {$clean_name} - {$clean_title}_({$counter}).html";
+        $zip_entry_name = "resume_builder/[{$build_date}] [Builder] {$clean_name} - {$clean_title}_({$counter}).pdf";
         $counter++;
     }
     $used_filenames[$zip_entry_name] = true;
 
-    $zip->addFromString('resumes/' . $zip_entry_name, $html_content);
+    $zip->addFromString('resumes/' . $zip_entry_name, $pdf_content);
     $added_count++;
 
     fputcsv($csv_handle, [
@@ -378,7 +340,7 @@ foreach ($builder_records as $b) {
         $b['created_at'],
         '100%',
         'Generated & Polished',
-        'Built Resume',
+        'Built Resume (PDF)',
         'resumes/' . $zip_entry_name
     ]);
 }

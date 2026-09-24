@@ -80,6 +80,10 @@ $builder_resumes = $pdo->query("
     LEFT JOIN users u ON b.user_id = u.id
     ORDER BY b.created_at DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
+foreach ($builder_resumes as &$br) {
+    $br['resume_path'] = 'view_builder_pdf.php?id=' . $br['id'];
+}
+unset($br);
 
 // C. Resume Checker (resume_reviews table)
 $checker_resumes = $pdo->query("
@@ -222,7 +226,7 @@ $count_total = count($all_resumes);
         }
         .admin-tr {
             display: grid;
-            grid-template-columns: 140px 1.4fr 1.4fr 1.4fr 110px 90px 110px;
+            grid-template-columns: 140px 1.4fr 1.4fr 1.3fr 110px 80px 130px;
             gap: 10px;
             padding: 12px 16px;
             align-items: center;
@@ -450,7 +454,13 @@ $count_total = count($all_resumes);
 
                             <!-- Document Name -->
                             <div class="admin-th-hide-mobile" style="color:var(--mut); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="<?= htmlspecialchars($r['filename']) ?>">
-                                📄 <?= htmlspecialchars($r['filename'] ?: 'resume.pdf') ?>
+                                <?php if(!empty($r['resume_path'])): ?>
+                                    <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" style="color:inherit; text-decoration:none;" title="Open PDF">
+                                        📄 <?= htmlspecialchars($r['filename'] ?: 'resume.pdf') ?>
+                                    </a>
+                                <?php else: ?>
+                                    📄 <?= htmlspecialchars($r['filename'] ?: 'resume.pdf') ?>
+                                <?php endif; ?>
                             </div>
 
                             <!-- Date Created -->
@@ -472,30 +482,50 @@ $count_total = count($all_resumes);
                             <!-- Action -->
                             <div style="text-align:center;">
                                 <?php if($r['source_type'] === 'job_apply' && !empty($r['resume_path']) && file_exists($r['resume_path'])): ?>
-                                    <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 9px; font-size:11px; text-decoration:none;" title="View Original PDF">
-                                        📄 View PDF
-                                    </a>
+                                    <div style="display:inline-flex; align-items:center; gap:4px; justify-content:center;">
+                                        <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 8px; font-size:11px; text-decoration:none;" title="View Original PDF (New Tab)">
+                                            📄 View PDF
+                                        </a>
+                                        <button type="button" onclick="openPdfModal('<?= htmlspecialchars(addslashes($r['resume_path'])) ?>', '<?= htmlspecialchars(addslashes($r['job_title'])) ?>', '<?= htmlspecialchars(addslashes($r['candidate_name'])) ?> &bull; <?= htmlspecialchars(addslashes($r['candidate_email'])) ?>', '<?= htmlspecialchars(addslashes($r['filename'])) ?>', '<?= htmlspecialchars(addslashes($r['resume_path'])) ?>')" class="btn-secondary" style="padding:4px 6px; font-size:11px;" title="Quick PDF Preview Modal">
+                                            👁️
+                                        </button>
+                                    </div>
                                 <?php elseif($r['source_type'] === 'job_apply'): ?>
                                     <a href="candidate.php?id=<?= urlencode($r['id']) ?>" target="_blank" class="btn-secondary" style="padding:4px 9px; font-size:11px; text-decoration:none;">
                                         👤 Details
                                     </a>
                                 <?php elseif($r['source_type'] === 'resume_builder'): ?>
-                                    <button type="button" onclick="openBuilderPreview(<?= htmlspecialchars(json_encode($r)) ?>)" class="btn-secondary" style="padding:4px 9px; font-size:11px;">
-                                        👁️ View Build
-                                    </button>
-                                <?php elseif($r['source_type'] === 'default_resume'): ?>
-                                    <?php if(!empty($r['resume_path']) && file_exists($r['resume_path'])): ?>
-                                        <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 9px; font-size:11px; text-decoration:none;" title="View Saved User Resume PDF">
+                                    <div style="display:inline-flex; align-items:center; gap:4px; justify-content:center;">
+                                        <a href="view_builder_pdf.php?id=<?= urlencode($r['id']) ?>" target="_blank" class="btn-secondary" style="padding:4px 8px; font-size:11px; text-decoration:none;" title="View Resume Builder Output in PDF (New Tab)">
                                             📄 View PDF
                                         </a>
+                                        <button type="button" onclick="openBuilderPreview(<?= htmlspecialchars(json_encode($r)) ?>)" class="btn-secondary" style="padding:4px 6px; font-size:11px;" title="Quick PDF Preview Modal">
+                                            👁️
+                                        </button>
+                                    </div>
+                                <?php elseif($r['source_type'] === 'default_resume'): ?>
+                                    <?php if(!empty($r['resume_path']) && file_exists($r['resume_path'])): ?>
+                                        <div style="display:inline-flex; align-items:center; gap:4px; justify-content:center;">
+                                            <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 8px; font-size:11px; text-decoration:none;" title="View Saved User Resume PDF (New Tab)">
+                                                📄 View PDF
+                                            </a>
+                                            <button type="button" onclick="openPdfModal('<?= htmlspecialchars(addslashes($r['resume_path'])) ?>', '<?= htmlspecialchars(addslashes($r['job_title'])) ?>', '<?= htmlspecialchars(addslashes($r['candidate_name'])) ?> &bull; <?= htmlspecialchars(addslashes($r['candidate_email'])) ?>', '<?= htmlspecialchars(addslashes($r['filename'])) ?>', '<?= htmlspecialchars(addslashes($r['resume_path'])) ?>')" class="btn-secondary" style="padding:4px 6px; font-size:11px;" title="Quick PDF Preview Modal">
+                                                👁️
+                                            </button>
+                                        </div>
                                     <?php else: ?>
                                         <span style="font-size:11px; color:var(--mut);">File Missing</span>
                                     <?php endif; ?>
                                 <?php elseif($r['source_type'] === 'resume_checker'): ?>
                                     <?php if(!empty($r['resume_path']) && file_exists(__DIR__ . '/' . $r['resume_path'])): ?>
-                                        <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 9px; font-size:11px; text-decoration:none;" title="View Uploaded PDF">
-                                            📄 View PDF
-                                        </a>
+                                        <div style="display:inline-flex; align-items:center; gap:4px; justify-content:center;">
+                                            <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 8px; font-size:11px; text-decoration:none;" title="View Uploaded PDF (New Tab)">
+                                                📄 View PDF
+                                            </a>
+                                            <button type="button" onclick="openPdfModal('<?= htmlspecialchars(addslashes($r['resume_path'])) ?>', '<?= htmlspecialchars(addslashes($r['job_title'])) ?>', '<?= htmlspecialchars(addslashes($r['candidate_name'])) ?> &bull; <?= htmlspecialchars(addslashes($r['candidate_email'])) ?>', '<?= htmlspecialchars(addslashes($r['filename'])) ?>', '<?= htmlspecialchars(addslashes($r['resume_path'])) ?>')" class="btn-secondary" style="padding:4px 6px; font-size:11px;" title="Quick PDF Preview Modal">
+                                                👁️
+                                            </button>
+                                        </div>
                                     <?php else: ?>
                                         <button type="button" onclick="openCheckerPreview(<?= htmlspecialchars(json_encode($r)) ?>)" class="btn-secondary" style="padding:4px 9px; font-size:11px;" title="Original file no longer on disk — view the extracted resume text instead">
                                             👁️ View Report
@@ -600,20 +630,45 @@ $count_total = count($all_resumes);
         </div>
     </main>
 
-    <!-- Modal: View Resume Builder Preview -->
-    <div id="builderPreviewModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:4000; align-items:center; justify-content:center; padding:20px;">
-        <div class="panel" style="max-width:680px; width:100%; max-height:85vh; overflow-y:auto; position:relative; border-radius:18px; box-shadow:var(--shadow-lg);">
-            <button type="button" onclick="closeBuilderPreview()" style="position:absolute; top:20px; right:20px; background:none; border:none; color:var(--mut); font-size:22px; cursor:pointer; line-height:1;">✕</button>
-            <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-                <div style="font-size:24px;">🛠️</div>
-                <div>
-                    <div id="modalBuilderTitle" style="font-size:18px; font-weight:800; color:var(--txt);">Generated Resume</div>
-                    <div id="modalBuilderUser" style="font-size:12px; color:var(--mut);">Candidate Build Preview</div>
+    <!-- Modal: View Resume (PDF & Text Viewer) -->
+    <div id="resumePdfModal" onclick="if(event.target === this) closePdfModal()" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); backdrop-filter:blur(8px); z-index:9000; align-items:center; justify-content:center; padding:16px;">
+        <div style="background:var(--surf); max-width:960px; width:100%; height:90vh; max-height:92vh; display:flex; flex-direction:column; border-radius:18px; overflow:hidden; box-shadow:var(--shadow-lg); border:var(--glass-border);">
+            
+            <!-- Modal Header -->
+            <div style="padding:14px 22px; background:var(--dim); border-bottom:1px solid var(--bdr); display:flex; justify-content:space-between; align-items:center; gap:14px; flex-shrink:0;">
+                <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                    <div id="modalIcon" style="font-size:24px;">📄</div>
+                    <div style="min-width:0;">
+                        <div id="modalResumeTitle" style="font-size:15px; font-weight:800; color:var(--txt); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Resume Preview</div>
+                        <div id="modalResumeUser" style="font-size:11.5px; color:var(--mut); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Candidate Details</div>
+                    </div>
+                </div>
+
+                <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                    <a id="modalOpenTabBtn" href="#" target="_blank" class="btn-secondary" style="padding:6px 14px; font-size:11.5px; text-decoration:none; border-radius:8px;" title="Open in New Tab">
+                        ↗ Full Screen
+                    </a>
+                    <a id="modalDownloadBtn" href="#" download class="btn-primary" style="padding:6px 14px; font-size:11.5px; text-decoration:none; width:auto; border-radius:8px;" title="Download PDF Document">
+                        📥 Download PDF
+                    </a>
+                    <button type="button" onclick="closePdfModal()" style="background:none; border:none; color:var(--mut); font-size:22px; cursor:pointer; line-height:1; padding:4px 6px;" title="Close Modal">✕</button>
                 </div>
             </div>
-            <div id="modalBuilderContent" style="background:var(--dim); padding:18px 20px; border-radius:12px; font-size:12.5px; line-height:1.6; border:1px solid var(--bdr); color:var(--txt);"></div>
+
+            <!-- Modal PDF Iframe Container -->
+            <div id="modalPdfWrapper" style="flex:1; background:#181825; position:relative; min-height:400px; display:flex; align-items:center; justify-content:center;">
+                <iframe id="modalPdfIframe" src="" style="width:100%; height:100%; border:none;"></iframe>
+            </div>
+
+            <!-- Modal Text Content (Fallback for missing checker uploads) -->
+            <div id="modalTextWrapper" style="display:none; flex:1; overflow-y:auto; padding:20px; background:var(--dim);">
+                <div id="modalTextContent" style="background:var(--surf); padding:18px 20px; border-radius:12px; font-size:12.5px; line-height:1.6; border:1px solid var(--bdr); color:var(--txt);"></div>
+            </div>
         </div>
     </div>
+
+    <!-- Legacy compatibility alias container -->
+    <div id="builderPreviewModal" style="display:none;"></div>
 
     <script>
         var currentSource = 'all';
@@ -695,77 +750,60 @@ $count_total = count($all_resumes);
             return '<div style="font-size:10.5px; font-weight:800; letter-spacing:0.8px; text-transform:uppercase; color:var(--mut); margin-bottom:7px;">' + label + '</div>';
         }
 
+        function openPdfModal(pdfUrl, title, user, filename, downloadUrl) {
+            document.getElementById('modalResumeTitle').textContent = title || 'Resume Preview';
+            document.getElementById('modalResumeUser').textContent = (user || '') + (filename ? ' • ' + filename : '');
+            document.getElementById('modalIcon').textContent = '📄';
+
+            var openBtn = document.getElementById('modalOpenTabBtn');
+            var dlBtn = document.getElementById('modalDownloadBtn');
+            var iframe = document.getElementById('modalPdfIframe');
+            var pdfWrapper = document.getElementById('modalPdfWrapper');
+            var textWrapper = document.getElementById('modalTextWrapper');
+
+            if (openBtn) {
+                openBtn.href = pdfUrl;
+                openBtn.style.display = 'inline-flex';
+            }
+            if (dlBtn) {
+                dlBtn.href = downloadUrl || (pdfUrl + (pdfUrl.indexOf('?') > -1 ? '&' : '?') + 'download=1');
+                dlBtn.style.display = 'inline-flex';
+            }
+
+            pdfWrapper.style.display = 'flex';
+            textWrapper.style.display = 'none';
+            iframe.src = pdfUrl;
+
+            document.getElementById('resumePdfModal').style.display = 'flex';
+        }
+
+        function closePdfModal() {
+            var iframe = document.getElementById('modalPdfIframe');
+            if (iframe) iframe.src = '';
+            document.getElementById('resumePdfModal').style.display = 'none';
+        }
+
         function openBuilderPreview(item) {
-            document.getElementById('modalBuilderTitle').textContent = item.job_title || 'Generated Resume';
-            document.getElementById('modalBuilderUser').textContent = (item.candidate_name || 'Candidate') + ' • ' + (item.candidate_email || '');
-
-            var html = '';
-            try {
-                var data = JSON.parse(item.generated_content);
-                if (data && typeof data === 'object' && (data.summary || data.experience || data.education || data.skills)) {
-
-                    if (data.summary) {
-                        html += '<div style="margin-bottom:18px;">' + builderSectionLabel('Summary') +
-                                '<div>' + escapeHtml(data.summary) + '</div></div>';
-                    }
-
-                    if (data.skills && (Array.isArray(data.skills) ? data.skills.length : String(data.skills).trim())) {
-                        var skillsStr = Array.isArray(data.skills) ? data.skills.join(', ') : data.skills;
-                        html += '<div style="margin-bottom:18px;">' + builderSectionLabel('Skills') +
-                                '<div>' + escapeHtml(skillsStr) + '</div></div>';
-                    }
-
-                    if (Array.isArray(data.experience) && data.experience.length) {
-                        html += '<div style="margin-bottom:18px;">' + builderSectionLabel('Experience');
-                        data.experience.forEach(function(exp) {
-                            var heading = [exp.role, exp.company].filter(Boolean).map(escapeHtml).join(' — ');
-                            html += '<div style="margin-bottom:12px;">';
-                            if (heading) html += '<div style="font-weight:700; color:var(--txt);">' + heading + '</div>';
-                            if (exp.duration) html += '<div style="font-size:11px; color:var(--mut); margin-bottom:4px;">' + escapeHtml(exp.duration) + '</div>';
-                            if (Array.isArray(exp.bullets) && exp.bullets.length) {
-                                html += '<ul style="margin:4px 0 0 18px; padding:0;">';
-                                exp.bullets.forEach(function(b) { html += '<li style="margin-bottom:3px;">' + escapeHtml(b) + '</li>'; });
-                                html += '</ul>';
-                            } else if (exp.notes) {
-                                html += '<div>' + escapeHtml(exp.notes) + '</div>';
-                            }
-                            html += '</div>';
-                        });
-                        html += '</div>';
-                    }
-
-                    if (Array.isArray(data.education) && data.education.length) {
-                        html += '<div>' + builderSectionLabel('Education');
-                        data.education.forEach(function(edu) {
-                            var heading = [edu.degree, edu.school].filter(Boolean).map(escapeHtml).join(' — ');
-                            html += '<div style="margin-bottom:8px;">';
-                            if (heading) html += '<div style="font-weight:700; color:var(--txt);">' + heading + '</div>';
-                            if (edu.year) html += '<div style="font-size:11px; color:var(--mut);">' + escapeHtml(edu.year) + '</div>';
-                            html += '</div>';
-                        });
-                        html += '</div>';
-                    }
-                }
-            } catch(e) {
-                // Not JSON (or unrecognized shape) — fall back to showing the raw text.
-            }
-
-            if (!html) {
-                var raw = item.generated_content || item.raw_input || 'No preview content available.';
-                html = '<div style="white-space:pre-wrap;">' + escapeHtml(raw) + '</div>';
-            }
-
-            document.getElementById('modalBuilderContent').innerHTML = html;
-            document.getElementById('builderPreviewModal').style.display = 'flex';
+            var pdfUrl = 'view_builder_pdf.php?id=' + encodeURIComponent(item.id);
+            var downloadUrl = 'view_builder_pdf.php?id=' + encodeURIComponent(item.id) + '&download=1';
+            var title = item.job_title || 'Resume Builder Document';
+            var user = (item.candidate_name || 'Candidate') + ' • ' + (item.candidate_email || '');
+            openPdfModal(pdfUrl, title, user, item.filename, downloadUrl);
         }
 
         function closeBuilderPreview() {
-            document.getElementById('builderPreviewModal').style.display = 'none';
+            closePdfModal();
         }
 
         function openCheckerPreview(item) {
-            document.getElementById('modalBuilderTitle').textContent = 'Resume Checker Report';
-            document.getElementById('modalBuilderUser').textContent = (item.candidate_name || 'Candidate') + ' • ' + (item.candidate_email || '') + ' • ' + (item.filename || 'resume.pdf');
+            document.getElementById('modalResumeTitle').textContent = 'Resume Checker Report';
+            document.getElementById('modalResumeUser').textContent = (item.candidate_name || 'Candidate') + ' • ' + (item.candidate_email || '') + ' • ' + (item.filename || 'resume.pdf');
+            document.getElementById('modalIcon').textContent = '🔍';
+
+            var openBtn = document.getElementById('modalOpenTabBtn');
+            var dlBtn = document.getElementById('modalDownloadBtn');
+            if (openBtn) openBtn.style.display = 'none';
+            if (dlBtn) dlBtn.style.display = 'none';
 
             var html = '';
             if (item.summary) {
@@ -776,12 +814,14 @@ $count_total = count($all_resumes);
             html += '<div>' + builderSectionLabel('Extracted Resume Text (original file no longer on disk)') +
                     '<div style="white-space:pre-wrap;">' + (extracted ? escapeHtml(extracted) : 'No extracted text saved for this review.') + '</div></div>';
 
-            document.getElementById('modalBuilderContent').innerHTML = html;
-            document.getElementById('builderPreviewModal').style.display = 'flex';
+            document.getElementById('modalTextContent').innerHTML = html;
+            document.getElementById('modalPdfWrapper').style.display = 'none';
+            document.getElementById('modalTextWrapper').style.display = 'block';
+            document.getElementById('resumePdfModal').style.display = 'flex';
         }
 
         window.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeBuilderPreview();
+            if (e.key === 'Escape') closePdfModal();
         });
     </script>
     <script src="theme.js"></script>

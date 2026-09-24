@@ -681,7 +681,9 @@ try {
 
                     <?php if(!empty($generated['skills'])): ?>
                         <h4>Core Skills & Competencies</h4>
-                        <div style="margin-bottom:14px;"><?= htmlspecialchars(implode(' · ', $generated['skills'])) ?></div>
+                        <ul style="margin:4px 0 14px 18px; padding:0; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:4px 16px;">
+                            <?php foreach($generated['skills'] as $s): ?><li><?= htmlspecialchars($s) ?></li><?php endforeach; ?>
+                        </ul>
                     <?php endif; ?>
 
                     <?php if(!empty($generated['achievements'])): ?>
