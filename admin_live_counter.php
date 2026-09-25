@@ -64,7 +64,7 @@ $user_display = $_SESSION['user_name'] ?? 'Admin';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kerja Milestones - Live TV Counters</title>
+    <title>Milestones - Live TV Counters</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
@@ -153,19 +153,11 @@ $user_display = $_SESSION['user_name'] ?? 'Admin';
         }
 
         .brand-name {
-            font-size: clamp(32px, 4.4vw, 54px);
+            font-size: clamp(28px, 3.8vw, 48px);
             font-weight: 900;
-            letter-spacing: 2px;
-            line-height: 1.05;
+            letter-spacing: 4px;
+            line-height: 1.1;
             color: var(--txt-main);
-        }
-
-        .brand-milestones {
-            font-size: clamp(14px, 1.8vw, 24px);
-            font-weight: 600;
-            letter-spacing: 5px;
-            color: var(--txt-muted);
-            margin-top: 4px;
             text-transform: uppercase;
         }
 
@@ -652,12 +644,11 @@ $user_display = $_SESSION['user_name'] ?? 'Admin';
         <!-- Header -->
         <header class="tv-header">
             <div class="brand-block">
-                <h1 class="brand-name">KERJA</h1>
-                <div class="brand-milestones">MILESTONES</div>
+                <h1 class="brand-name">MILESTONES</h1>
             </div>
 
             <div class="brand-logo-wrap">
-                <img src="logo/keria.jpeg" alt="Kerja Logo" class="brand-logo-img">
+                <img src="logo/keria.jpeg" alt="Logo" class="brand-logo-img">
             </div>
         </header>
 
@@ -1036,12 +1027,18 @@ $user_display = $_SESSION['user_name'] ?? 'Admin';
                 if (!res.ok) throw new Error('Network error');
                 const data = await res.json();
 
-                let newRegistered = data.registered ?? currentStats.registered;
-                let newResume = data.resume ?? currentStats.resume;
-                let newJobs = data.jobs ?? currentStats.jobs;
-                let newRegNew = data.registered_new ?? currentStats.registered_new;
-                let newResNew = data.resume_new ?? currentStats.resume_new;
-                let newJobsNew = data.jobs_new ?? currentStats.jobs_new;
+                // If DB is reported disconnected on server, do not overwrite valid loaded counts with zeroes
+                if (data.db_connected === false && currentStats.registered > 0) {
+                    console.warn('API reported db_connected=false, retaining existing counts');
+                    return;
+                }
+
+                let newRegistered = (data.registered !== undefined && data.registered !== null) ? data.registered : currentStats.registered;
+                let newResume = (data.resume !== undefined && data.resume !== null) ? data.resume : currentStats.resume;
+                let newJobs = (data.jobs !== undefined && data.jobs !== null) ? data.jobs : currentStats.jobs;
+                let newRegNew = (data.registered_new !== undefined && data.registered_new !== null) ? data.registered_new : currentStats.registered_new;
+                let newResNew = (data.resume_new !== undefined && data.resume_new !== null) ? data.resume_new : currentStats.resume_new;
+                let newJobsNew = (data.jobs_new !== undefined && data.jobs_new !== null) ? data.jobs_new : currentStats.jobs_new;
 
                 if (appSettings.mode === 'custom') {
                     newRegistered = appSettings.regBase;

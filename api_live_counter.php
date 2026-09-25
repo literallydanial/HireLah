@@ -32,40 +32,13 @@ $response = [
     'timestamp' => time()
 ];
 
-// Load DB config if constants not defined
-if (!defined('DB_HOST')) {
-    define('DB_HOST', 'localhost');
-    define('DB_NAME', 'hirelah');
-    define('DB_USER', 'root');
-    define('DB_PASS', '');
-}
+// Always use the application's central database connection
+require_once 'db.php';
 
-$pdo = null;
-try {
-    $charset = 'utf8mb4';
-    $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=$charset";
-    $options = [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-        PDO::ATTR_TIMEOUT => 2
-    ];
-    $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-    $response['db_connected'] = true;
-} catch (\Throwable $e) {
-    // Fallback to 127.0.0.1 if localhost IPv6 resolution fails on Windows
+if (isset($pdo) && $pdo) {
     try {
-        $dsn = "mysql:host=127.0.0.1;dbname=" . DB_NAME . ";charset=utf8mb4";
-        $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
         $response['db_connected'] = true;
-    } catch (\Throwable $e2) {
-        $response['db_connected'] = false;
-        $response['db_note'] = 'Database connection error: ' . $e2->getMessage();
-    }
-}
 
-if ($pdo) {
-    try {
         // 1. Registered Users Count
         $uTotal = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
         $uToday = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE created_at >= CURDATE() OR created_at >= NOW() - INTERVAL 24 HOUR")->fetchColumn();
