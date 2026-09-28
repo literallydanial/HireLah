@@ -84,6 +84,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'gener
         }
     }
 
+    // References are entirely optional — only collected/stored if the
+    // candidate ticked "Include a references section" and filled at least
+    // one name in. Passed straight through as given (not sent to the AI),
+    // since these are real people's contact details, not text to rewrite.
+    $references = [];
+    if (isset($_POST['include_references'])) {
+        foreach (($_POST['ref_name'] ?? []) as $i => $rname) {
+            $rname = trim($rname);
+            if ($rname === '') continue;
+            $references[] = [
+                'name' => $rname,
+                'title' => trim($_POST['ref_title'][$i] ?? ''),
+                'contact' => trim($_POST['ref_contact'][$i] ?? '')
+            ];
+        }
+    }
+
     $input = [
         'target_title' => $target_title,
         'experience' => $experience,
@@ -100,14 +117,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'gener
             $generated = generate_resume_document($api_key, $input);
             $generated_meta = ['full_name' => $full_name, 'target_title' => $target_title, 'contact_email' => $contact_email, 'contact_phone' => $contact_phone, 'location' => $location];
 
+            $extra_fields = ['full_name' => $full_name, 'contact_email' => $contact_email, 'contact_phone' => $contact_phone, 'location' => $location, 'references' => $references];
+
             $stmt = $pdo->prepare("INSERT INTO resume_builds (user_id, target_title, raw_input, generated_content) VALUES (?, ?, ?, ?)");
             $stmt->execute([
                 $_SESSION['user_id'],
                 $target_title,
-                json_encode(array_merge($input, ['full_name' => $full_name, 'contact_email' => $contact_email, 'contact_phone' => $contact_phone, 'location' => $location])),
-                json_encode(array_merge($generated, ['full_name' => $full_name, 'contact_email' => $contact_email, 'contact_phone' => $contact_phone, 'location' => $location]))
+                json_encode(array_merge($input, $extra_fields)),
+                json_encode(array_merge($generated, $extra_fields))
             ]);
             $new_build_id = $pdo->lastInsertId();
+            $generated['references'] = $references;
         } catch (Exception $e) {
             error_log("Resume Builder Error: " . $e->getMessage());
             $error = "Something went wrong generating your resume. Please try again.";
@@ -562,6 +582,157 @@ try {
             .resume-doc-paper { border: none !important; box-shadow: none !important; padding: 0 !important; }
             @page { size: A4; margin: 12mm; }
         }
+
+        /* ================= DARK MODE OVERRIDES ================= */
+        /* This page's embedded styles use hardcoded light colors instead of
+           style.css's shared --bg/--txt/--card variables, so the global
+           [data-theme="dark"] toggle needs page-scoped overrides here
+           (same fix pattern as jobs.php). */
+
+        [data-theme="dark"] body {
+            background-color: #18191C !important;
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(217, 255, 79, 0.10) 0%, transparent 40%),
+                radial-gradient(circle at 90% 15%, rgba(217, 255, 79, 0.06) 0%, transparent 45%),
+                radial-gradient(circle at 15% 85%, rgba(142, 172, 134, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 85% 80%, rgba(217, 255, 79, 0.08) 0%, transparent 45%) !important;
+            color: #F9FAFB;
+        }
+
+        [data-theme="dark"] .rb-hero-h1 {
+            color: #F9FAFB;
+        }
+
+        [data-theme="dark"] .rb-hero-h1 .accent-leaf {
+            color: #A8D93A;
+        }
+
+        [data-theme="dark"] .rb-hero-sub {
+            color: #A5ACB8;
+        }
+
+        [data-theme="dark"] .rb-card {
+            background: #26272C;
+            border-color: #383940;
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.25), 0 2px 6px -1px rgba(0, 0, 0, 0.15);
+        }
+
+        [data-theme="dark"] .rb-card:hover {
+            border-color: #9BC93A;
+            box-shadow: 0 8px 26px -4px rgba(0, 0, 0, 0.32);
+        }
+
+        [data-theme="dark"] .rb-card-title {
+            color: #F9FAFB;
+        }
+
+        [data-theme="dark"] .rb-card-subtitle {
+            color: #A5ACB8;
+        }
+
+        [data-theme="dark"] .rb-label {
+            color: #C5CAD3;
+        }
+
+        [data-theme="dark"] .rb-input,
+        [data-theme="dark"] .rb-textarea {
+            background: #1F2023;
+            border-color: #383940;
+            color: #F9FAFB;
+        }
+
+        [data-theme="dark"] .rb-input:focus,
+        [data-theme="dark"] .rb-textarea:focus {
+            background: #1F2023;
+            border-color: #A8D93A;
+            box-shadow: 0 0 0 3px rgba(217, 255, 79, 0.18);
+        }
+
+        [data-theme="dark"] .rb-input::placeholder,
+        [data-theme="dark"] .rb-textarea::placeholder {
+            color: #6B7280;
+        }
+
+        [data-theme="dark"] .rb-checkbox-wrap {
+            color: #C5CAD3;
+        }
+
+        [data-theme="dark"] .rb-repeat-block {
+            background: #1F2023;
+            border-color: #383940;
+        }
+
+        [data-theme="dark"] .rb-repeat-block:hover {
+            border-color: #6B8A00;
+        }
+
+        [data-theme="dark"] .rb-remove-btn {
+            background: rgba(248, 113, 113, 0.15);
+            color: #F87171;
+        }
+
+        [data-theme="dark"] .rb-remove-btn:hover {
+            background: rgba(248, 113, 113, 0.3);
+        }
+
+        [data-theme="dark"] .rb-add-pill-btn {
+            background: rgba(217, 255, 79, 0.1);
+            border-color: rgba(217, 255, 79, 0.35);
+            color: #D9FF4F;
+        }
+
+        [data-theme="dark"] .rb-add-pill-btn:hover {
+            background: rgba(217, 255, 79, 0.18);
+            border-color: #D9FF4F;
+        }
+
+        [data-theme="dark"] .ai-pen-btn {
+            background: linear-gradient(135deg, rgba(217, 255, 79, 0.16), rgba(217, 255, 79, 0.06));
+            border-color: rgba(217, 255, 79, 0.35);
+            color: #D9FF4F;
+        }
+
+        [data-theme="dark"] .ai-pen-btn:hover {
+            background: rgba(217, 255, 79, 0.25);
+        }
+
+        [data-theme="dark"] .ai-sugg-chip {
+            background: #1F2023;
+            border-color: #383940;
+            color: #E2E4E8;
+        }
+
+        [data-theme="dark"] .ai-sugg-chip:hover {
+            border-color: #D9FF4F;
+            background: #2A2B30;
+        }
+
+        [data-theme="dark"] .rb-submit-pill-btn {
+            background: #D9FF4F;
+            color: #0A0A0A;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] .rb-submit-pill-btn:hover {
+            background: #C2E63A;
+        }
+
+        [data-theme="dark"] .mode-toggle-bar {
+            background: rgba(38, 39, 44, 0.8);
+            border-color: #383940;
+        }
+
+        [data-theme="dark"] .mode-toggle-btn {
+            color: #A5ACB8;
+        }
+
+        [data-theme="dark"] .mode-toggle-btn.active {
+            background: #D9FF4F;
+            color: #0A0A0A;
+        }
+
+        /* .resume-doc-paper intentionally stays white/black in both themes —
+           it represents the printed resume document itself, not page chrome. */
     </style>
 </head>
 <body>
@@ -622,10 +793,19 @@ try {
                         <p style="font-size:13px; color:#6B7280; margin:4px 0 0;">Review your polished resume below, download it as a PDF, or build another version.</p>
                     </div>
                     <div style="display:flex; gap:10px;">
-                        <button onclick="window.print()" class="btn-primary" style="padding:10px 20px; font-size:13px; width:auto; border-radius:9999px;">
-                            📥 Download as PDF
-                        </button>
                         <?php $current_build_id = $new_build_id ?? ($_GET['view'] ?? null); ?>
+                        <?php if ($current_build_id): ?>
+                            <a href="view_builder_pdf.php?id=<?= (int)$current_build_id ?>&download=1" class="btn-primary" style="padding:10px 20px; font-size:13px; width:auto; border-radius:9999px; text-decoration:none; display:inline-flex; align-items:center;">
+                                📥 Download as PDF
+                            </a>
+                            <a href="export_resume_docx.php?id=<?= (int)$current_build_id ?>" class="btn-secondary" style="padding:10px 20px; font-size:13px; width:auto; border-radius:9999px; text-decoration:none; display:inline-flex; align-items:center;">
+                                📝 Download as Word
+                            </a>
+                        <?php else: ?>
+                            <button onclick="window.print()" class="btn-primary" style="padding:10px 20px; font-size:13px; width:auto; border-radius:9999px;">
+                                📥 Download as PDF
+                            </button>
+                        <?php endif; ?>
                         <?php if ($current_build_id): ?>
                             <a href="resume_builder.php?edit=<?= (int)$current_build_id ?>" class="btn-secondary" style="padding:10px 18px; font-size:13px; text-decoration:none; border-radius:9999px;">
                                 ✏️ Edit Details
@@ -648,7 +828,7 @@ try {
 
                     <?php if(!empty($generated['summary'])): ?>
                         <h4>Professional Summary</h4>
-                        <div style="margin-bottom:14px;"><?= htmlspecialchars($generated['summary']) ?></div>
+                        <div style="margin-bottom:14px; text-align:justify;"><?= htmlspecialchars($generated['summary']) ?></div>
                     <?php endif; ?>
 
                     <?php
@@ -691,6 +871,16 @@ try {
                         <ul style="margin:4px 0 12px 18px; padding:0;">
                             <?php foreach($generated['achievements'] as $a): ?><li><?= htmlspecialchars($a) ?></li><?php endforeach; ?>
                         </ul>
+                    <?php endif; ?>
+
+                    <?php if(!empty($generated['references'])): ?>
+                        <h4>References</h4>
+                        <?php foreach($generated['references'] as $ref): ?>
+                            <?php $rname = trim($ref['name'] ?? ''); if ($rname === '') continue; ?>
+                            <div style="font-weight:700; font-size:13.5px;"><?= htmlspecialchars($rname) ?></div>
+                            <?php if (!empty($ref['title'])): ?><div style="font-size:12px; color:#666; font-style:italic;"><?= htmlspecialchars($ref['title']) ?></div><?php endif; ?>
+                            <?php if (!empty($ref['contact'])): ?><div style="font-size:12px; color:#374151; margin-bottom:8px;"><?= htmlspecialchars($ref['contact']) ?></div><?php endif; ?>
+                        <?php endforeach; ?>
                     <?php endif; ?>
                 </div>
             </div>
@@ -829,6 +1019,31 @@ try {
                         </div>
                     </div>
 
+                    <!-- CARD 6: References (Optional) -->
+                    <div class="rb-card">
+                        <div class="rb-card-header">
+                            <div class="rb-num-badge">6</div>
+                            <div>
+                                <h3 class="rb-card-title">References</h3>
+                                <p class="rb-card-subtitle">Add people who can vouch for you. Completely optional.</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="rb-checkbox-wrap">
+                                <input type="checkbox" name="include_references" id="includeRefsCheck" <?= !empty($prefill['references']) ? 'checked' : '' ?>>
+                                <span>Include a references section on my resume</span>
+                            </label>
+                        </div>
+
+                        <div id="refsPanelBody" style="display:<?= !empty($prefill['references']) ? 'block' : 'none' ?>; margin-top:14px;">
+                            <div id="refContainer"></div>
+                            <button type="button" class="rb-add-pill-btn" onclick="addRef()">
+                                <span>+ Add Another Reference</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Generate Action Button -->
                     <button type="submit" class="rb-submit-pill-btn">
                         <span>✨ Generate My Resume</span>
@@ -926,6 +1141,26 @@ try {
         </div>
     </template>
 
+    <template id="refTemplate">
+        <div class="rb-repeat-block ref-block">
+            <button type="button" class="rb-remove-btn" onclick="this.closest('.rb-repeat-block').remove()" title="Remove Reference">&times;</button>
+            <div class="rb-field-grid-3">
+                <div>
+                    <label class="rb-label">Name</label>
+                    <input type="text" name="ref_name[]" class="rb-input" placeholder="e.g. Amir Rahman">
+                </div>
+                <div>
+                    <label class="rb-label">Title / Relationship</label>
+                    <input type="text" name="ref_title[]" class="rb-input" placeholder="e.g. Former Manager, BrightWave Media">
+                </div>
+                <div>
+                    <label class="rb-label">Contact</label>
+                    <input type="text" name="ref_contact[]" class="rb-input" placeholder="e.g. amir@brightwave.com · +60 12-345 6789">
+                </div>
+            </div>
+        </div>
+    </template>
+
     <script>
     const PREFILL_DATA = <?= $prefill ? json_encode($prefill) : 'null' ?>;
 
@@ -950,6 +1185,16 @@ try {
         }
         document.getElementById('eduContainer').appendChild(tpl);
     }
+    function addRef(data) {
+        const tpl = document.getElementById('refTemplate').content.cloneNode(true);
+        const block = tpl.querySelector('.ref-block');
+        if (data) {
+            block.querySelector('[name="ref_name[]"]').value = data.name || '';
+            block.querySelector('[name="ref_title[]"]').value = data.title || '';
+            block.querySelector('[name="ref_contact[]"]').value = data.contact || '';
+        }
+        document.getElementById('refContainer').appendChild(tpl);
+    }
 
     document.addEventListener('DOMContentLoaded', function() {
         if (!document.getElementById('expContainer')) return;
@@ -963,6 +1208,26 @@ try {
         } else {
             addEdu();
         }
+        if (PREFILL_DATA && Array.isArray(PREFILL_DATA.references) && PREFILL_DATA.references.length > 0) {
+            PREFILL_DATA.references.forEach(ref => addRef(ref));
+        } else {
+            addRef();
+        }
+    });
+
+    // References toggle: only shown/submitted when the candidate opts in
+    document.addEventListener('DOMContentLoaded', function() {
+        const includeRefsCheck = document.getElementById('includeRefsCheck');
+        const refsPanelBody = document.getElementById('refsPanelBody');
+        if (!includeRefsCheck || !refsPanelBody) return;
+        function applyRefsVisibility(isChecked) {
+            refsPanelBody.style.display = isChecked ? 'block' : 'none';
+            refsPanelBody.querySelectorAll('input').forEach(el => el.disabled = !isChecked);
+        }
+        applyRefsVisibility(includeRefsCheck.checked);
+        includeRefsCheck.addEventListener('change', function() {
+            applyRefsVisibility(this.checked);
+        });
     });
 
     // Fresh-grad toggle handler

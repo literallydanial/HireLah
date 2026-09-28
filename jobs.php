@@ -1227,6 +1227,309 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 margin-top: 2px;
             }
         }
+
+        /* ================= DARK MODE OVERRIDES ================= */
+        /* jobs.php uses its own hardcoded light-mode palette above instead of
+           style.css's shared --bg/--txt/--surf variables, so the global
+           [data-theme="dark"] toggle needs page-scoped overrides here. */
+
+        [data-theme="dark"] body {
+            background-color: var(--bg, #18191C);
+            color: var(--txt, #F9FAFB);
+        }
+
+        [data-theme="dark"] .keria-hero-banner {
+            border-bottom-color: rgba(255, 255, 255, 0.08);
+        }
+
+        /* Hero banner text intentionally stays black in both themes —
+           it sits on the banner's light leafy artwork, not a themed
+           surface, so it should not follow the dark-mode palette. */
+
+        [data-theme="dark"] .banner-search-card {
+            background: #26272C;
+            border-color: #383940;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] .search-inputs-row {
+            background: #1F2023;
+            border-color: #383940;
+        }
+
+        [data-theme="dark"] .search-input-col.location-col {
+            border-left-color: #383940;
+        }
+
+        [data-theme="dark"] .search-field-icon,
+        [data-theme="dark"] .select-chevron {
+            color: #A5ACB8;
+        }
+
+        [data-theme="dark"] .search-text-input {
+            color: #F9FAFB;
+        }
+
+        [data-theme="dark"] .search-text-input::placeholder {
+            color: #6B7280;
+        }
+
+        [data-theme="dark"] .filter-select-input {
+            background: #1F2023;
+            border-color: #383940;
+            color: #C5CAD3;
+        }
+
+        [data-theme="dark"] .filter-select-input:focus,
+        [data-theme="dark"] .filter-select-input:hover {
+            border-color: #5B6270;
+        }
+
+        [data-theme="dark"] .quick-pill-btn {
+            background: #1F2023;
+            border-color: #383940;
+            color: #C5CAD3;
+        }
+
+        [data-theme="dark"] .quick-pill-btn:hover {
+            background: #2A2B30;
+            border-color: #4A4B52;
+        }
+
+        [data-theme="dark"] .quick-pill-btn.active {
+            background: #D9FF4F;
+            border-color: #D9FF4F;
+            color: #0A0A0A;
+        }
+
+        [data-theme="dark"] .job-cards-list-pane::-webkit-scrollbar-thumb {
+            background: #383940;
+        }
+
+        [data-theme="dark"] .job-cards-list-pane::-webkit-scrollbar-thumb:hover {
+            background: #4A4B52;
+        }
+
+        [data-theme="dark"] .active-positions-header {
+            color: #F9FAFB;
+        }
+
+        [data-theme="dark"] .job-card-box {
+            background: #26272C;
+            border-color: #383940;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        [data-theme="dark"] .job-card-box:hover {
+            border-color: #A3E635;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] .job-card-box.selected-card {
+            background: #26272C;
+            box-shadow: 0 6px 20px rgba(132, 204, 22, 0.22);
+        }
+
+        [data-theme="dark"] .card-job-title,
+        [data-theme="dark"] .detail-job-title,
+        [data-theme="dark"] .ai-eval-title-line,
+        [data-theme="dark"] .job-desc-main-title,
+        [data-theme="dark"] .job-spec-block-title {
+            color: #F9FAFB;
+        }
+
+        [data-theme="dark"] .badge-posted-ago {
+            background: rgba(251, 146, 60, 0.15);
+            border-color: rgba(251, 146, 60, 0.35);
+            color: #FB923C;
+        }
+
+        [data-theme="dark"] .card-company-meta,
+        [data-theme="dark"] .detail-company-subline,
+        [data-theme="dark"] .job-desc-subtext {
+            color: #A5ACB8;
+        }
+
+        [data-theme="dark"] .card-company-meta strong,
+        [data-theme="dark"] .detail-company-subline strong {
+            color: #E2E4E8;
+        }
+
+        [data-theme="dark"] .card-meta-dot {
+            color: #4A4B52;
+        }
+
+        [data-theme="dark"] .card-pill-tag,
+        [data-theme="dark"] .detail-meta-pill {
+            background: #1F2023;
+            border-color: #383940;
+            color: #C5CAD3;
+        }
+
+        [data-theme="dark"] .detail-meta-pill.active-status {
+            background: rgba(52, 211, 153, 0.15);
+            border-color: rgba(52, 211, 153, 0.35);
+            color: #34D399;
+        }
+
+        [data-theme="dark"] .card-logo-container {
+            background: #1F2023;
+            border-color: #383940;
+        }
+
+        [data-theme="dark"] .card-ai-match-row {
+            border-top-color: #383940;
+        }
+
+        [data-theme="dark"] .ai-match-label-group {
+            color: #C5CAD3;
+        }
+
+        [data-theme="dark"] .ai-progress-track,
+        [data-theme="dark"] .ai-eval-progress-bar {
+            background: #383940;
+        }
+
+        [data-theme="dark"] .job-detail-card-inner {
+            background: #26272C;
+            border-color: #383940;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] .job-detail-card-inner::-webkit-scrollbar-track {
+            background: #1F2023;
+        }
+
+        [data-theme="dark"] .job-detail-card-inner::-webkit-scrollbar-thumb {
+            background: #4A4B52;
+        }
+
+        [data-theme="dark"] .btn-circle-action {
+            background: #1F2023;
+            border-color: #383940;
+            color: #C5CAD3;
+        }
+
+        [data-theme="dark"] .btn-circle-action:hover {
+            background: #2A2B30;
+            border-color: #5B6270;
+        }
+
+        [data-theme="dark"] .btn-circle-action.is-saved {
+            background: rgba(251, 191, 36, 0.15);
+            border-color: rgba(251, 191, 36, 0.35);
+            color: #FBBF24;
+        }
+
+        [data-theme="dark"] .detail-salary-text {
+            color: #34D399;
+        }
+
+        [data-theme="dark"] .detail-apply-row {
+            border-bottom-color: #383940;
+        }
+
+        [data-theme="dark"] .btn-detail-apply {
+            background: #D9FF4F;
+            color: #0A0A0A;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+        }
+
+        [data-theme="dark"] .btn-detail-apply:hover {
+            background: #C2E63A;
+        }
+
+        [data-theme="dark"] .btn-detail-applied {
+            background: #1F2023;
+            color: #34D399;
+            border-color: rgba(52, 211, 153, 0.35);
+        }
+
+        [data-theme="dark"] .btn-detail-save {
+            background: transparent;
+            border-color: #F9FAFB;
+            color: #F9FAFB;
+        }
+
+        [data-theme="dark"] .btn-detail-save:hover {
+            background: #1F2023;
+        }
+
+        [data-theme="dark"] .btn-detail-save.is-saved {
+            background: rgba(251, 191, 36, 0.15);
+            border-color: #FBBF24;
+            color: #FBBF24;
+        }
+
+        [data-theme="dark"] .ai-eval-breakdown-card {
+            background: #1F2023;
+            border-color: #383940;
+        }
+
+        [data-theme="dark"] .ai-eval-subtitle {
+            color: #60A5FA;
+        }
+
+        [data-theme="dark"] .ai-eval-score-label,
+        [data-theme="dark"] .ai-metric-title,
+        [data-theme="dark"] .ai-overlap-heading {
+            color: #A5ACB8;
+        }
+
+        [data-theme="dark"] .ai-eval-info-icon {
+            color: #6B7280;
+        }
+
+        [data-theme="dark"] .ai-metric-item-card {
+            background: #26272C;
+            border-color: #383940;
+        }
+
+        [data-theme="dark"] .overlap-pill-matched {
+            background: rgba(52, 211, 153, 0.15);
+            border-color: rgba(52, 211, 153, 0.35);
+            color: #34D399;
+        }
+
+        [data-theme="dark"] .overlap-pill-missing {
+            background: rgba(251, 146, 60, 0.15);
+            border-color: rgba(251, 146, 60, 0.35);
+            color: #FB923C;
+        }
+
+        [data-theme="dark"] .ai-eval-prompt-card {
+            background: linear-gradient(135deg, rgba(217, 255, 79, 0.1), rgba(96, 165, 250, 0.08));
+            border-color: rgba(217, 255, 79, 0.3);
+        }
+
+        [data-theme="dark"] .job-desc-paragraph,
+        [data-theme="dark"] .job-bullet-list {
+            color: #C5CAD3;
+        }
+
+        [data-theme="dark"] .company-gallery-section {
+            border-top-color: #383940;
+        }
+
+        [data-theme="dark"] .company-gallery-tile {
+            background: #1F2023;
+            border-color: #383940;
+        }
+
+        [data-theme="dark"] .company-gallery-tile:hover {
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+            border-color: #5B6270;
+        }
+
+        [data-theme="dark"] .keria-toast {
+            background: #F9FAFB;
+            color: #0A0A0A;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        [data-theme="dark"] .search-input-col.location-col {
+            border-top-color: #383940;
+        }
     </style>
 </head>
 <body>
@@ -2048,5 +2351,6 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             }
         });
     </script>
+    <script src="theme.js"></script>
 </body>
 </html>

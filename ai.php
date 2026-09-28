@@ -578,9 +578,9 @@ function generate_fallback_resume_document($input) {
                 $edu_phrase .= ' from ' . $education[0]['school'];
             }
         }
-        $summary = "Motivated recent graduate pursuing a role as " . $target_title . $edu_phrase . ". Automated draft (AI not configured) — consider refining this summary further.";
+        $summary = "Motivated recent graduate pursuing a role as " . $target_title . $edu_phrase . ". Brings a solid academic foundation, strong willingness to learn, and readiness to apply classroom knowledge in a real-world professional setting. Eager to contribute fresh perspective and grow into the responsibilities of the role. (Automated draft — AI not configured; consider refining this summary further.)";
     } else {
-        $summary = "Motivated " . $target_title . " with hands-on experience across roles including " . ($experience[0]['role'] ?: 'recent positions') . ". Automated draft (AI not configured) — consider refining this summary further.";
+        $summary = "Motivated " . $target_title . " with hands-on experience across roles including " . ($experience[0]['role'] ?: 'recent positions') . ". Brings practical, day-to-day experience relevant to the target role and a track record of taking on responsibility. Comfortable working across the typical duties expected in this field and continuing to build on that experience. (Automated draft — AI not configured; consider refining this summary further.)";
     }
 
     return [
@@ -599,7 +599,13 @@ function build_resume_prompt($input) {
         $fresh_grad_note = "\n\nThis candidate is a fresh graduate with little or no full-time work history. Write the summary around their education, academic projects, and coursework. Treat any listed internships/part-time work as supporting evidence of transferable skills, not a career history. Do not imply years of professional experience the candidate doesn't have. Emphasize potential, foundational skills, and eagerness to start their career.";
     }
     return <<<PROMPT
-You are an expert resume writer helping a candidate build a professional resume from their own rough notes. Turn the raw input below into polished, professional resume content — proper grammar, active verbs, concise impact-focused bullet points. Do NOT invent facts, companies, numbers, or achievements that are not implied by the candidate's notes — only rephrase and structure what they gave you.
+You are an expert resume writer helping a candidate build a professional resume from their own rough notes. Turn the raw input below into polished, professional resume content — proper grammar, active verbs, concise impact-focused bullet points. Do NOT invent hard facts: never fabricate specific numbers/metrics, employer names, dates, clients, or credentials that the candidate did not state.
+
+ELABORATION — this is important: candidates often type very little (a job title and two or three words). Your job is to expand that into full, complete, professional resume content, not to just tidy up their exact wording:
+- If a note is short (e.g. "handled social media"), elaborate it into a fuller bullet point using standard, industry-typical responsibilities and skills that a person in that exact role/title normally performs — describe scope, methods, and purpose in professional language, without inventing specific numbers, results, or names they never mentioned.
+- The professional summary should be 3-4 full sentences, not 2, and should read as complete and confident even when the underlying notes are sparse — draw on what's typical/expected for the stated target role and any implied seniority, rather than staying literally minimal.
+- Never respond with something that reads as thin, generic, or obviously under-written just because the input was short. When in doubt, add reasonable professional depth and context around what the candidate gave you rather than leaving it terse.
+- This applies to experience bullets, the summary, and achievement entries alike. It does not apply to hard facts (numbers, company names, dates, certifications) — leave those exactly as given, or omit them, never invent them.
 
 CANDIDATE'S TARGET ROLE AND RAW NOTES (JSON):
 {$input_json}
@@ -607,13 +613,13 @@ CANDIDATE'S TARGET ROLE AND RAW NOTES (JSON):
 OUTPUT REQUIREMENTS:
 Output strictly a JSON object, no text outside the JSON:
 {
-    "summary": "2-3 sentence professional summary tailored to their target role, based only on the info given.",
+    "summary": "3-4 sentence professional summary tailored to their target role, elaborated with standard professional context for that role — based only on the facts given, never inventing metrics or employers.",
     "experience": [
         {
             "company": "as given",
             "role": "as given",
             "duration": "as given",
-            "bullets": ["Polished, professional bullet point rewritten from their rough notes", "..."]
+            "bullets": ["Fully elaborated, professional bullet point expanded from their rough notes using standard responsibilities for this role — no invented numbers/facts", "..."]
         }
     ],
     "education": [
@@ -623,7 +629,7 @@ Output strictly a JSON object, no text outside the JSON:
     "achievements": ["cleaned up certification/award/achievement/language from extra_notes, one per entry", "..."]
 }
 
-Keep the same number of experience/education entries as given in the input, in the same order. Each experience entry should have 2-4 bullet points. The "achievements" array must be built ONLY from the candidate's "extra_notes" field (certifications, achievements, awards, languages, or anything else they listed there) — split it into short, individually-listable entries. If extra_notes is empty, output an empty array for "achievements". Do not put achievements content into "summary" or "skills" instead — it belongs in its own "achievements" array.{$fresh_grad_note}
+Keep the same number of experience/education entries as given in the input, in the same order. Each experience entry should have 3-5 bullet points (elaborate rather than truncate). The "achievements" array must be built ONLY from the candidate's "extra_notes" field (certifications, achievements, awards, languages, or anything else they listed there) — split it into short, individually-listable entries. If extra_notes is empty, output an empty array for "achievements". Do not put achievements content into "summary" or "skills" instead — it belongs in its own "achievements" array.{$fresh_grad_note}
 PROMPT;
 }
 
@@ -664,7 +670,7 @@ A candidate is writing their resume and typed these rough notes about their role
 
 "{$rough_notes}"
 
-Rewrite this into 3 short, professional resume bullet points (active verbs, concise, no invented facts/numbers beyond what's stated). Output strictly a JSON array of strings, nothing else, e.g. ["...", "...", "..."]
+Rewrite and ELABORATE this into 3 full, professional resume bullet points — even if the notes are just a few words, expand them using standard, typical responsibilities and skills for a "{$role}" role (active verbs, complete professional phrasing, not just a tidied-up version of the exact words given). Do not invent specific numbers/metrics, employer names, or facts beyond what's stated — elaborate on scope and context, not on hard facts. Output strictly a JSON array of strings, nothing else, e.g. ["...", "...", "..."]
 PROMPT;
             $response = call_gemini_api($api_key, $prompt);
             $data = null;

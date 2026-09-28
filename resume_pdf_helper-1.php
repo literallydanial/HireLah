@@ -50,11 +50,6 @@ function get_resume_builder_data($build, $user = null) {
     $achievements = $gen['achievements'] ?? ($raw['achievements'] ?? ($build['achievements'] ?? []));
     if (is_string($achievements)) $achievements = json_decode($achievements, true) ?: [];
 
-    // References are entirely optional — the candidate only sees a section
-    // for these if they explicitly chose to include one and filled it in.
-    $references = $gen['references'] ?? ($raw['references'] ?? ($build['references'] ?? []));
-    if (is_string($references)) $references = json_decode($references, true) ?: [];
-
     return [
         'full_name' => $full_name,
         'target_title' => $target_title,
@@ -67,7 +62,6 @@ function get_resume_builder_data($build, $user = null) {
         'education' => is_array($education) ? $education : [],
         'skills' => $skills,
         'achievements' => is_array($achievements) ? $achievements : [],
-        'references' => is_array($references) ? $references : [],
         'created_at' => $build['created_at'] ?? date('Y-m-d H:i:s'),
     ];
 }
@@ -215,23 +209,6 @@ function render_resume_builder_html($build, $user = null) {
         $body_content .= '</ul>';
     }
 
-    // References — entirely optional; only appears when the candidate chose
-    // to include one and provided at least one entry.
-    if (!empty($data['references'])) {
-        $body_content .= '<div class="section-title">References</div>';
-        foreach ($data['references'] as $ref) {
-            $rname = trim($ref['name'] ?? '');
-            if ($rname === '') continue;
-            $rtitle = trim($ref['title'] ?? '');
-            $rcontact = trim($ref['contact'] ?? '');
-            $body_content .= '<div class="entry-block">';
-            $body_content .= '<div class="entry-title">' . htmlspecialchars($rname) . '</div>';
-            if ($rtitle) $body_content .= '<div class="entry-sub">' . htmlspecialchars($rtitle) . '</div>';
-            if ($rcontact) $body_content .= '<div class="entry-notes">' . htmlspecialchars($rcontact) . '</div>';
-            $body_content .= '</div>';
-        }
-    }
-
     // Fallback if no structured sections were found
     if (empty($data['summary']) && empty($data['experience']) && empty($data['education'])) {
         $fallback_raw = !empty($build['generated_content']) && is_string($build['generated_content']) 
@@ -346,7 +323,6 @@ function render_resume_builder_html($build, $user = null) {
         font-size: 9pt;
         color: #374151;
         line-height: 1.45;
-        text-align: justify;
     }
     .skills-table {
         width: 100%;
@@ -367,6 +343,17 @@ function render_resume_builder_html($build, $user = null) {
         line-height: 1.45;
         margin-bottom: 2px;
     }
+    .footer-stamp {
+        position: fixed;
+        bottom: 0px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 7.5pt;
+        color: #9CA3AF;
+        border-top: 1px solid #E5E7EB;
+        padding-top: 4px;
+    }
 </style>
 </head>
 <body>
@@ -377,6 +364,10 @@ function render_resume_builder_html($build, $user = null) {
     </div>
 
     ' . $body_content . '
+
+    <div class="footer-stamp">
+        Generated via Keria AI Resume Builder &bull; ' . date('F j, Y', strtotime($data['created_at'])) . '
+    </div>
 </body>
 </html>';
 
@@ -540,18 +531,10 @@ function generate_resume_builder_pdf_minimal($build, $user = null) {
         $body .= '</ul>';
     }
 
-    if (!empty($data['references'])) {
-        $body .= '<h2>References</h2>';
-        foreach ($data['references'] as $ref) {
-            $rname = trim($ref['name'] ?? '');
-            if ($rname === '') continue;
-            $rtitle = trim($ref['title'] ?? '');
-            $rcontact = trim($ref['contact'] ?? '');
-            $body .= '<p><b>' . $esc($rname) . '</b>';
-            if ($rtitle) $body .= '<br><i>' . $esc($rtitle) . '</i>';
-            if ($rcontact) $body .= '<br>' . $esc($rcontact);
-            $body .= '</p>';
-        }
+    $footer_date = date('F j, Y');
+    if (!empty($data['created_at'])) {
+        $ts = strtotime($data['created_at']);
+        if ($ts !== false) $footer_date = date('F j, Y', $ts);
     }
 
     $html = '<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -562,14 +545,15 @@ body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #1F242
 h1 { font-size: 20pt; margin: 0 0 2px 0; }
 .target-title { font-size: 11pt; font-weight: bold; color: #4A5D00; margin: 0 0 6px 0; }
 h2 { font-size: 10.5pt; text-transform: uppercase; margin: 14px 0 6px 0; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
-p { text-align: justify; }
 ul { margin: 4px 0 6px 18px; padding: 0; }
 li { margin-bottom: 2px; }
+.footer { margin-top: 20px; padding-top: 6px; border-top: 1px solid #ddd; font-size: 8pt; color: #888; text-align: center; }
 </style></head><body>
 <h1>' . $esc($data['full_name']) . '</h1>
 <div class="target-title">' . $esc($data['target_title']) . '</div>
 <div>' . $contact_line . '</div>
 ' . $body . '
+<div class="footer">Generated via Keria AI Resume Builder &bull; ' . $esc($footer_date) . '</div>
 </body></html>';
 
     $options = new Options();
@@ -785,7 +769,6 @@ function render_resume_builder_printable_fallback($build, $error_msg = null) {
             color: #374151;
             line-height: 1.6;
             margin-bottom: 10px;
-            text-align: justify;
         }
         .entry-block {
             margin-bottom: 12px;
@@ -834,6 +817,15 @@ function render_resume_builder_printable_fallback($build, $error_msg = null) {
             color: #374151;
             line-height: 1.45;
         }
+        .footer-stamp {
+            margin-top: 24px;
+            padding-top: 8px;
+            border-top: 1px solid #E5E7EB;
+            text-align: center;
+            font-size: 8pt;
+            color: #9CA3AF;
+        }
+
         @media print {
             .no-print { display: none !important; }
             body { background: #FFFFFF !important; padding: 0 !important; margin: 0 !important; }
@@ -962,261 +954,12 @@ function render_resume_builder_printable_fallback($build, $error_msg = null) {
             </ul>
         <?php endif; ?>
 
-        <?php if(!empty($data['references'])): ?>
-            <div class="section-title">References</div>
-            <?php foreach($data['references'] as $ref): ?>
-                <?php $rname = trim($ref['name'] ?? ''); if ($rname === '') continue; ?>
-                <?php $rtitle = trim($ref['title'] ?? ''); $rcontact = trim($ref['contact'] ?? ''); ?>
-                <div class="entry-block">
-                    <div class="entry-title"><?= htmlspecialchars($rname) ?></div>
-                    <?php if ($rtitle): ?><div class="entry-sub"><?= htmlspecialchars($rtitle) ?></div><?php endif; ?>
-                    <?php if ($rcontact): ?><div class="summary-paragraph" style="margin-bottom:0;"><?= htmlspecialchars($rcontact) ?></div><?php endif; ?>
-                </div>
-            <?php endforeach; ?>
-        <?php endif; ?>
+        <div class="footer-stamp">
+            Generated via Keria AI Resume Builder &bull; <?= date('F j, Y', strtotime($data['created_at'])) ?>
+        </div>
     </div>
 </body>
 </html>
 <?php
-    exit;
-}
-
-/**
- * ---------------------------------------------------------------------
- * Microsoft Word (.docx) export
- * ---------------------------------------------------------------------
- * Builds a real, editable .docx file directly with ZipArchive + raw OOXML
- * (no third-party library required/installed). The candidate can open this
- * in Word (or Google Docs / LibreOffice) and edit it freely. Body paragraphs
- * are justified to match the PDF; bullet points use a hanging indent with a
- * "•" character (fully editable plain text, not a locked auto-list).
- */
-
-function docx_esc($s) {
-    return htmlspecialchars((string)$s, ENT_QUOTES | ENT_XML1, 'UTF-8');
-}
-
-/** A single justified body paragraph (splits on newlines into separate paragraphs). */
-function docx_prose_paragraphs($text, $size = 21) {
-    $xml = '';
-    $lines = preg_split('/\r\n|\r|\n/', trim((string)$text));
-    foreach ($lines as $line) {
-        if (trim($line) === '') continue;
-        $xml .= '<w:p><w:pPr><w:jc w:val="both"/><w:spacing w:after="160"/></w:pPr>'
-              . '<w:r><w:rPr><w:sz w:val="' . $size . '"/><w:szCs w:val="' . $size . '"/></w:rPr>'
-              . '<w:t xml:space="preserve">' . docx_esc($line) . '</w:t></w:r></w:p>';
-    }
-    return $xml;
-}
-
-/** A section heading paragraph (bold, colored, bottom border). */
-function docx_heading($text) {
-    return '<w:p><w:pPr><w:spacing w:before="280" w:after="120"/>'
-         . '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="D6E4A8"/></w:pBdr></w:pPr>'
-         . '<w:r><w:rPr><w:b/><w:color w:val="384800"/><w:sz w:val="21"/><w:szCs w:val="21"/></w:rPr>'
-         . '<w:t xml:space="preserve">' . docx_esc(mb_strtoupper($text)) . '</w:t></w:r></w:p>';
-}
-
-/** A single bullet-point paragraph (hanging indent + literal bullet glyph, still plain editable text). */
-function docx_bullet($text, $size = 19) {
-    return '<w:p><w:pPr><w:ind w:left="420" w:hanging="240"/><w:spacing w:after="60"/><w:jc w:val="both"/></w:pPr>'
-         . '<w:r><w:rPr><w:sz w:val="' . $size . '"/><w:szCs w:val="' . $size . '"/></w:rPr>'
-         . '<w:t xml:space="preserve">• ' . docx_esc($text) . '</w:t></w:r></w:p>';
-}
-
-/** A plain (non-justified) paragraph, optionally bold/italic — used for entry titles/meta lines. */
-function docx_line($text, $bold = false, $italic = false, $size = 20, $color = null, $spacingAfter = 20) {
-    if (trim((string)$text) === '') return '';
-    $rpr = '<w:rPr>';
-    if ($bold) $rpr .= '<w:b/>';
-    if ($italic) $rpr .= '<w:i/>';
-    if ($color) $rpr .= '<w:color w:val="' . $color . '"/>';
-    $rpr .= '<w:sz w:val="' . $size . '"/><w:szCs w:val="' . $size . '"/></w:rPr>';
-    return '<w:p><w:pPr><w:spacing w:after="' . $spacingAfter . '"/></w:pPr>'
-         . '<w:r>' . $rpr . '<w:t xml:space="preserve">' . docx_esc($text) . '</w:t></w:r></w:p>';
-}
-
-function generate_resume_builder_docx($build, $user = null) {
-    $data = get_resume_builder_data($build, $user);
-
-    $contacts = array_filter([$data['email'], $data['phone'], $data['location']]);
-    $contact_line = implode('   •   ', $contacts);
-
-    $body = '';
-
-    // Header: name, target title, contact line
-    $body .= '<w:p><w:pPr><w:spacing w:after="40"/></w:pPr>'
-           . '<w:r><w:rPr><w:b/><w:sz w:val="40"/><w:szCs w:val="40"/></w:rPr>'
-           . '<w:t xml:space="preserve">' . docx_esc($data['full_name']) . '</w:t></w:r></w:p>';
-    $body .= docx_line($data['target_title'], true, false, 24, '6B8A00', 40);
-    if ($contact_line !== '') {
-        $body .= '<w:p><w:pPr><w:spacing w:after="200"/><w:pBdr><w:bottom w:val="single" w:sz="10" w:space="6" w:color="6B8A00"/></w:pBdr></w:pPr>'
-               . '<w:r><w:rPr><w:color w:val="4B5563"/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'
-               . '<w:t xml:space="preserve">' . docx_esc($contact_line) . '</w:t></w:r></w:p>';
-    }
-
-    if (!empty($data['summary'])) {
-        $body .= docx_heading('Professional Summary');
-        $body .= docx_prose_paragraphs($data['summary']);
-    }
-
-    $exp_xml = '';
-    if (!empty($data['experience'])) {
-        $exp_xml .= docx_heading('Work Experience');
-        foreach ($data['experience'] as $exp) {
-            $role = trim($exp['role'] ?? '');
-            $comp = trim($exp['company'] ?? '');
-            $dur = trim($exp['duration'] ?? '');
-            $title_line = $role . ($role && $comp ? ' — ' : '') . $comp;
-            $exp_xml .= docx_line($title_line ?: 'Experience Entry', true, false, 20, '111827', 10);
-            if ($dur) $exp_xml .= docx_line($dur, false, true, 18, '6B7280', 30);
-            if (!empty($exp['bullets']) && is_array($exp['bullets'])) {
-                foreach ($exp['bullets'] as $b) {
-                    $b = trim($b);
-                    if ($b !== '') $exp_xml .= docx_bullet($b);
-                }
-            } elseif (!empty($exp['notes'])) {
-                $exp_xml .= docx_prose_paragraphs($exp['notes'], 19);
-            }
-        }
-    }
-
-    $edu_xml = '';
-    if (!empty($data['education'])) {
-        $edu_xml .= docx_heading('Education & Credentials');
-        foreach ($data['education'] as $edu) {
-            $deg = trim($edu['degree'] ?? '');
-            $sch = trim($edu['school'] ?? '');
-            $yr = trim($edu['year'] ?? '');
-            $edu_xml .= docx_line($deg ?: 'Degree / Qualification', true, false, 20, '111827', 10);
-            $meta = trim($sch . ($yr ? ' · ' . $yr : ''));
-            if ($meta) $edu_xml .= docx_line($meta, false, true, 18, '4B5563', 30);
-        }
-    }
-
-    $body .= $data['is_fresh_grad'] ? ($edu_xml . $exp_xml) : ($exp_xml . $edu_xml);
-
-    if (!empty($data['skills'])) {
-        $skills_list = [];
-        if (is_array($data['skills'])) {
-            foreach ($data['skills'] as $s) {
-                $s = trim((string)$s);
-                if ($s !== '') $skills_list[] = $s;
-            }
-        } elseif (is_string($data['skills']) && trim($data['skills']) !== '') {
-            foreach (explode(',', $data['skills']) as $p) {
-                $p = trim($p);
-                if ($p !== '') $skills_list[] = $p;
-            }
-        }
-        if (!empty($skills_list)) {
-            $body .= docx_heading('Core Skills & Competencies');
-            foreach ($skills_list as $sk) {
-                $body .= docx_bullet($sk);
-            }
-        }
-    }
-
-    if (!empty($data['achievements'])) {
-        $body .= docx_heading('Key Achievements & Certifications');
-        foreach ($data['achievements'] as $ach) {
-            $ach = trim($ach);
-            if ($ach !== '') $body .= docx_bullet($ach);
-        }
-    }
-
-    if (!empty($data['references'])) {
-        $body .= docx_heading('References');
-        foreach ($data['references'] as $ref) {
-            $rname = trim($ref['name'] ?? '');
-            if ($rname === '') continue;
-            $rtitle = trim($ref['title'] ?? '');
-            $rcontact = trim($ref['contact'] ?? '');
-            $body .= docx_line($rname, true, false, 20, '111827', 10);
-            if ($rtitle) $body .= docx_line($rtitle, false, true, 18, '4B5563', 10);
-            if ($rcontact) $body .= docx_line($rcontact, false, false, 18, '374151', 30);
-        }
-    }
-
-    // A4 in twentieths of a point (11906 x 16838), ~0.79in margins
-    $document_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        . '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-        . '<w:body>' . $body
-        . '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
-        . '<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/>'
-        . '</w:sectPr></w:body></w:document>';
-
-    $content_types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-        . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-        . '<Default Extension="xml" ContentType="application/xml"/>'
-        . '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-        . '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
-        . '</Types>';
-
-    $rels_root = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-        . '</Relationships>';
-
-    $rels_document = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
-        . '</Relationships>';
-
-    $styles_xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        . '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-        . '<w:docDefaults><w:rPrDefault><w:rPr>'
-        . '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>'
-        . '<w:sz w:val="21"/><w:szCs w:val="21"/><w:lang w:val="en-US"/>'
-        . '</w:rPr></w:rPrDefault></w:docDefaults>'
-        . '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>'
-        . '</w:styles>';
-
-    $tmp_path = tempnam(sys_get_temp_dir(), 'kresume_') . '.docx';
-    $zip = new \ZipArchive();
-    if ($zip->open($tmp_path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
-        throw new \RuntimeException("Unable to create temporary .docx archive.");
-    }
-    $zip->addFromString('[Content_Types].xml', $content_types);
-    $zip->addFromString('_rels/.rels', $rels_root);
-    $zip->addFromString('word/document.xml', $document_xml);
-    $zip->addFromString('word/_rels/document.xml.rels', $rels_document);
-    $zip->addFromString('word/styles.xml', $styles_xml);
-    $zip->close();
-
-    $bytes = file_get_contents($tmp_path);
-    @unlink($tmp_path);
-
-    if ($bytes === false) {
-        throw new \RuntimeException("Failed to read generated .docx file.");
-    }
-
-    return $bytes;
-}
-
-/**
- * Streams the generated Word document directly to the browser as a download.
- */
-function stream_resume_builder_docx($build, $user = null) {
-    $data = get_resume_builder_data($build, $user);
-    $name_part = sanitize_resume_filename($data['full_name']);
-    $title_part = sanitize_resume_filename($data['target_title']);
-    $filename = "Resume_{$name_part}_{$title_part}.docx";
-
-    $docx_content = generate_resume_builder_docx($build, $user);
-
-    while (ob_get_level() > 0) {
-        ob_end_clean();
-    }
-
-    header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Content-Length: ' . strlen($docx_content));
-    header('Cache-Control: private, max-age=0, must-revalidate');
-    header('Pragma: public');
-    header('X-Content-Type-Options: nosniff');
-
-    echo $docx_content;
     exit;
 }
