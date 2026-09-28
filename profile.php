@@ -63,6 +63,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $smtp_pass = trim($_POST['smtp_pass'] ?? '');
         $smtp_port = trim($_POST['smtp_port'] ?? '587');
         $smtp_from = trim($_POST['smtp_from'] ?? '');
+        $smtp_secure = trim($_POST['smtp_secure'] ?? 'tls');
+        $smtp_from_name = trim($_POST['smtp_from_name'] ?? '');
 
         $config_file = __DIR__ . '/config.json';
         $curr_config = file_exists($config_file) ? json_decode(file_get_contents($config_file), true) : [];
@@ -79,9 +81,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $curr_config['smtp_port'] = $smtp_port;
         $curr_config['smtp_from'] = $smtp_from;
+        $curr_config['smtp_secure'] = $smtp_secure;
+        $curr_config['smtp_from_name'] = $smtp_from_name;
 
         file_put_contents($config_file, json_encode($curr_config, JSON_PRETTY_PRINT));
-        $_SESSION['toast'] = "Settings & PHPMailer Mailer Config saved!";
+        $_SESSION['toast'] = "Settings & PHPMailer SMTP Configuration saved!";
         header("Location: profile.php");
         exit;
     }
@@ -97,19 +101,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         require_once __DIR__ . '/mailer.php';
-        $res = send_questionnaire_email(
-            $user['name'],
-            $target_email,
-            "Software Engineer Position",
-            "Screening Questionnaire Assessment",
-            "test_token_" . time(),
-            [
-                "What is your expected salary and notice period?",
-                "What relevant technical experience do you bring to this role?"
-            ]
-        );
+        $res = send_test_email($target_email);
         if (!empty($res['success'])) {
-            $_SESSION['toast'] = "Test questionnaire email dispatched to " . htmlspecialchars($target_email) . " via PHPMailer!";
+            $transport_note = !empty($res['is_smtp']) ? "via Authenticated SMTP" : "via Native mail() [Warning: High spam risk!]";
+            $_SESSION['toast'] = "Test deliverability email dispatched to " . htmlspecialchars($target_email) . " ({$transport_note})! Check your inbox.";
         } else {
             $_SESSION['error'] = "PHPMailer SMTP Test Failed: " . ($res['error'] ?? 'Unknown error');
         }
@@ -1022,7 +1017,7 @@ if ($user['role'] === 'candidate') {
                     </div>
                     <p style="font-size:13px; color:var(--mut); margin-bottom:20px;">Manage backend Google Gemini AI model parameters and PHPMailer SMTP credentials for candidate email dispatches.</p>
                     
-                    <form method="POST">
+                    <form method="POST" id="smtpConfigForm">
                         <input type="hidden" name="action" value="update_api_key">
                         
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px;">
@@ -1043,36 +1038,84 @@ if ($user['role'] === 'candidate') {
                         </div>
 
                         <div style="border-top:1px dashed var(--bdr); padding-top:20px; margin-top:20px;">
-                            <div style="font-size:14px; font-weight:700; color:var(--txt); margin-bottom:8px; display:flex; align-items:center; gap:6px;">
-                                <span>📧</span> PHPMailer SMTP Dispatcher Settings
-                            </div>
-                            <div style="background:rgba(107, 138, 0, 0.08); border:1px solid rgba(107, 138, 0, 0.25); border-radius:12px; padding:14px 18px; margin-bottom:20px; font-size:12.5px; color:var(--txt); line-height:1.5;">
-                                💡 <strong>Gmail Users Note:</strong> Google requires a 16-character <strong>App Password</strong>. Enable 2-Step Verification on your Google Account and generate one at <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--acc); font-weight:700;">myaccount.google.com/apppasswords</a>.
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+                                <div style="font-size:14px; font-weight:700; color:var(--txt); display:flex; align-items:center; gap:6px;">
+                                    <span>📧</span> PHPMailer SMTP Dispatcher & Anti-Spam Settings
+                                </div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    <button type="button" onclick="applySmtpPreset('gmail')" class="btn-secondary" style="padding:5px 12px; font-size:11.5px; font-weight:700; cursor:pointer;">⚡ Gmail Preset</button>
+                                    <button type="button" onclick="applySmtpPreset('brevo')" class="btn-secondary" style="padding:5px 12px; font-size:11.5px; font-weight:700; cursor:pointer;">⚡ Brevo Preset</button>
+                                    <button type="button" onclick="applySmtpPreset('sendgrid')" class="btn-secondary" style="padding:5px 12px; font-size:11.5px; font-weight:700; cursor:pointer;">⚡ SendGrid Preset</button>
+                                </div>
                             </div>
 
-                            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px;">
+                            <?php if (empty($cfg['smtp_host'])): ?>
+                                <!-- High Spam Warning Banner -->
+                                <div style="background:#FEF2F2; border:1px solid #FCA5A5; border-left:5px solid #EF4444; border-radius:10px; padding:14px 18px; margin-bottom:20px; font-size:12.5px; color:#991B1B; line-height:1.6;">
+                                    <div style="font-weight:700; font-size:13.5px; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                                        ⚠️ Emails are currently going to Spam / Junk!
+                                    </div>
+                                    SMTP is not configured. Keria is currently defaulting to PHP's unauthenticated native <code>mail()</code> on localhost. Major providers like <strong>Gmail, Outlook, Yahoo, and iCloud</strong> immediately flag unauthenticated localhost emails as Spam/Junk.
+                                    <br><strong>Solution:</strong> Fill in an authenticated SMTP service below (e.g. Gmail with an App Password or SendGrid/Brevo) to ensure 100% primary inbox delivery!
+                                </div>
+                            <?php else: ?>
+                                <!-- Active SMTP Status Banner -->
+                                <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-left:5px solid #10B981; border-radius:10px; padding:14px 18px; margin-bottom:20px; font-size:12.5px; color:#065F46; line-height:1.5;">
+                                    <strong>✅ Authenticated SMTP Active:</strong> Sending via <code><?= htmlspecialchars($cfg['smtp_host']) ?>:<?= htmlspecialchars($cfg['smtp_port'] ?? '587') ?></code>.
+                                    Anti-spam envelope alignment (Return-Path), FQDN Message-ID, and RFC transactional headers are actively attached.
+                                </div>
+                            <?php endif; ?>
+
+                            <!-- Deliverability & Anti-Spam Guidance Card -->
+                            <div style="background:rgba(107, 138, 0, 0.08); border:1px solid rgba(107, 138, 0, 0.25); border-radius:12px; padding:16px 20px; margin-bottom:20px; font-size:12.5px; color:var(--txt); line-height:1.6;">
+                                <div style="font-weight:700; margin-bottom:6px; color:var(--txt); font-size:13px;">🛡️ 4 Golden Rules to Prevent Emails from Landing in Junk/Spam:</div>
+                                <ul style="margin:0; padding-left:20px;">
+                                    <li><strong>1. Always use Authenticated SMTP:</strong> Never use local unauthenticated mail. Use Gmail, Brevo, SendGrid, Mailgun, or your domain's SMTP.</li>
+                                    <li><strong>2. From Address Alignment:</strong> The <em>Sender Email (From Header)</em> <u>MUST match</u> your SMTP Username (e.g. your Gmail address). If they differ, Gmail and Outlook flag it as phishing/spoofing.</li>
+                                    <li><strong>3. Gmail Users:</strong> You MUST use a 16-character <strong>Google App Password</strong> (not your normal Google account password). Generate one at <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--acc); font-weight:700;">myaccount.google.com/apppasswords</a>.</li>
+                                    <li><strong>4. Custom Domain DNS (SPF & DKIM):</strong> If using a custom domain (e.g. <code>@company.com</code>), ensure your DNS has an SPF record (<code>v=spf1 include:... ~all</code>) and DKIM keys configured.</li>
+                                </ul>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns:1.5fr 1fr 1fr; gap:16px; margin-bottom:16px;">
                                 <div>
                                     <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">SMTP Host Server</label>
-                                    <input type="text" name="smtp_host" placeholder="smtp.gmail.com" value="<?= htmlspecialchars($cfg['smtp_host'] ?? '') ?>">
+                                    <input type="text" name="smtp_host" id="smtp_host" placeholder="smtp.gmail.com" value="<?= htmlspecialchars($cfg['smtp_host'] ?? '') ?>">
                                 </div>
                                 <div>
-                                    <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">SMTP User / Email</label>
-                                    <input type="text" name="smtp_user" placeholder="your.email@gmail.com" value="<?= htmlspecialchars($cfg['smtp_user'] ?? '') ?>">
+                                    <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">SMTP Port</label>
+                                    <input type="number" name="smtp_port" id="smtp_port" placeholder="587" value="<?= htmlspecialchars($cfg['smtp_port'] ?? '587') ?>">
                                 </div>
                                 <div>
-                                    <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">SMTP App Password</label>
-                                    <input type="password" name="smtp_pass" placeholder="<?= htmlspecialchars($smtp_pass_hint) ?>" value="" autocomplete="off">
+                                    <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">Encryption Protocol</label>
+                                    <select name="smtp_secure" id="smtp_secure">
+                                        <option value="tls" <?= (($cfg['smtp_secure'] ?? 'tls') === 'tls') ? 'selected' : '' ?>>TLS / STARTTLS (Port 587 - Recommended)</option>
+                                        <option value="ssl" <?= (($cfg['smtp_secure'] ?? '') === 'ssl') ? 'selected' : '' ?>>SSL / SMTPS (Port 465)</option>
+                                        <option value="none" <?= (($cfg['smtp_secure'] ?? '') === 'none') ? 'selected' : '' ?>>None / Plain (Port 25)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
+                                <div>
+                                    <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">SMTP User / Login Email</label>
+                                    <input type="text" name="smtp_user" id="smtp_user" placeholder="your.name@gmail.com" value="<?= htmlspecialchars($cfg['smtp_user'] ?? '') ?>" oninput="syncSenderEmailIfEmpty(this.value)">
+                                </div>
+                                <div>
+                                    <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">SMTP App Password / Token</label>
+                                    <input type="password" name="smtp_pass" id="smtp_pass" placeholder="<?= htmlspecialchars($smtp_pass_hint) ?>" value="" autocomplete="off">
                                 </div>
                             </div>
 
                             <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px;">
                                 <div>
-                                    <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">SMTP Port</label>
-                                    <input type="number" name="smtp_port" placeholder="587" value="<?= htmlspecialchars($cfg['smtp_port'] ?? '587') ?>">
+                                    <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">Sender Email (From Header)</label>
+                                    <input type="email" name="smtp_from" id="smtp_from" placeholder="your.name@gmail.com" value="<?= htmlspecialchars($cfg['smtp_from'] ?? '') ?>">
+                                    <div style="font-size:11px; color:var(--mut); margin-top:4px;">⚠️ Must match your SMTP user or domain to pass anti-spam checks.</div>
                                 </div>
                                 <div>
-                                    <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">Sender Email (From Header)</label>
-                                    <input type="email" name="smtp_from" placeholder="your.email@gmail.com" value="<?= htmlspecialchars($cfg['smtp_from'] ?? '') ?>">
+                                    <label style="display:block; font-size:11.5px; font-weight:600; color:var(--mut); margin-bottom:6px;">Sender Display Name</label>
+                                    <input type="text" name="smtp_from_name" id="smtp_from_name" placeholder="Keria Recruitment" value="<?= htmlspecialchars($cfg['smtp_from_name'] ?? 'Keria Recruitment Team') ?>">
                                 </div>
                             </div>
                         </div>
@@ -1082,14 +1125,47 @@ if ($user['role'] === 'candidate') {
                         </div>
                     </form>
 
-                    <form method="POST" onsubmit="return confirm('Send test questionnaire email to ' + this.test_target_email.value + '?');" style="margin-top:20px; border-top:1px dashed var(--bdr); padding-top:20px; display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap;">
+                    <script>
+                        function applySmtpPreset(type) {
+                            const host = document.getElementById('smtp_host');
+                            const port = document.getElementById('smtp_port');
+                            const secure = document.getElementById('smtp_secure');
+                            const fromName = document.getElementById('smtp_from_name');
+                            
+                            if (type === 'gmail') {
+                                host.value = 'smtp.gmail.com';
+                                port.value = '587';
+                                secure.value = 'tls';
+                                if (!fromName.value) fromName.value = 'Keria Recruitment Team';
+                                alert('Gmail preset applied! Remember to enter your Gmail address in SMTP User and use a 16-character App Password from myaccount.google.com/apppasswords.');
+                            } else if (type === 'brevo') {
+                                host.value = 'smtp-relay.brevo.com';
+                                port.value = '587';
+                                secure.value = 'tls';
+                            } else if (type === 'sendgrid') {
+                                host.value = 'smtp.sendgrid.net';
+                                port.value = '587';
+                                secure.value = 'tls';
+                            }
+                        }
+
+                        function syncSenderEmailIfEmpty(val) {
+                            const fromInput = document.getElementById('smtp_from');
+                            if (!fromInput.value || fromInput.value.includes('@gmail.com') || fromInput.dataset.synced === 'true') {
+                                fromInput.value = val;
+                                fromInput.dataset.synced = 'true';
+                            }
+                        }
+                    </script>
+
+                    <form method="POST" onsubmit="return confirm('Send test deliverability email to ' + this.test_target_email.value + '?');" style="margin-top:20px; border-top:1px dashed var(--bdr); padding-top:20px; display:flex; gap:16px; align-items:flex-end; flex-wrap:wrap;">
                         <input type="hidden" name="action" value="test_smtp">
                         <div style="flex:1; min-width:280px;">
-                            <label style="display:block; font-size:11.5px; font-weight:700; color:var(--mut); margin-bottom:6px;">Test Email Target Recipient</label>
+                            <label style="display:block; font-size:11.5px; font-weight:700; color:var(--mut); margin-bottom:6px;">Deliverability Test Target Recipient</label>
                             <input type="email" name="test_target_email" value="nuriman.kadir01@s.unikl.edu.my" required onkeydown="if(event.key === 'Enter'){ event.preventDefault(); return false; }">
                         </div>
                         <div>
-                            <button type="submit" class="btn-secondary" style="padding:11px 20px; font-weight:700; white-space:nowrap;">🧪 Send Test Email &rarr;</button>
+                            <button type="submit" class="btn-secondary" style="padding:11px 20px; font-weight:700; white-space:nowrap;">🧪 Test Inbox Deliverability &rarr;</button>
                         </div>
                     </form>
                 </div>
