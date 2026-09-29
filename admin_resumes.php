@@ -226,6 +226,10 @@ $count_total = count($all_resumes);
             box-shadow: var(--shadow-sm);
             width: 100%;
         }
+        .admin-table-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
         .admin-tr {
             display: grid;
             grid-template-columns: 140px 1.4fr 1.4fr 1.3fr 110px 80px 130px;
@@ -304,8 +308,8 @@ $count_total = count($all_resumes);
             .header-inner { padding: 0 16px !important; }
             main { padding: 16px 16px 32px !important; }
             .stats-summary-grid { grid-template-columns: repeat(2, 1fr); }
-            .admin-tr { grid-template-columns: 120px 1fr 1fr 100px 90px; }
-            .admin-th-hide-mobile { display: none; }
+            .admin-table { width: max-content; min-width: 100%; }
+            .admin-tr { grid-template-columns: 140px 190px 170px 160px 100px 70px 170px; min-width: 900px; }
         }
     </style>
 </head>
@@ -403,6 +407,7 @@ $count_total = count($all_resumes);
             </div>
 
             <!-- Resumes Table -->
+            <div class="admin-table-scroll">
             <div class="admin-table">
                 <div class="admin-tr admin-th">
                     <div>Source</div>
@@ -484,50 +489,30 @@ $count_total = count($all_resumes);
                             <!-- Action -->
                             <div style="text-align:center;">
                                 <?php if($r['source_type'] === 'job_apply' && !empty($r['resume_path']) && file_exists($r['resume_path'])): ?>
-                                    <div style="display:inline-flex; align-items:center; gap:4px; justify-content:center;">
-                                        <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 8px; font-size:11px; text-decoration:none;" title="View Original PDF (New Tab)">
-                                            📄 View PDF
-                                        </a>
-                                        <button type="button" onclick="openPdfModal('<?= htmlspecialchars(addslashes($r['resume_path'])) ?>', '<?= htmlspecialchars(addslashes($r['job_title'])) ?>', '<?= htmlspecialchars(addslashes($r['candidate_name'])) ?> &bull; <?= htmlspecialchars(addslashes($r['candidate_email'])) ?>', '<?= htmlspecialchars(addslashes($r['filename'])) ?>', '<?= htmlspecialchars(addslashes($r['resume_path'])) ?>')" class="btn-secondary" style="padding:4px 6px; font-size:11px;" title="Quick PDF Preview Modal">
-                                            👁️
-                                        </button>
-                                    </div>
+                                    <button type="button" onclick="openPdfModal('<?= htmlspecialchars(addslashes($r['resume_path'])) ?>', '<?= htmlspecialchars(addslashes($r['job_title'])) ?>', '<?= htmlspecialchars(addslashes($r['candidate_name'])) ?> &bull; <?= htmlspecialchars(addslashes($r['candidate_email'])) ?>', '<?= htmlspecialchars(addslashes($r['filename'])) ?>', '<?= htmlspecialchars(addslashes($r['resume_path'])) ?>')" class="btn-secondary" style="padding:4px 9px; font-size:11px;" title="View PDF">
+                                        👁️ View PDF
+                                    </button>
                                 <?php elseif($r['source_type'] === 'job_apply'): ?>
                                     <a href="candidate.php?id=<?= urlencode($r['id']) ?>" target="_blank" class="btn-secondary" style="padding:4px 9px; font-size:11px; text-decoration:none;">
                                         👤 Details
                                     </a>
                                 <?php elseif($r['source_type'] === 'resume_builder'): ?>
-                                    <div style="display:inline-flex; align-items:center; gap:4px; justify-content:center;">
-                                        <a href="view_builder_pdf.php?id=<?= urlencode($r['id']) ?>" target="_blank" class="btn-secondary" style="padding:4px 8px; font-size:11px; text-decoration:none;" title="View Resume Builder Output in PDF (New Tab)">
-                                            📄 View PDF
-                                        </a>
-                                        <button type="button" onclick="openBuilderPreview(<?= htmlspecialchars(json_encode($r)) ?>)" class="btn-secondary" style="padding:4px 6px; font-size:11px;" title="Quick PDF Preview Modal">
-                                            👁️
-                                        </button>
-                                    </div>
+                                    <button type="button" onclick="openBuilderPreview(<?= htmlspecialchars(json_encode($r)) ?>)" class="btn-secondary" style="padding:4px 9px; font-size:11px;" title="View PDF">
+                                        👁️ View PDF
+                                    </button>
                                 <?php elseif($r['source_type'] === 'default_resume'): ?>
                                     <?php if(!empty($r['resume_path']) && file_exists($r['resume_path'])): ?>
-                                        <div style="display:inline-flex; align-items:center; gap:4px; justify-content:center;">
-                                            <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 8px; font-size:11px; text-decoration:none;" title="View Saved User Resume PDF (New Tab)">
-                                                📄 View PDF
-                                            </a>
-                                            <button type="button" onclick="openPdfModal('<?= htmlspecialchars(addslashes($r['resume_path'])) ?>', '<?= htmlspecialchars(addslashes($r['job_title'])) ?>', '<?= htmlspecialchars(addslashes($r['candidate_name'])) ?> &bull; <?= htmlspecialchars(addslashes($r['candidate_email'])) ?>', '<?= htmlspecialchars(addslashes($r['filename'])) ?>', '<?= htmlspecialchars(addslashes($r['resume_path'])) ?>')" class="btn-secondary" style="padding:4px 6px; font-size:11px;" title="Quick PDF Preview Modal">
-                                                👁️
-                                            </button>
-                                        </div>
+                                        <button type="button" onclick="openPdfModal('<?= htmlspecialchars(addslashes($r['resume_path'])) ?>', '<?= htmlspecialchars(addslashes($r['job_title'])) ?>', '<?= htmlspecialchars(addslashes($r['candidate_name'])) ?> &bull; <?= htmlspecialchars(addslashes($r['candidate_email'])) ?>', '<?= htmlspecialchars(addslashes($r['filename'])) ?>', '<?= htmlspecialchars(addslashes($r['resume_path'])) ?>')" class="btn-secondary" style="padding:4px 9px; font-size:11px;" title="View PDF">
+                                            👁️ View PDF
+                                        </button>
                                     <?php else: ?>
                                         <span style="font-size:11px; color:var(--mut);">File Missing</span>
                                     <?php endif; ?>
                                 <?php elseif($r['source_type'] === 'resume_checker'): ?>
                                     <?php if(!empty($r['resume_path']) && file_exists(__DIR__ . '/' . $r['resume_path'])): ?>
-                                        <div style="display:inline-flex; align-items:center; gap:4px; justify-content:center;">
-                                            <a href="<?= htmlspecialchars($r['resume_path']) ?>" target="_blank" class="btn-secondary" style="padding:4px 8px; font-size:11px; text-decoration:none;" title="View Uploaded PDF (New Tab)">
-                                                📄 View PDF
-                                            </a>
-                                            <button type="button" onclick="openPdfModal('<?= htmlspecialchars(addslashes($r['resume_path'])) ?>', '<?= htmlspecialchars(addslashes($r['job_title'])) ?>', '<?= htmlspecialchars(addslashes($r['candidate_name'])) ?> &bull; <?= htmlspecialchars(addslashes($r['candidate_email'])) ?>', '<?= htmlspecialchars(addslashes($r['filename'])) ?>', '<?= htmlspecialchars(addslashes($r['resume_path'])) ?>')" class="btn-secondary" style="padding:4px 6px; font-size:11px;" title="Quick PDF Preview Modal">
-                                                👁️
-                                            </button>
-                                        </div>
+                                        <button type="button" onclick="openPdfModal('<?= htmlspecialchars(addslashes($r['resume_path'])) ?>', '<?= htmlspecialchars(addslashes($r['job_title'])) ?>', '<?= htmlspecialchars(addslashes($r['candidate_name'])) ?> &bull; <?= htmlspecialchars(addslashes($r['candidate_email'])) ?>', '<?= htmlspecialchars(addslashes($r['filename'])) ?>', '<?= htmlspecialchars(addslashes($r['resume_path'])) ?>')" class="btn-secondary" style="padding:4px 9px; font-size:11px;" title="View PDF">
+                                            👁️ View PDF
+                                        </button>
                                     <?php else: ?>
                                         <button type="button" onclick="openCheckerPreview(<?= htmlspecialchars(json_encode($r)) ?>)" class="btn-secondary" style="padding:4px 9px; font-size:11px;" title="Original file no longer on disk — view the extracted resume text instead">
                                             👁️ View Report
@@ -540,6 +525,7 @@ $count_total = count($all_resumes);
                         </div>
                     <?php endforeach; ?>
                 <?php endif; ?>
+            </div>
             </div>
         </div>
 

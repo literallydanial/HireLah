@@ -568,13 +568,25 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 max-width: calc(100vw - 32px) !important;
             }
         }
+        /* Admin tables (Registered Accounts, Job Postings Moderation) don't
+           fit a phone screen no matter how the columns are sized — instead
+           of squeezing them (which was the bug: the old mobile override
+           only listed 5 column-tracks for a row that actually has 7
+           visible cells, so Grid auto-generated unpredictable extra
+           tracks and the checkbox/badges/buttons wrapped and scattered),
+           each table scrolls sideways at its natural width so every
+           column stays legible and aligned with its header. */
+        .admin-table-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
         @media (max-width: 1024px) {
             .header-inner { padding: 0 16px !important; }
             main { padding: 16px 16px 32px !important; }
             .stats-summary-grid { grid-template-columns: 1fr 1fr; }
             .health-grid { grid-template-columns: 1fr; }
-            .admin-tr { grid-template-columns: 30px 1fr 1.2fr 100px 110px; }
-            .admin-th-hide-mobile { display: none; }
+            .admin-table { width: max-content; min-width: 100%; }
+            .admin-tr { grid-template-columns: 34px 50px 190px 190px 85px 100px 110px 185px; min-width: 750px; }
         }
     </style>
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=<?php echo @filemtime(__DIR__.'/favicon-32x32.png'); ?>">
@@ -911,6 +923,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                     <input type="hidden" name="action" value="bulk_delete_users">
                 </form>
 
+                <div class="admin-table-scroll">
                 <div class="admin-table">
                     <div class="admin-tr admin-th">
                         <div><input type="checkbox" id="selectAllUsers" onclick="toggleSelectAllUsers(this)" title="Select All" style="width:15px; height:15px; cursor:pointer;"></div>
@@ -1007,12 +1020,14 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                         </div>
                     <?php endforeach; ?>
                 </div>
+                </div>
             </div>
         </div>
 
         <!-- Tab 2: Job Postings Moderation -->
         <div id="jobsTab" class="admin-tab-pane" style="display:none;">
             <div class="panel" style="padding:20px;">
+                <div class="admin-table-scroll">
                 <div class="admin-table">
                     <div class="admin-tr admin-th" style="grid-template-columns: 60px 1.8fr 1.4fr 110px 110px 100px;">
                         <div>ID</div>
@@ -1041,6 +1056,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                             </div>
                         </div>
                     <?php endforeach; ?>
+                </div>
                 </div>
             </div>
         </div>
