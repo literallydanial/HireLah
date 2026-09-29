@@ -156,10 +156,23 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Resume Builder - Keria</title>
+    <title>Free AI Resume Builder Malaysia — Build a Professional Resume Fast | Keria</title>
+    <meta name="description" content="Build a professional, ATS-friendly resume in minutes with Keria’s free AI resume builder. Get AI-elaborated content and download as PDF or Word.">
+    <link rel="canonical" href="https://thekeria.com/resume_builder.php">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Keria">
+    <meta property="og:title" content="Free AI Resume Builder Malaysia — Build a Professional Resume Fast | Keria">
+    <meta property="og:description" content="Build a professional, ATS-friendly resume in minutes with Keria’s free AI resume builder. Get AI-elaborated content and download as PDF or Word.">
+    <meta property="og:url" content="https://thekeria.com/resume_builder.php">
+    <meta property="og:image" content="https://thekeria.com/logo/logo.png">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Free AI Resume Builder Malaysia — Build a Professional Resume Fast | Keria">
+    <meta name="twitter:description" content="Build a professional, ATS-friendly resume in minutes with Keria’s free AI resume builder. Get AI-elaborated content and download as PDF or Word.">
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
-    <link rel="icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
-    <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=<?php echo @filemtime(__DIR__.'/favicon-32x32.png'); ?>">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=<?php echo @filemtime(__DIR__.'/favicon-16x16.png'); ?>">
+    <link rel="shortcut icon" href="favicon.ico?v=<?php echo @filemtime(__DIR__.'/favicon.ico'); ?>">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=<?php echo @filemtime(__DIR__.'/apple-touch-icon.png'); ?>">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Caveat:wght@600;700&display=swap');
 

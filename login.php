@@ -66,9 +66,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - Keria</title>
+    <meta name="description" content="Log in to your Keria account to manage job applications, resumes, or job postings.">
+    <link rel="canonical" href="https://thekeria.com/login.php">
+    <meta name="robots" content="noindex, follow">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Keria">
+    <meta property="og:title" content="Login - Keria">
+    <meta property="og:description" content="Log in to your Keria account to manage job applications, resumes, or job postings.">
+    <meta property="og:url" content="https://thekeria.com/login.php">
+    <meta property="og:image" content="https://thekeria.com/logo/logo.png">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Login - Keria">
+    <meta name="twitter:description" content="Log in to your Keria account to manage job applications, resumes, or job postings.">
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
-    <link rel="icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
-    <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=<?php echo @filemtime(__DIR__.'/favicon-32x32.png'); ?>">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=<?php echo @filemtime(__DIR__.'/favicon-16x16.png'); ?>">
+    <link rel="shortcut icon" href="favicon.ico?v=<?php echo @filemtime(__DIR__.'/favicon.ico'); ?>">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=<?php echo @filemtime(__DIR__.'/apple-touch-icon.png'); ?>">
 </head>
 <body style="display:flex; align-items:center; justify-content:center; min-height:100vh;">
     <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>

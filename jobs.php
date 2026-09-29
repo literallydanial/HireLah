@@ -96,6 +96,124 @@ foreach ($jobs as $idx => &$j) {
 }
 unset($j);
 
+// ------------------------------------------------------------
+// SEO: resolve a specific job from ?id= (or legacy ?job_id=) so this
+// page can serve a real per-job <title>/meta/canonical/JobPosting
+// schema, instead of the same generic title for every job.
+// Falls back to the generic job-board metadata when no id is given
+// or the id doesn't match any active job.
+// ------------------------------------------------------------
+$selected_job_id = null;
+if (!empty($_GET['id'])) {
+    $selected_job_id = (int)$_GET['id'];
+} elseif (!empty($_GET['job_id'])) {
+    $selected_job_id = (int)$_GET['job_id'];
+}
+
+$selected_job = null;
+if ($selected_job_id) {
+    foreach ($jobs as $jc) {
+        if ((int)$jc['id'] === $selected_job_id) {
+            $selected_job = $jc;
+            break;
+        }
+    }
+    if (!$selected_job) {
+        // Job might not be in the current filtered/search result set
+        // (e.g. a shared link with search params still in the URL) —
+        // look it up directly so the shared link still resolves.
+        $sel_stmt = $pdo->prepare("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name, u.company_logo
+                                    FROM jobs j LEFT JOIN users u ON j.employer_id = u.id
+                                    WHERE j.id = ? AND (j.status = 'Active' OR j.status IS NULL)");
+        $sel_stmt->execute([$selected_job_id]);
+        $selected_job = $sel_stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+}
+
+$site_base_url = 'https://thekeria.com';
+$page_title = 'Job Board — Browse Jobs in Malaysia | Keria';
+$page_description = 'Browse active job openings across Malaysia on Keria — filter by role, location, salary and work mode, then apply directly with your AI-built resume.';
+$canonical_url = $site_base_url . '/jobs.php';
+$og_image_url = $site_base_url . '/logo/logo.png';
+$job_schema_json = null;
+
+if ($selected_job) {
+    $sj_title   = $selected_job['job_title'];
+    $sj_company = $selected_job['employer_name'] ?: 'Keria Employer';
+    // Use a real place name only — never the department/team name, which
+    // schema.org's addressLocality requires to be an actual locality.
+    $sj_location = $selected_job['location'] ?: 'Kuala Lumpur, Malaysia';
+    $sj_desc_plain = trim(preg_replace('/\s+/', ' ', strip_tags($selected_job['description'] ?? '')));
+    if ($sj_desc_plain === '') {
+        $sj_desc_plain = "Apply for the $sj_title position at $sj_company in $sj_location, posted on Keria's job board.";
+    }
+
+    $page_title = "$sj_title at $sj_company — $sj_location | Keria Job Board";
+    $page_description = mb_strlen($sj_desc_plain) > 160 ? (mb_substr($sj_desc_plain, 0, 157) . '...') : $sj_desc_plain;
+    $canonical_url = $site_base_url . '/jobs.php?id=' . (int)$selected_job['id'];
+    if (!empty($selected_job['company_logo'])) {
+        $og_image_url = $site_base_url . '/' . ltrim($selected_job['company_logo'], '/');
+    }
+
+    // Map our free-text employment type to schema.org's enumerated values
+    $employment_type_map = [
+        'full-time' => 'FULL_TIME', 'full time' => 'FULL_TIME',
+        'part-time' => 'PART_TIME', 'part time' => 'PART_TIME',
+        'contract' => 'CONTRACTOR', 'internship' => 'INTERN', 'intern' => 'INTERN',
+        'temporary' => 'TEMPORARY', 'freelance' => 'CONTRACTOR',
+    ];
+    $schema_employment_type = $employment_type_map[strtolower(trim($selected_job['employment_type'] ?? ''))] ?? 'FULL_TIME';
+
+    $job_schema = [
+        '@context' => 'https://schema.org/',
+        '@type' => 'JobPosting',
+        'title' => $sj_title,
+        'description' => $sj_desc_plain,
+        'identifier' => [
+            '@type' => 'PropertyValue',
+            'name' => 'Keria',
+            'value' => (string)$selected_job['id'],
+        ],
+        'datePosted' => date('Y-m-d', strtotime($selected_job['created_at'] ?? 'now')),
+        'employmentType' => $schema_employment_type,
+        'hiringOrganization' => [
+            '@type' => 'Organization',
+            'name' => $sj_company,
+            'sameAs' => $site_base_url . '/jobs.php',
+        ],
+        'jobLocation' => [
+            '@type' => 'Place',
+            'address' => [
+                '@type' => 'PostalAddress',
+                'addressLocality' => $sj_location,
+                'addressCountry' => 'MY',
+            ],
+        ],
+    ];
+
+    if (!empty($selected_job['work_mode']) && stripos($selected_job['work_mode'], 'remote') !== false) {
+        $job_schema['jobLocationType'] = 'TELECOMMUTE';
+        $job_schema['applicantLocationRequirements'] = ['@type' => 'Country', 'name' => 'Malaysia'];
+    }
+
+    if (!empty($selected_job['salary_min']) || !empty($selected_job['salary_max'])) {
+        $min = $selected_job['salary_min'] ?: $selected_job['salary_max'];
+        $max = $selected_job['salary_max'] ?: $selected_job['salary_min'];
+        $job_schema['baseSalary'] = [
+            '@type' => 'MonetaryAmount',
+            'currency' => 'MYR',
+            'value' => [
+                '@type' => 'QuantitativeValue',
+                'minValue' => (float)$min,
+                'maxValue' => (float)$max,
+                'unitText' => 'MONTH',
+            ],
+        ];
+    }
+
+    $job_schema_json = json_encode($job_schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+}
+
 // Fetch set of job IDs & AI scores that the logged-in candidate has applied to
 $applied_job_ids = [];
 $candidate_scores = [];
@@ -132,13 +250,29 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Job Board — keria</title>
+    <title><?= htmlspecialchars($page_title) ?></title>
+    <meta name="description" content="<?= htmlspecialchars($page_description) ?>">
+    <link rel="canonical" href="<?= htmlspecialchars($canonical_url) ?>">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Keria">
+    <meta property="og:title" content="<?= htmlspecialchars($page_title) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars($page_description) ?>">
+    <meta property="og:url" content="<?= htmlspecialchars($canonical_url) ?>">
+    <meta property="og:image" content="<?= htmlspecialchars($og_image_url) ?>">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="<?= htmlspecialchars($page_title) ?>">
+    <meta name="twitter:description" content="<?= htmlspecialchars($page_description) ?>">
+    <?php if ($job_schema_json): ?>
+    <script type="application/ld+json"><?= $job_schema_json ?></script>
+    <?php endif; ?>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
-    <link rel="icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
-    <link rel="shortcut icon" type="image/png" href="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=<?php echo @filemtime(__DIR__.'/favicon-32x32.png'); ?>">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=<?php echo @filemtime(__DIR__.'/favicon-16x16.png'); ?>">
+    <link rel="shortcut icon" href="favicon.ico?v=<?php echo @filemtime(__DIR__.'/favicon.ico'); ?>">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=<?php echo @filemtime(__DIR__.'/apple-touch-icon.png'); ?>">
 
     <style>
         :root {
@@ -515,6 +649,9 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
             position: relative;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+            display: block;
+            text-decoration: none;
+            color: inherit;
         }
 
         .job-card-box:hover {
@@ -1771,7 +1908,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
 
                         $logo_src = !empty($j['company_logo']) ? htmlspecialchars($j['company_logo']) : '';
                     ?>
-                        <div class="job-card-box <?= $index === 0 ? 'selected-card' : '' ?>" id="card_<?= $j['id'] ?>" onclick="selectJob(<?= $j['id'] ?>)">
+                        <a href="jobs.php?id=<?= $j['id'] ?>" class="job-card-box <?= $index === 0 ? 'selected-card' : '' ?>" id="card_<?= $j['id'] ?>" onclick="selectJob(<?= $j['id'] ?>); return false;">
                             <div class="card-top-row">
                                 <div class="card-title-group">
                                     <div class="card-title-line">
@@ -1825,7 +1962,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                                     <span class="ai-score-pct" style="color: <?= $score_text_color ?>;"><?= $score_num ?>%</span>
                                 </div>
                             <?php endif; ?>
-                        </div>
+                        </a>
                     <?php endforeach; ?>
 
                 </div>
@@ -1833,7 +1970,44 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 <!-- Right Column: Sticky Job Details Preview -->
                 <div class="job-detail-sticky-pane">
                     <div class="job-detail-card-inner" id="jobDetailPreview">
+                        <?php if ($selected_job):
+                            $sj_salary = 'Salary Undisclosed';
+                            if (!empty($selected_job['salary_text'])) {
+                                $sj_salary = htmlspecialchars($selected_job['salary_text']);
+                            } elseif (!empty($selected_job['salary_min']) && !empty($selected_job['salary_max'])) {
+                                $sj_salary = 'RM ' . number_format($selected_job['salary_min']) . ' &ndash; RM ' . number_format($selected_job['salary_max']) . ' / month';
+                            } elseif (!empty($selected_job['salary_min'])) {
+                                $sj_salary = 'From RM ' . number_format($selected_job['salary_min']) . ' / month';
+                            } elseif (!empty($selected_job['salary_max'])) {
+                                $sj_salary = 'Up to RM ' . number_format($selected_job['salary_max']) . ' / month';
+                            }
+                        ?>
+                        <!-- Server-rendered so search engines and social-share previews see the
+                             real job content immediately; selectJob() below re-renders this same
+                             job interactively once the page's JS runs, so nothing is duplicated
+                             for a normal visitor. -->
+                        <div class="detail-top-bar">
+                            <h2 class="detail-job-title"><?= htmlspecialchars($selected_job['job_title']) ?></h2>
+                        </div>
+                        <div class="detail-company-subline">
+                            <strong><?= htmlspecialchars($selected_job['employer_name'] ?? 'Keria Employer') ?></strong>
+                            <span class="card-meta-dot">&bull;</span>
+                            <span>📍 <?= htmlspecialchars($selected_job['location'] ?: ($selected_job['department'] ?: 'Kuala Lumpur')) ?></span>
+                        </div>
+                        <div class="detail-salary-text"><span>💰</span> <span><?= $sj_salary ?></span></div>
+                        <div class="detail-meta-pills-row">
+                            <span class="detail-meta-pill">📋 <?= htmlspecialchars($selected_job['employment_type'] ?: 'Full-time') ?></span>
+                            <span class="detail-meta-pill">🏢 <?= htmlspecialchars($selected_job['work_mode'] ?: 'On-site') ?></span>
+                        </div>
+                        <div class="job-desc-section-wrapper">
+                            <div class="job-desc-header-row">
+                                <div class="job-desc-main-title"><span>📄</span><span>Job Description</span></div>
+                            </div>
+                            <p class="job-desc-paragraph"><?= nl2br(htmlspecialchars($selected_job['description'] ?? '')) ?></p>
+                        </div>
+                        <?php else: ?>
                         <!-- Loaded dynamically via JS -->
+                        <?php endif; ?>
                     </div>
                 </div>
 

@@ -279,14 +279,27 @@ if (file_exists('db.php')) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>keria — good people, brighter days.</title>
+    <title>Keria — AI Job Portal &amp; Free Resume Builder in Malaysia</title>
+    <meta name="description" content="Find jobs in Malaysia, build a professional resume with AI, and get instant resume feedback — all in one free platform for job seekers and employers.">
+    <link rel="canonical" href="https://thekeria.com/index.php">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Keria">
+    <meta property="og:title" content="Keria — AI Job Portal &amp; Free Resume Builder in Malaysia">
+    <meta property="og:description" content="Find jobs in Malaysia, build a professional resume with AI, and get instant resume feedback — all in one free platform for job seekers and employers.">
+    <meta property="og:url" content="https://thekeria.com/index.php">
+    <meta property="og:image" content="https://thekeria.com/logo/logo.png">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Keria — AI Job Portal &amp; Free Resume Builder in Malaysia">
+    <meta name="twitter:description" content="Find jobs in Malaysia, build a professional resume with AI, and get instant resume feedback — all in one free platform for job seekers and employers.">
+    <script type="application/ld+json">{"@context":"https://schema.org/","@type":"Organization","name":"Keria","url":"https://thekeria.com/","logo":"https://thekeria.com/logo/logo.png","description":"AI-powered job portal and resume builder in Malaysia.","sameAs":[]}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
-    <link rel="icon" type="image/png" href="assets/casey-2.png?v=<?php echo @filemtime(__DIR__.'/assets/casey-2.png'); ?>">
-    <link rel="shortcut icon" type="image/png" href="assets/casey-2.png?v=<?php echo @filemtime(__DIR__.'/assets/casey-2.png'); ?>">
-    <link rel="apple-touch-icon" href="assets/casey-1.png?v=<?php echo @filemtime(__DIR__.'/assets/casey-1.png'); ?>">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=<?php echo @filemtime(__DIR__.'/favicon-32x32.png'); ?>">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=<?php echo @filemtime(__DIR__.'/favicon-16x16.png'); ?>">
+    <link rel="shortcut icon" href="favicon.ico?v=<?php echo @filemtime(__DIR__.'/favicon.ico'); ?>">
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=<?php echo @filemtime(__DIR__.'/apple-touch-icon.png'); ?>">
     
     <style>
         :root {
