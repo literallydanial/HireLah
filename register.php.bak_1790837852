@@ -174,20 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="POST"<?= $is_university_signup ? ' action="register.php?type=university"' : '' ?>>
             <?php if ($is_university_signup): ?>
-                <select name="university_id" id="registerUniSelect" required style="margin-bottom:12px;" onchange="toggleUniOtherField()">
-                    <option value="">Select your university...</option>
-                    <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                        <?php if ($u['type'] !== $current_uni_type): $current_uni_type = $u['type']; if ($current_uni_type !== null && isset($opened_optgroup)) echo '</optgroup>'; ?>
-                            <optgroup label="<?= $current_uni_type === 'public' ? 'Public Universities' : ($current_uni_type === 'private' ? 'Private Universities' : 'Other') ?>">
-                            <?php $opened_optgroup = true; ?>
-                        <?php endif; ?>
-                        <option value="<?= (int) $u['id'] ?>" <?= (string) ($_POST['university_id'] ?? $_GET['university_id'] ?? '') === (string) $u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['name']) ?></option>
-                    <?php endforeach; if (isset($opened_optgroup)) echo '</optgroup>'; ?>
-                    <option value="other" <?= ($_POST['university_id'] ?? '') === 'other' ? 'selected' : '' ?>>Not listed / Other</option>
-                </select>
-                <div id="uniOtherFieldBlock" style="display:none; margin-bottom:12px;">
-                    <input type="text" name="institution_name" placeholder="Institution / University Name" value="<?= htmlspecialchars($_POST['institution_name'] ?? '') ?>">
-                </div>
+                <input type="text" name="institution_name" placeholder="Institution / University Name" required value="<?= htmlspecialchars($_POST['institution_name'] ?? '') ?>" style="margin-bottom:12px;">
                 <input type="text" name="name" placeholder="Contact Person Name" required value="<?= htmlspecialchars($_POST['name'] ?? '') ?>" style="margin-bottom:12px;">
             <?php else: ?>
                 <input type="text" name="name" placeholder="Full Name" required value="<?= htmlspecialchars($_POST['name'] ?? '') ?>" style="margin-bottom:12px;">
@@ -229,13 +216,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         document.getElementById('studentFieldsBlock').style.display = (role === 'candidate') ? 'block' : 'none';
                     }
                     document.addEventListener('DOMContentLoaded', toggleStudentFields);
-        function toggleUniOtherField() {
-            var sel = document.getElementById('registerUniSelect');
-            var block = document.getElementById('uniOtherFieldBlock');
-            if (!sel || !block) return;
-            block.style.display = (sel.value === 'other') ? 'block' : 'none';
-        }
-        document.addEventListener('DOMContentLoaded', toggleUniOtherField);
                 </script>
             <?php endif; ?>
 

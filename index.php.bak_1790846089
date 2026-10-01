@@ -1831,7 +1831,7 @@ if (file_exists('db.php')) {
                 <a href="resume_check.php" class="keria-nav-link" style="color:#0A0A0A; font-weight:700;">✨ Resume Checker</a>
                 <a href="resume_builder.php" class="keria-nav-link">Resume Builder</a>
                 <a href="register.php" class="keria-nav-link">For Employers</a>
-                <a href="for_university.php" class="keria-nav-link" style="display:inline-flex; align-items:center; gap:6px;">For University <span style="font-size:9.5px; font-weight:800; letter-spacing:0.3px; color:#92400E; background:rgba(245,158,11,0.18); border:1px solid rgba(245,158,11,0.4); border-radius:999px; padding:2px 7px; white-space:nowrap;">COMING SOON</span></a>
+                <a href="for_university.php" class="keria-nav-link">For University</a>
                 <a href="#features" class="keria-nav-link">About</a>
             </nav>
 
@@ -2332,7 +2332,7 @@ if (file_exists('db.php')) {
                 <a href="resume_check.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">AI Resume Check</a>
                 <a href="resume_builder.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Resume Builder</a>
                 <a href="register.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">For Employers</a>
-                <a href="for_university.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px; display:inline-flex; align-items:center; gap:6px;">For University <span style="font-size:9.5px; font-weight:800; letter-spacing:0.3px; color:#FBBF24; background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.4); border-radius:999px; padding:2px 7px; white-space:nowrap;">COMING SOON</span></a>
+                <a href="for_university.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">For University</a>
                 <a href="terms.php" style="color:rgba(255,255,255,0.7); text-decoration:none; font-size:14px;">Terms & Conditions</a>
             </div>
         </div>

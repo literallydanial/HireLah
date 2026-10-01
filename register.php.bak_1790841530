@@ -181,7 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <optgroup label="<?= $current_uni_type === 'public' ? 'Public Universities' : ($current_uni_type === 'private' ? 'Private Universities' : 'Other') ?>">
                             <?php $opened_optgroup = true; ?>
                         <?php endif; ?>
-                        <option value="<?= (int) $u['id'] ?>" <?= (string) ($_POST['university_id'] ?? $_GET['university_id'] ?? '') === (string) $u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['name']) ?></option>
+                        <option value="<?= (int) $u['id'] ?>" <?= (string) ($_POST['university_id'] ?? '') === (string) $u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['name']) ?></option>
                     <?php endforeach; if (isset($opened_optgroup)) echo '</optgroup>'; ?>
                     <option value="other" <?= ($_POST['university_id'] ?? '') === 'other' ? 'selected' : '' ?>>Not listed / Other</option>
                 </select>

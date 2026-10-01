@@ -14,9 +14,6 @@ $unreadCount = $userNotifs['unread_count'];
 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$user_id]);
 $user = $stmt->fetch();
-$universities_list = ($user['role'] === 'candidate')
-    ? $pdo->query("SELECT id, name, type FROM universities ORDER BY FIELD(type,'public','private','other'), name")->fetchAll()
-    : [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Handle oversized post payload before PHP discards $_POST
@@ -39,27 +36,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($check_email->fetch()) {
                 $_SESSION['error'] = "The email address '$email' is already registered by another account.";
             } else {
-                // A candidate may self-link (or change) their university + matric number here too.
-                $set_sql = "name = ?, email = ?";
-                $params = [$name, $email];
-                if ($user['role'] === 'candidate') {
-                    $posted_uni_id = $_POST['university_id'] ?? '';
-                    $university_id = null;
-                    if ($posted_uni_id !== '') {
-                        $uni_check = $pdo->prepare("SELECT id FROM universities WHERE id = ?");
-                        $uni_check->execute([$posted_uni_id]);
-                        if ($uni_check->fetch()) {
-                            $university_id = (int) $posted_uni_id;
-                        }
-                    }
-                    $matric_number = trim($_POST['matric_number'] ?? '') ?: null;
-                    $set_sql .= ", university_id = ?, matric_number = ?";
-                    $params[] = $university_id;
-                    $params[] = $matric_number;
-                }
-                $params[] = $user_id;
-                $up = $pdo->prepare("UPDATE users SET $set_sql WHERE id = ?");
-                if ($up->execute($params)) {
+                $up = $pdo->prepare("UPDATE users SET name = ?, email = ? WHERE id = ?");
+                if ($up->execute([$name, $email, $user_id])) {
                     $_SESSION['user_name'] = $name;
                     $_SESSION['toast'] = "Account name and email address updated successfully!";
                 } else {
@@ -749,32 +727,10 @@ if ($user['role'] === 'candidate') {
                         <input type="text" name="name" value="<?= htmlspecialchars($user['name']) ?>" required placeholder="e.g. Alex Tan">
                     </div>
                     
-                    <div style="margin-bottom:<?= $user['role'] === 'candidate' ? '18px' : '24px' ?>;">
+                    <div style="margin-bottom:24px;">
                         <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Email Address</label>
                         <input type="email" name="email" value="<?= htmlspecialchars($user['email']) ?>" required placeholder="alex@example.com">
                     </div>
-
-                    <?php if ($user['role'] === 'candidate'): ?>
-                        <div style="margin-bottom:18px;">
-                            <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">My University (optional)</label>
-                            <select name="university_id">
-                                <option value="">— Not a student / none —</option>
-                                <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                                    <?php if ($u['type'] !== $current_uni_type): ?>
-                                        <?php if ($current_uni_type !== null): ?></optgroup><?php endif; ?>
-                                        <optgroup label="<?= $u['type'] === 'public' ? 'Public Universities' : ($u['type'] === 'private' ? 'Private Universities' : 'Other') ?>">
-                                        <?php $current_uni_type = $u['type']; ?>
-                                    <?php endif; ?>
-                                    <option value="<?= $u['id'] ?>" <?= ((int)($user['university_id'] ?? 0) === (int)$u['id']) ? 'selected' : '' ?>><?= htmlspecialchars($u['name']) ?></option>
-                                <?php endforeach; ?>
-                                <?php if ($current_uni_type !== null): ?></optgroup><?php endif; ?>
-                            </select>
-                        </div>
-                        <div style="margin-bottom:24px;">
-                            <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Matric / Student ID Number (optional)</label>
-                            <input type="text" name="matric_number" value="<?= htmlspecialchars($user['matric_number'] ?? '') ?>" placeholder="e.g. A12345678">
-                        </div>
-                    <?php endif; ?>
                     
                     <button type="submit" class="btn-primary" style="width:100%;">Save Profile Info &rarr;</button>
                 </form>

@@ -84,7 +84,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($_SESSION['toast'])) {
                 $_SESSION['toast'] = "Account verified successfully! Welcome to Keria.";
             }
-            header("Location: " . ($user['role'] === 'employer' ? "employer_dashboard.php" : "jobs.php"));
+            if ($user['role'] === 'employer') {
+                $redirect_target = "employer_dashboard.php";
+            } elseif ($user['role'] === 'university') {
+                $redirect_target = "university_dashboard.php";
+            } else {
+                $redirect_target = "jobs.php";
+            }
+            header("Location: " . $redirect_target);
             exit;
         }
     } elseif ($action === 'resend_otp') {

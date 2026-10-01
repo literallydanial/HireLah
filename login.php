@@ -51,6 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header("Location: admin_dashboard.php");
         } elseif ($user['role'] === 'employer') {
             header("Location: employer_dashboard.php");
+        } elseif ($user['role'] === 'university') {
+            header("Location: university_dashboard.php");
         } else {
             header("Location: jobs.php"); // candidate dashboard
         }

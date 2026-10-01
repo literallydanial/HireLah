@@ -15,17 +15,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'admin') 
 $admin_id = $_SESSION['user_id'];
 $admin_name = $_SESSION['user_name'] ?? 'Admin';
 
-// Universities list reused for the Add/Edit User modals' university_id dropdown
-// (same table candidates self-link to), so a university account created or
-// edited here can be scoped by a real id rather than free-text matching.
-$universities_list = $pdo->query("SELECT id, name, type FROM universities ORDER BY FIELD(type,'public','private','other'), name")->fetchAll();
-
-// Base link for the "University Sign-Up QR Code" tab -- same scheme+host
-// convention used for the employer team-invite link in profile.php.
-$uqr_scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-$uqr_base = $uqr_scheme . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-$university_signup_link = $uqr_base . '/register.php?type=university';
-
 // ----------------------------------------------------
 // 1. POST ACTIONS: Add User / Delete User / Toggle Verify / Delete Job
 // ----------------------------------------------------
@@ -39,30 +28,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password = $_POST['password'] ?? '';
         $role = $_POST['role'] ?? 'candidate';
         $is_verified = isset($_POST['is_verified']) ? 1 : 0;
-        $institution_name = ($role === 'university') ? trim($_POST['institution_name'] ?? '') : null;
-        $university_id = null;
-        if ($role === 'university') {
-            // Same universities list candidates use, so a real university_id can
-            // scope "my students" on the university dashboard instead of matching
-            // free-text institution names.
-            $posted_uni_id = $_POST['university_id'] ?? '';
-            if ($posted_uni_id !== '' && $posted_uni_id !== 'other') {
-                $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE id = ?");
-                $uni_check->execute([$posted_uni_id]);
-                $uni_row = $uni_check->fetch();
-                if ($uni_row) {
-                    $university_id = (int) $uni_row['id'];
-                    $institution_name = $uni_row['name'];
-                }
-            }
-        }
 
         if (empty($name) || empty($email) || empty($password)) {
             $_SESSION['error'] = "All fields (Name, Email, Password) are required.";
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $_SESSION['error'] = "Invalid email format.";
-        } elseif ($role === 'university' && $institution_name === '') {
-            $_SESSION['error'] = "Institution name is required for a university account.";
         } else {
             // Check duplicate email
             $chk = $pdo->prepare("SELECT id FROM users WHERE email = ?");
@@ -71,8 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['error'] = "An account with this email address already exists.";
             } else {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $ins = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, company_name, university_id, is_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
-                $ins->execute([$name, $email, $hash, $role, $institution_name, $university_id, $is_verified]);
+                $ins = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, is_verified, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
+                $ins->execute([$name, $email, $hash, $role, $is_verified]);
                 $new_user_id = $pdo->lastInsertId();
 
                 log_admin_action($pdo, $admin_id, $admin_name, 'add_user', 'user', $new_user_id, "Created new $role account for '$name' ($email)");
@@ -106,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'change_role') {
         $target_id = (int)($_POST['user_id'] ?? 0);
         $new_role = $_POST['new_role'] ?? 'candidate';
-        if ($target_id > 0 && in_array($new_role, ['candidate', 'employer', 'admin', 'university'])) {
+        if ($target_id > 0 && in_array($new_role, ['candidate', 'employer', 'admin'])) {
             $stmt = $pdo->prepare("UPDATE users SET role = ? WHERE id = ?");
             $stmt->execute([$new_role, $target_id]);
 
@@ -150,105 +120,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $updates = ["name = ?", "email = ?", "is_verified = ?"];
                     $params = [$name, $email, $is_verified];
-                    $edit_valid = true;
 
-                    if (in_array($role, ['candidate', 'employer', 'admin', 'university'], true)) {
+                    if (in_array($role, ['candidate', 'employer', 'admin'], true)) {
                         $updates[] = "role = ?";
                         $params[] = $role;
                     }
 
-                    // Institution name & icon (university accounts only) -- gives admin
-                    // full control over a university account's profile without needing
-                    // to log in as that account.
-                    if ($role === 'university') {
-                        $university_id = null;
-                        $posted_uni_id = $_POST['university_id'] ?? '';
-                        if ($posted_uni_id !== '' && $posted_uni_id !== 'other') {
-                            $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE id = ?");
-                            $uni_check->execute([$posted_uni_id]);
-                            $uni_row = $uni_check->fetch();
-                            if ($uni_row) {
-                                $university_id = (int) $uni_row['id'];
-                            }
-                        }
-                        $institution_name = $university_id !== null
-                            ? $pdo->query("SELECT name FROM universities WHERE id = " . (int) $university_id)->fetchColumn()
-                            : trim($_POST['institution_name'] ?? '');
-                        if ($institution_name === '' || $institution_name === false) {
-                            $_SESSION['error'] = "Institution name is required for a university account.";
-                            $edit_valid = false;
-                        } else {
-                            $updates[] = "company_name = ?";
-                            $params[] = $institution_name;
-                            $updates[] = "university_id = ?";
-                            $params[] = $university_id;
-                        }
-
-                        $icon_file = $_FILES['university_icon'] ?? null;
-                        if ($edit_valid && $icon_file && ($icon_file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
-                            $allowed_ext = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-                            $max_bytes = 2 * 1024 * 1024;
-                            if ($icon_file['error'] === UPLOAD_ERR_INI_SIZE || ($icon_file['size'] ?? 0) > $max_bytes) {
-                                $_SESSION['error'] = "Uploaded icon exceeds the maximum allowed size (2MB).";
-                                $edit_valid = false;
-                            } elseif ($icon_file['error'] !== UPLOAD_ERR_OK) {
-                                $_SESSION['error'] = "Icon upload failed. Please try again.";
-                                $edit_valid = false;
-                            } else {
-                                $ext = strtolower(pathinfo($icon_file['name'], PATHINFO_EXTENSION));
-                                $image_info = @getimagesize($icon_file['tmp_name']);
-                                if (!in_array($ext, $allowed_ext) || $image_info === false) {
-                                    $_SESSION['error'] = "Invalid icon image. Use JPG, PNG, WEBP or GIF.";
-                                    $edit_valid = false;
-                                } else {
-                                    $icon_dir = 'uploads/university_logos/';
-                                    if (!is_dir($icon_dir)) @mkdir($icon_dir, 0755, true);
-                                    if (!is_dir($icon_dir) || !is_writable($icon_dir)) {
-                                        $_SESSION['error'] = "Directory '$icon_dir' is not writable. Please check permissions.";
-                                        $edit_valid = false;
-                                    } else {
-                                        foreach (glob($icon_dir . 'u' . $target_id . '.*') as $old_icon_file) {
-                                            @unlink($old_icon_file);
-                                        }
-                                        $icon_path = $icon_dir . 'u' . $target_id . '.' . $ext;
-                                        if (move_uploaded_file($icon_file['tmp_name'], $icon_path)) {
-                                            $updates[] = "company_logo = ?";
-                                            $params[] = $icon_path;
-                                        } else {
-                                            $_SESSION['error'] = "Failed to save icon.";
-                                            $edit_valid = false;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     $pw_changed = false;
-                    if ($edit_valid && !empty($password)) {
+                    if (!empty($password)) {
                         $updates[] = "password_hash = ?";
                         $params[] = password_hash($password, PASSWORD_DEFAULT);
                         $pw_changed = true;
                     }
 
-                    if ($edit_valid) {
-                        $params[] = $target_id;
-                        $upd = $pdo->prepare("UPDATE users SET " . implode(", ", $updates) . " WHERE id = ?");
-                        $upd->execute($params);
+                    $params[] = $target_id;
+                    $upd = $pdo->prepare("UPDATE users SET " . implode(", ", $updates) . " WHERE id = ?");
+                    $upd->execute($params);
 
-                        // If admin edited their own account, synchronize active session
-                        if ($target_id === (int)$_SESSION['user_id']) {
-                            $_SESSION['user_name'] = $name;
-                            $_SESSION['user_email'] = $email;
-                            if (in_array($role, ['candidate', 'employer', 'admin', 'university'], true)) {
-                                $_SESSION['user_role'] = $role;
-                            }
+                    // If admin edited their own account, synchronize active session
+                    if ($target_id === (int)$_SESSION['user_id']) {
+                        $_SESSION['user_name'] = $name;
+                        $_SESSION['user_email'] = $email;
+                        if (in_array($role, ['candidate', 'employer', 'admin'], true)) {
+                            $_SESSION['user_role'] = $role;
                         }
-
-                        $log_detail = "Edited account #$target_id for '$name' ($email)" . ($pw_changed ? " with password update" : "");
-                        log_admin_action($pdo, $admin_id, $admin_name, 'edit_user', 'user', $target_id, $log_detail);
-                        $_SESSION['toast'] = "Account for '$name' updated successfully" . ($pw_changed ? " (password updated)" : "") . "!";
                     }
+
+                    $log_detail = "Edited account #$target_id for '$name' ($email)" . ($pw_changed ? " with password update" : "");
+                    log_admin_action($pdo, $admin_id, $admin_name, 'edit_user', 'user', $target_id, $log_detail);
+                    $_SESSION['toast'] = "Account for '$name' updated successfully" . ($pw_changed ? " (password updated)" : "") . "!";
                 }
             }
         }
@@ -863,7 +763,6 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             <button type="button" class="tab-btn active" onclick="switchAdminTab('usersTab', this)">👥 Registered Accounts (<?= count($users_list) ?>)<?php if($new_signups_48h > 0): ?> <span style="background:#EC4899; color:#fff; border-radius:8px; padding:1px 7px; font-size:10px; font-weight:800; margin-left:4px;">🆕 <?= $new_signups_48h ?> new</span><?php endif; ?></button>
             <button type="button" class="tab-btn" onclick="switchAdminTab('jobsTab', this)">💼 Job Postings Moderation (<?= count($jobs_list) ?>)</button>
             <button type="button" class="tab-btn" onclick="switchAdminTab('funnelTab', this)">🔻 Platform-Wide Hiring Funnel Analytics</button>
-            <button type="button" class="tab-btn" onclick="switchAdminTab('universityQrTab', this)">🎓 University Sign-Up QR Code</button>
         </div>
 
         <!-- Platform Hiring Funnel Analytics Panel (its own tab now, toggled via
@@ -981,11 +880,10 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                     <input type="text" id="userSearchInput" onkeyup="filterUsersTable()" placeholder="🔍 Search user name, email, or role..." style="max-width:360px; padding:9px 14px; font-size:13px; margin:0;">
                     
                     <div style="display:flex; gap:8px;">
-                        <select id="roleFilterSelect" onchange="filterUsersTable()" style="padding:9px 36px 9px 12px; font-size:13px; margin:0; width:auto;">
+                        <select id="roleFilterSelect" onchange="filterUsersTable()" style="padding:9px 12px; font-size:13px; margin:0; width:auto;">
                             <option value="">All Roles</option>
                             <option value="candidate">Candidates</option>
                             <option value="employer">Employers</option>
-                            <option value="university">Universities</option>
                             <option value="admin">Admins</option>
                         </select>
                     </div>
@@ -1065,8 +963,6 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                                        data-user-role="<?= htmlspecialchars($u['role'], ENT_QUOTES) ?>"
                                        data-user-verified="<?= $u['is_verified'] ? '1' : '0' ?>"
                                        data-is-self="<?= $u_is_self ? '1' : '0' ?>"
-                                       data-user-company-name="<?= htmlspecialchars($u['company_name'] ?? '', ENT_QUOTES) ?>"
-                                       data-user-company-logo="<?= htmlspecialchars($u['company_logo'] ?? '', ENT_QUOTES) ?>"
                                        onclick="event.stopPropagation(); updateBulkSelection();" style="width:15px; height:15px; cursor:pointer;">
                             </div>
                             <div style="font-weight:700; color:var(--mut);">#<?= $u['id'] ?></div>
@@ -1079,7 +975,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                             </div>
                             <div style="color:var(--mut); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><?= htmlspecialchars($u['email']) ?></div>
                             <div>
-                                <span class="chip <?= $u['role'] === 'admin' ? 'chip-rejected' : ($u['role'] === 'employer' ? 'chip-review' : ($u['role'] === 'university' ? 'chip-review' : 'chip-shortlisted')) ?>" style="font-size:10px;">
+                                <span class="chip <?= $u['role'] === 'admin' ? 'chip-rejected' : ($u['role'] === 'employer' ? 'chip-review' : 'chip-shortlisted') ?>" style="font-size:10px;">
                                     <?= ucfirst(htmlspecialchars($u['role'])) ?>
                                 </span>
                             </div>
@@ -1099,10 +995,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                                     "email" => $u["email"],
                                     "role" => $u["role"],
                                     "is_verified" => (int)$u["is_verified"],
-                                    "is_self" => $u_is_self,
-                                    "company_name" => $u["company_name"] ?? '',
-                                    "company_logo" => $u["company_logo"] ?? '',
-                                    "university_id" => $u["university_id"] ?? ''
+                                    "is_self" => $u_is_self
                                 ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' class="btn-secondary" style="padding:4px 8px; font-size:10px;" title="Edit Account Name, Email, or Password">
                                     ✏️ Edit
                                 </button>
@@ -1167,106 +1060,6 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Tab: University Sign-Up QR Code -->
-        <div id="universityQrTab" class="admin-tab-pane" style="display:none;">
-            <div class="panel" style="padding:20px; max-width:620px;">
-                <div style="font-size:16px; font-weight:800; color:var(--txt); margin-bottom:6px;">🎓 University Sign-Up QR Code</div>
-                <p style="font-size:12.5px; color:var(--mut); margin:0 0 18px 0;">
-                    Print this at a career fair or share it with a university's career center. Scanning it opens Keria's
-                    university registration page, pre-set to sign up as a <strong>University / Career Center representative</strong>.
-                </p>
-
-                <div style="margin-bottom:16px;">
-                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Pre-select a university (optional)</label>
-                    <select id="uqrUniSelect" onchange="renderUniversityQr()" style="padding:10px 14px; font-size:13px;">
-                        <option value="">Let the representative pick at signup</option>
-                        <?php $uqr_opened_optgroup = null; foreach ($universities_list as $u): ?>
-                            <?php if ($u['type'] !== $uqr_opened_optgroup): $uqr_opened_optgroup = $u['type']; if (isset($uqr_group_started)) echo '</optgroup>'; ?>
-                                <optgroup label="<?= $uqr_opened_optgroup === 'public' ? 'Public Universities' : ($uqr_opened_optgroup === 'private' ? 'Private Universities' : 'Other') ?>">
-                                <?php $uqr_group_started = true; ?>
-                            <?php endif; ?>
-                            <option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                        <?php endforeach; if (isset($uqr_group_started)) echo '</optgroup>'; ?>
-                    </select>
-                    <div style="font-size:10.5px; color:var(--mut); margin-top:4px;">Picking one here just pre-fills the dropdown on the registration page — the representative can still change it.</div>
-                </div>
-
-                <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
-                    <div style="flex:1; min-width:260px;">
-                        <div style="display:flex; gap:8px; margin-bottom:10px;">
-                            <input type="text" readonly id="uqrLinkInput" value="<?= htmlspecialchars($university_signup_link) ?>" style="flex:1; font-family:monospace; font-size:12px;">
-                            <button type="button" class="btn-secondary" style="padding:9px 16px; font-size:12.5px; white-space:nowrap;" onclick="copyUniversityQrLink()">📋 Copy</button>
-                        </div>
-                        <button type="button" class="btn-secondary" style="padding:8px 16px; font-size:12px;" onclick="downloadUniversityQr()">⬇️ Download QR (PNG)</button>
-                    </div>
-                    <div style="text-align:center;">
-                        <div id="uqrCode" style="width:180px; height:180px; display:flex; align-items:center; justify-content:center; background:#fff; border-radius:10px; border:1px solid var(--bdr); padding:10px;"></div>
-                        <div style="font-size:11px; color:var(--mut); margin-top:6px;">Scan to register</div>
-                    </div>
-                </div>
-            </div>
-
-            <script src="qrcode.js?v=<?php echo @filemtime(__DIR__.'/qrcode.js'); ?>"></script>
-            <script>
-                var UQR_BASE_LINK = <?= json_encode($university_signup_link) ?>;
-
-                function buildUniversityQrLink() {
-                    var sel = document.getElementById('uqrUniSelect');
-                    var uniId = sel ? sel.value : '';
-                    return uniId ? (UQR_BASE_LINK + '&university_id=' + encodeURIComponent(uniId)) : UQR_BASE_LINK;
-                }
-
-                function renderUniversityQr() {
-                    var link = buildUniversityQrLink();
-                    document.getElementById('uqrLinkInput').value = link;
-                    var holder = document.getElementById('uqrCode');
-                    holder.innerHTML = '';
-                    try {
-                        var qr = qrcode(0, 'M');
-                        qr.addData(link);
-                        qr.make();
-                        holder.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
-                    } catch (e) {
-                        holder.textContent = 'QR unavailable';
-                    }
-                }
-
-                function copyUniversityQrLink() {
-                    var input = document.getElementById('uqrLinkInput');
-                    input.select();
-                    input.setSelectionRange(0, 99999);
-                    navigator.clipboard && navigator.clipboard.writeText(input.value).catch(function(){ document.execCommand('copy'); });
-                }
-
-                function downloadUniversityQr() {
-                    var svg = document.querySelector('#uqrCode svg');
-                    if (!svg) return;
-                    var svgData = new XMLSerializer().serializeToString(svg);
-                    var img = new Image();
-                    var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-                    var url = URL.createObjectURL(svgBlob);
-                    img.onload = function() {
-                        var scale = 4;
-                        var canvas = document.createElement('canvas');
-                        canvas.width = img.width * scale;
-                        canvas.height = img.height * scale;
-                        var ctx = canvas.getContext('2d');
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        URL.revokeObjectURL(url);
-                        var a = document.createElement('a');
-                        a.download = 'keria-university-signup-qr.png';
-                        a.href = canvas.toDataURL('image/png');
-                        a.click();
-                    };
-                    img.src = url;
-                }
-
-                document.addEventListener('DOMContentLoaded', renderUniversityQr);
-            </script>
         </div>
     </main>
 
@@ -1339,31 +1132,11 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
 
                 <div style="margin-bottom:16px;">
                     <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Account Role</label>
-                    <select name="role" id="addUserRole" required style="padding:10px 12px; font-size:13px;" onchange="toggleAddUserRoleFields()">
+                    <select name="role" required style="padding:10px 12px; font-size:13px;">
                         <option value="candidate">Candidate</option>
                         <option value="employer">Employer</option>
-                        <option value="university">University</option>
                         <option value="admin">System Admin</option>
                     </select>
-                </div>
-
-                <div id="addUserInstitutionField" style="display:none; margin-bottom:16px;">
-                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University</label>
-                    <select name="university_id" id="addUserUniSelect" onchange="toggleAddUserUniOther()" style="padding:10px 14px; font-size:13px; margin-bottom:8px;">
-                        <option value="">Select a university...</option>
-                        <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                            <?php if ($u['type'] !== $current_uni_type): $current_uni_type = $u['type']; if (isset($add_opened_optgroup)) echo '</optgroup>'; ?>
-                                <optgroup label="<?= $current_uni_type === 'public' ? 'Public Universities' : ($current_uni_type === 'private' ? 'Private Universities' : 'Other') ?>">
-                                <?php $add_opened_optgroup = true; ?>
-                            <?php endif; ?>
-                            <option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                        <?php endforeach; if (isset($add_opened_optgroup)) echo '</optgroup>'; ?>
-                        <option value="other">Not listed / Other</option>
-                    </select>
-                    <div id="addUserInstitutionOtherBlock" style="display:none;">
-                        <input type="text" name="institution_name" placeholder="e.g. Universiti Putra Malaysia" style="padding:10px 14px; font-size:13px;">
-                    </div>
-                    <div style="font-size:10.5px; color:var(--mut); margin-top:4px;">The icon can be uploaded after the account is created, via Edit Account.</div>
                 </div>
 
                 <div style="margin-bottom:20px; padding:10px 14px; background:var(--dim); border-radius:10px; display:flex; align-items:center; gap:10px;">
@@ -1394,7 +1167,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 </div>
             </div>
 
-            <form method="POST" style="margin-top:16px;" enctype="multipart/form-data">
+            <form method="POST" style="margin-top:16px;">
                 <input type="hidden" name="action" value="edit_user">
                 <input type="hidden" name="user_id" id="editUserId" value="">
 
@@ -1421,44 +1194,11 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
 
                 <div style="margin-bottom:14px;">
                     <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Account Role</label>
-                    <select name="role" id="editUserRole" required style="padding:10px 12px; font-size:13px;" onchange="toggleEditUserRoleFields()">
+                    <select name="role" id="editUserRole" required style="padding:10px 12px; font-size:13px;">
                         <option value="candidate">Candidate</option>
                         <option value="employer">Employer</option>
-                        <option value="university">University</option>
                         <option value="admin">System Admin</option>
                     </select>
-                </div>
-
-                <div id="editUserInstitutionBlock" style="display:none;">
-                    <div style="margin-bottom:14px;">
-                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University</label>
-                        <select name="university_id" id="editUserUniSelect" onchange="toggleEditUserUniOther()" style="padding:10px 14px; font-size:13px; margin-bottom:8px;">
-                            <option value="">Select a university...</option>
-                            <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                                <?php if ($u['type'] !== $current_uni_type): $current_uni_type = $u['type']; if (isset($edit_opened_optgroup)) echo '</optgroup>'; ?>
-                                    <optgroup label="<?= $current_uni_type === 'public' ? 'Public Universities' : ($current_uni_type === 'private' ? 'Private Universities' : 'Other') ?>">
-                                    <?php $edit_opened_optgroup = true; ?>
-                                <?php endif; ?>
-                                <option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                            <?php endforeach; if (isset($edit_opened_optgroup)) echo '</optgroup>'; ?>
-                            <option value="other">Not listed / Other</option>
-                        </select>
-                        <div id="editUserInstitutionOtherBlock" style="display:none;">
-                            <input type="text" name="institution_name" id="editInstitutionName" placeholder="e.g. Universiti Putra Malaysia" style="padding:10px 14px; font-size:13px;">
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom:14px;">
-                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Institution Icon</label>
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <div id="editInstitutionIconPreview" style="width:40px; height:40px; border-radius:9px; border:1px solid var(--bdr); background:var(--surf); display:flex; align-items:center; justify-content:center; overflow:hidden; font-size:18px; color:var(--acc); flex-shrink:0;">🎓</div>
-                            <label class="btn-secondary" style="padding:7px 14px; font-size:11.5px; cursor:pointer; margin:0;">
-                                🖼️ Choose Icon
-                                <input type="file" name="university_icon" accept=".jpg,.jpeg,.png,.webp,.gif" style="display:none;">
-                            </label>
-                            <span style="font-size:10.5px; color:var(--mut);">JPG, PNG, WEBP or GIF -- up to 2MB</span>
-                        </div>
-                    </div>
                 </div>
 
                 <div style="margin-bottom:20px; padding:10px 14px; background:var(--dim); border-radius:10px; display:flex; align-items:center; gap:10px;">
@@ -1582,10 +1322,6 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         function closeAddUserModal() {
             document.getElementById('addUserModal').style.display = 'none';
         }
-        function toggleAddUserRoleFields() {
-            var role = document.getElementById('addUserRole').value;
-            document.getElementById('addUserInstitutionField').style.display = (role === 'university') ? 'block' : 'none';
-        }
 
         function openExportResumesModal() {
             document.getElementById('exportResumesModal').style.display = 'flex';
@@ -1681,58 +1417,12 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             document.getElementById('editUserPassword').value = '';
             document.getElementById('editUserRole').value = user.role || 'candidate';
             document.getElementById('editUserVerified').checked = (user.is_verified == 1);
-            var editUniSelect = document.getElementById('editUserUniSelect');
-            if (editUniSelect) {
-                if (user.university_id) {
-                    editUniSelect.value = String(user.university_id);
-                    if (editUniSelect.value !== String(user.university_id)) {
-                        // id wasn't in the list (shouldn't happen) -- fall back to Other
-                        editUniSelect.value = 'other';
-                    }
-                } else if (user.company_name) {
-                    editUniSelect.value = 'other';
-                } else {
-                    editUniSelect.value = '';
-                }
-            }
-            document.getElementById('editInstitutionName').value = user.company_name || '';
-            toggleEditUserUniOther();
-
-            var preview = document.getElementById('editInstitutionIconPreview');
-            if (preview) {
-                if (user.company_logo) {
-                    preview.innerHTML = '<img src="' + user.company_logo + '?v=' + Date.now() + '" alt="icon" style="width:100%; height:100%; object-fit:contain;">';
-                } else {
-                    preview.innerHTML = '🎓';
-                }
-            }
-
-            toggleEditUserRoleFields();
 
             var subTitle = document.getElementById('editModalSubTitle');
             if (subTitle) {
                 subTitle.textContent = 'Editing ' + (user.name || 'Account') + ' (ID #' + user.id + ')';
             }
             document.getElementById('editUserModal').style.display = 'flex';
-        }
-
-        function toggleEditUserRoleFields() {
-            var role = document.getElementById('editUserRole').value;
-            document.getElementById('editUserInstitutionBlock').style.display = (role === 'university') ? 'block' : 'none';
-        }
-
-        function toggleEditUserUniOther() {
-            var sel = document.getElementById('editUserUniSelect');
-            var block = document.getElementById('editUserInstitutionOtherBlock');
-            if (!sel || !block) return;
-            block.style.display = (sel.value === 'other') ? 'block' : 'none';
-        }
-
-        function toggleAddUserUniOther() {
-            var sel = document.getElementById('addUserUniSelect');
-            var block = document.getElementById('addUserInstitutionOtherBlock');
-            if (!sel || !block) return;
-            block.style.display = (sel.value === 'other') ? 'block' : 'none';
         }
 
         function closeEditUserModal() {
@@ -1768,9 +1458,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 email: cb.getAttribute('data-user-email'),
                 role: cb.getAttribute('data-user-role'),
                 is_verified: cb.getAttribute('data-user-verified'),
-                is_self: cb.getAttribute('data-is-self') === '1',
-                company_name: cb.getAttribute('data-user-company-name') || '',
-                company_logo: cb.getAttribute('data-user-company-logo') || ''
+                is_self: cb.getAttribute('data-is-self') === '1'
             });
         }
 

@@ -30,47 +30,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
-// ------------------------------------------------------------
-// Self-reported internship placement (student-entered — Keria has no way
-// to verify this independently, so it's trusted as-is, the same way a
-// resume's work history is).
-// ------------------------------------------------------------
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'save_placement') {
-    $company = trim($_POST['company'] ?? '');
-    $supervisor = trim($_POST['supervisor'] ?? '') ?: null;
-    $supervisor_contact = trim($_POST['supervisor_contact'] ?? '') ?: null;
-    $start_date = trim($_POST['start_date'] ?? '') ?: null;
-    $end_date = trim($_POST['end_date'] ?? '') ?: null;
-    $placement_type = in_array($_POST['placement_type'] ?? '', ['paid', 'unpaid'], true) ? $_POST['placement_type'] : 'paid';
-
-    if ($company === '') {
-        $_SESSION['error'] = "Company name is required to report your internship placement.";
-    } else {
-        $existing = $pdo->prepare("SELECT id FROM internship_placements WHERE candidate_user_id = ?");
-        $existing->execute([$_SESSION['user_id']]);
-        $row = $existing->fetch();
-
-        if ($row) {
-            $up = $pdo->prepare("UPDATE internship_placements SET company = ?, supervisor = ?, supervisor_contact = ?, start_date = ?, end_date = ?, placement_type = ? WHERE candidate_user_id = ?");
-            $up->execute([$company, $supervisor, $supervisor_contact, $start_date, $end_date, $placement_type, $_SESSION['user_id']]);
-        } else {
-            $ins = $pdo->prepare("INSERT INTO internship_placements (candidate_user_id, company, supervisor, supervisor_contact, start_date, end_date, placement_type) VALUES (?, ?, ?, ?, ?, ?, ?)");
-            $ins->execute([$_SESSION['user_id'], $company, $supervisor, $supervisor_contact, $start_date, $end_date, $placement_type]);
-        }
-        $_SESSION['toast'] = "Internship placement saved.";
-    }
-    header("Location: candidate_dashboard.php");
-    exit;
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_placement') {
-    $del = $pdo->prepare("DELETE FROM internship_placements WHERE candidate_user_id = ?");
-    $del->execute([$_SESSION['user_id']]);
-    $_SESSION['toast'] = "Internship placement removed.";
-    header("Location: candidate_dashboard.php");
-    exit;
-}
-
 $userNotifs = getCandidateNotifications($pdo, $_SESSION['user_id']);
 $notifItems = $userNotifs['items'];
 $unreadCount = $userNotifs['unread_count'];
@@ -78,14 +37,6 @@ $unreadCount = $userNotifs['unread_count'];
 $stmt = $pdo->prepare("SELECT c.*, j.job_title, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name FROM candidates c JOIN jobs j ON c.job_id = j.id LEFT JOIN users u ON j.employer_id = u.id WHERE c.user_id = ? ORDER BY c.created_at DESC");
 $stmt->execute([$_SESSION['user_id']]);
 $applications = $stmt->fetchAll();
-
-$uni_stmt = $pdo->prepare("SELECT u.university_id, un.name AS university_name FROM users u LEFT JOIN universities un ON un.id = u.university_id WHERE u.id = ?");
-$uni_stmt->execute([$_SESSION['user_id']]);
-$my_university = $uni_stmt->fetch();
-
-$placement_stmt = $pdo->prepare("SELECT * FROM internship_placements WHERE candidate_user_id = ?");
-$placement_stmt->execute([$_SESSION['user_id']]);
-$my_placement = $placement_stmt->fetch();
 
 // Map questionnaire requests for candidate's applications
 $app_ids = array_column($applications, 'id');
@@ -704,48 +655,6 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
             <span style="font-size: 16px; color:#9CA3AF;">🔍</span>
             <input type="text" id="appSearch" placeholder="Search applications by job title or employer..." onkeyup="filterApplications()" class="applications-search-input">
         </div>
-
-        <!-- Internship Placement (self-reported) -->
-        <?php if (!empty($my_university['university_id'])): ?>
-            <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:20px; padding:22px 24px; margin-bottom:24px; box-shadow:0 4px 14px rgba(0,0,0,0.03);">
-                <div style="font-size:16px; font-weight:800; color:#0A0A0A; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
-                    <span>🎓 My Internship Placement</span>
-                </div>
-                <div style="font-size:12px; color:#6B7280; margin-bottom:16px;">Shared with <strong><?= htmlspecialchars($my_university['university_name']) ?></strong> on their student dashboard. This is self-reported — enter it once you've accepted an offer.</div>
-
-                <?php if ($my_placement): ?>
-                    <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:14px; padding:16px; margin-bottom:12px;">
-                        <div style="font-size:15px; font-weight:800; color:#0A0A0A;"><?= htmlspecialchars($my_placement['company']) ?></div>
-                        <div style="font-size:12.5px; color:#6B7280; margin-top:4px;">
-                            <?php if (!empty($my_placement['supervisor'])): ?>Supervisor: <?= htmlspecialchars($my_placement['supervisor']) ?><?php if (!empty($my_placement['supervisor_contact'])): ?> (<?= htmlspecialchars($my_placement['supervisor_contact']) ?>)<?php endif; ?><br><?php endif; ?>
-                            <?php if (!empty($my_placement['start_date']) || !empty($my_placement['end_date'])): ?><?= htmlspecialchars($my_placement['start_date'] ?? '?') ?> &rarr; <?= htmlspecialchars($my_placement['end_date'] ?? '?') ?> &middot; <?php endif; ?>
-                            <span style="text-transform:capitalize;"><?= htmlspecialchars($my_placement['placement_type']) ?></span>
-                        </div>
-                    </div>
-                    <button type="button" class="btn-secondary" style="padding:6px 14px; font-size:12px;" onclick="document.getElementById('placementForm').style.display='block'; this.style.display='none';">✏️ Edit Placement</button>
-                    <form method="POST" style="display:inline; margin-left:8px;" onsubmit="return confirm('Remove your reported internship placement?');">
-                        <input type="hidden" name="action" value="delete_placement">
-                        <button type="submit" class="btn-secondary" style="padding:6px 14px; font-size:12px; color:#DC2626;">🗑️ Remove</button>
-                    </form>
-                <?php endif; ?>
-
-                <form method="POST" id="placementForm" style="<?= $my_placement ? 'display:none; margin-top:14px;' : '' ?>">
-                    <input type="hidden" name="action" value="save_placement">
-                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; margin-bottom:10px;">
-                        <input type="text" name="company" placeholder="Company name" required value="<?= htmlspecialchars($my_placement['company'] ?? '') ?>">
-                        <input type="text" name="supervisor" placeholder="Supervisor name" value="<?= htmlspecialchars($my_placement['supervisor'] ?? '') ?>">
-                        <input type="text" name="supervisor_contact" placeholder="Supervisor email/phone" value="<?= htmlspecialchars($my_placement['supervisor_contact'] ?? '') ?>">
-                        <select name="placement_type">
-                            <option value="paid" <?= ($my_placement['placement_type'] ?? 'paid') === 'paid' ? 'selected' : '' ?>>Paid</option>
-                            <option value="unpaid" <?= ($my_placement['placement_type'] ?? '') === 'unpaid' ? 'selected' : '' ?>>Unpaid</option>
-                        </select>
-                        <input type="date" name="start_date" value="<?= htmlspecialchars($my_placement['start_date'] ?? '') ?>">
-                        <input type="date" name="end_date" value="<?= htmlspecialchars($my_placement['end_date'] ?? '') ?>">
-                    </div>
-                    <button type="submit" class="btn-primary" style="padding:8px 18px; font-size:12.5px;"><?= $my_placement ? 'Update Placement' : 'Save Placement' ?> &rarr;</button>
-                </form>
-            </div>
-        <?php endif; ?>
 
         <!-- Upcoming & Proposed Interviews Section -->
         <?php 

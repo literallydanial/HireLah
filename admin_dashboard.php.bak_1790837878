@@ -15,17 +15,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'admin') 
 $admin_id = $_SESSION['user_id'];
 $admin_name = $_SESSION['user_name'] ?? 'Admin';
 
-// Universities list reused for the Add/Edit User modals' university_id dropdown
-// (same table candidates self-link to), so a university account created or
-// edited here can be scoped by a real id rather than free-text matching.
-$universities_list = $pdo->query("SELECT id, name, type FROM universities ORDER BY FIELD(type,'public','private','other'), name")->fetchAll();
-
-// Base link for the "University Sign-Up QR Code" tab -- same scheme+host
-// convention used for the employer team-invite link in profile.php.
-$uqr_scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-$uqr_base = $uqr_scheme . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
-$university_signup_link = $uqr_base . '/register.php?type=university';
-
 // ----------------------------------------------------
 // 1. POST ACTIONS: Add User / Delete User / Toggle Verify / Delete Job
 // ----------------------------------------------------
@@ -40,22 +29,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $role = $_POST['role'] ?? 'candidate';
         $is_verified = isset($_POST['is_verified']) ? 1 : 0;
         $institution_name = ($role === 'university') ? trim($_POST['institution_name'] ?? '') : null;
-        $university_id = null;
-        if ($role === 'university') {
-            // Same universities list candidates use, so a real university_id can
-            // scope "my students" on the university dashboard instead of matching
-            // free-text institution names.
-            $posted_uni_id = $_POST['university_id'] ?? '';
-            if ($posted_uni_id !== '' && $posted_uni_id !== 'other') {
-                $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE id = ?");
-                $uni_check->execute([$posted_uni_id]);
-                $uni_row = $uni_check->fetch();
-                if ($uni_row) {
-                    $university_id = (int) $uni_row['id'];
-                    $institution_name = $uni_row['name'];
-                }
-            }
-        }
 
         if (empty($name) || empty($email) || empty($password)) {
             $_SESSION['error'] = "All fields (Name, Email, Password) are required.";
@@ -71,8 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['error'] = "An account with this email address already exists.";
             } else {
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $ins = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, company_name, university_id, is_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
-                $ins->execute([$name, $email, $hash, $role, $institution_name, $university_id, $is_verified]);
+                $ins = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, company_name, is_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())");
+                $ins->execute([$name, $email, $hash, $role, $institution_name, $is_verified]);
                 $new_user_id = $pdo->lastInsertId();
 
                 log_admin_action($pdo, $admin_id, $admin_name, 'add_user', 'user', $new_user_id, "Created new $role account for '$name' ($email)");
@@ -161,27 +134,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // full control over a university account's profile without needing
                     // to log in as that account.
                     if ($role === 'university') {
-                        $university_id = null;
-                        $posted_uni_id = $_POST['university_id'] ?? '';
-                        if ($posted_uni_id !== '' && $posted_uni_id !== 'other') {
-                            $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE id = ?");
-                            $uni_check->execute([$posted_uni_id]);
-                            $uni_row = $uni_check->fetch();
-                            if ($uni_row) {
-                                $university_id = (int) $uni_row['id'];
-                            }
-                        }
-                        $institution_name = $university_id !== null
-                            ? $pdo->query("SELECT name FROM universities WHERE id = " . (int) $university_id)->fetchColumn()
-                            : trim($_POST['institution_name'] ?? '');
-                        if ($institution_name === '' || $institution_name === false) {
+                        $institution_name = trim($_POST['institution_name'] ?? '');
+                        if ($institution_name === '') {
                             $_SESSION['error'] = "Institution name is required for a university account.";
                             $edit_valid = false;
                         } else {
                             $updates[] = "company_name = ?";
                             $params[] = $institution_name;
-                            $updates[] = "university_id = ?";
-                            $params[] = $university_id;
                         }
 
                         $icon_file = $_FILES['university_icon'] ?? null;
@@ -863,7 +822,6 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             <button type="button" class="tab-btn active" onclick="switchAdminTab('usersTab', this)">👥 Registered Accounts (<?= count($users_list) ?>)<?php if($new_signups_48h > 0): ?> <span style="background:#EC4899; color:#fff; border-radius:8px; padding:1px 7px; font-size:10px; font-weight:800; margin-left:4px;">🆕 <?= $new_signups_48h ?> new</span><?php endif; ?></button>
             <button type="button" class="tab-btn" onclick="switchAdminTab('jobsTab', this)">💼 Job Postings Moderation (<?= count($jobs_list) ?>)</button>
             <button type="button" class="tab-btn" onclick="switchAdminTab('funnelTab', this)">🔻 Platform-Wide Hiring Funnel Analytics</button>
-            <button type="button" class="tab-btn" onclick="switchAdminTab('universityQrTab', this)">🎓 University Sign-Up QR Code</button>
         </div>
 
         <!-- Platform Hiring Funnel Analytics Panel (its own tab now, toggled via
@@ -1101,8 +1059,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                                     "is_verified" => (int)$u["is_verified"],
                                     "is_self" => $u_is_self,
                                     "company_name" => $u["company_name"] ?? '',
-                                    "company_logo" => $u["company_logo"] ?? '',
-                                    "university_id" => $u["university_id"] ?? ''
+                                    "company_logo" => $u["company_logo"] ?? ''
                                 ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)' class="btn-secondary" style="padding:4px 8px; font-size:10px;" title="Edit Account Name, Email, or Password">
                                     ✏️ Edit
                                 </button>
@@ -1167,106 +1124,6 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Tab: University Sign-Up QR Code -->
-        <div id="universityQrTab" class="admin-tab-pane" style="display:none;">
-            <div class="panel" style="padding:20px; max-width:620px;">
-                <div style="font-size:16px; font-weight:800; color:var(--txt); margin-bottom:6px;">🎓 University Sign-Up QR Code</div>
-                <p style="font-size:12.5px; color:var(--mut); margin:0 0 18px 0;">
-                    Print this at a career fair or share it with a university's career center. Scanning it opens Keria's
-                    university registration page, pre-set to sign up as a <strong>University / Career Center representative</strong>.
-                </p>
-
-                <div style="margin-bottom:16px;">
-                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Pre-select a university (optional)</label>
-                    <select id="uqrUniSelect" onchange="renderUniversityQr()" style="padding:10px 14px; font-size:13px;">
-                        <option value="">Let the representative pick at signup</option>
-                        <?php $uqr_opened_optgroup = null; foreach ($universities_list as $u): ?>
-                            <?php if ($u['type'] !== $uqr_opened_optgroup): $uqr_opened_optgroup = $u['type']; if (isset($uqr_group_started)) echo '</optgroup>'; ?>
-                                <optgroup label="<?= $uqr_opened_optgroup === 'public' ? 'Public Universities' : ($uqr_opened_optgroup === 'private' ? 'Private Universities' : 'Other') ?>">
-                                <?php $uqr_group_started = true; ?>
-                            <?php endif; ?>
-                            <option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                        <?php endforeach; if (isset($uqr_group_started)) echo '</optgroup>'; ?>
-                    </select>
-                    <div style="font-size:10.5px; color:var(--mut); margin-top:4px;">Picking one here just pre-fills the dropdown on the registration page — the representative can still change it.</div>
-                </div>
-
-                <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
-                    <div style="flex:1; min-width:260px;">
-                        <div style="display:flex; gap:8px; margin-bottom:10px;">
-                            <input type="text" readonly id="uqrLinkInput" value="<?= htmlspecialchars($university_signup_link) ?>" style="flex:1; font-family:monospace; font-size:12px;">
-                            <button type="button" class="btn-secondary" style="padding:9px 16px; font-size:12.5px; white-space:nowrap;" onclick="copyUniversityQrLink()">📋 Copy</button>
-                        </div>
-                        <button type="button" class="btn-secondary" style="padding:8px 16px; font-size:12px;" onclick="downloadUniversityQr()">⬇️ Download QR (PNG)</button>
-                    </div>
-                    <div style="text-align:center;">
-                        <div id="uqrCode" style="width:180px; height:180px; display:flex; align-items:center; justify-content:center; background:#fff; border-radius:10px; border:1px solid var(--bdr); padding:10px;"></div>
-                        <div style="font-size:11px; color:var(--mut); margin-top:6px;">Scan to register</div>
-                    </div>
-                </div>
-            </div>
-
-            <script src="qrcode.js?v=<?php echo @filemtime(__DIR__.'/qrcode.js'); ?>"></script>
-            <script>
-                var UQR_BASE_LINK = <?= json_encode($university_signup_link) ?>;
-
-                function buildUniversityQrLink() {
-                    var sel = document.getElementById('uqrUniSelect');
-                    var uniId = sel ? sel.value : '';
-                    return uniId ? (UQR_BASE_LINK + '&university_id=' + encodeURIComponent(uniId)) : UQR_BASE_LINK;
-                }
-
-                function renderUniversityQr() {
-                    var link = buildUniversityQrLink();
-                    document.getElementById('uqrLinkInput').value = link;
-                    var holder = document.getElementById('uqrCode');
-                    holder.innerHTML = '';
-                    try {
-                        var qr = qrcode(0, 'M');
-                        qr.addData(link);
-                        qr.make();
-                        holder.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
-                    } catch (e) {
-                        holder.textContent = 'QR unavailable';
-                    }
-                }
-
-                function copyUniversityQrLink() {
-                    var input = document.getElementById('uqrLinkInput');
-                    input.select();
-                    input.setSelectionRange(0, 99999);
-                    navigator.clipboard && navigator.clipboard.writeText(input.value).catch(function(){ document.execCommand('copy'); });
-                }
-
-                function downloadUniversityQr() {
-                    var svg = document.querySelector('#uqrCode svg');
-                    if (!svg) return;
-                    var svgData = new XMLSerializer().serializeToString(svg);
-                    var img = new Image();
-                    var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-                    var url = URL.createObjectURL(svgBlob);
-                    img.onload = function() {
-                        var scale = 4;
-                        var canvas = document.createElement('canvas');
-                        canvas.width = img.width * scale;
-                        canvas.height = img.height * scale;
-                        var ctx = canvas.getContext('2d');
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        URL.revokeObjectURL(url);
-                        var a = document.createElement('a');
-                        a.download = 'keria-university-signup-qr.png';
-                        a.href = canvas.toDataURL('image/png');
-                        a.click();
-                    };
-                    img.src = url;
-                }
-
-                document.addEventListener('DOMContentLoaded', renderUniversityQr);
-            </script>
         </div>
     </main>
 
@@ -1348,21 +1205,8 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 </div>
 
                 <div id="addUserInstitutionField" style="display:none; margin-bottom:16px;">
-                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University</label>
-                    <select name="university_id" id="addUserUniSelect" onchange="toggleAddUserUniOther()" style="padding:10px 14px; font-size:13px; margin-bottom:8px;">
-                        <option value="">Select a university...</option>
-                        <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                            <?php if ($u['type'] !== $current_uni_type): $current_uni_type = $u['type']; if (isset($add_opened_optgroup)) echo '</optgroup>'; ?>
-                                <optgroup label="<?= $current_uni_type === 'public' ? 'Public Universities' : ($current_uni_type === 'private' ? 'Private Universities' : 'Other') ?>">
-                                <?php $add_opened_optgroup = true; ?>
-                            <?php endif; ?>
-                            <option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                        <?php endforeach; if (isset($add_opened_optgroup)) echo '</optgroup>'; ?>
-                        <option value="other">Not listed / Other</option>
-                    </select>
-                    <div id="addUserInstitutionOtherBlock" style="display:none;">
-                        <input type="text" name="institution_name" placeholder="e.g. Universiti Putra Malaysia" style="padding:10px 14px; font-size:13px;">
-                    </div>
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Institution Name</label>
+                    <input type="text" name="institution_name" placeholder="e.g. Universiti Putra Malaysia" style="padding:10px 14px; font-size:13px;">
                     <div style="font-size:10.5px; color:var(--mut); margin-top:4px;">The icon can be uploaded after the account is created, via Edit Account.</div>
                 </div>
 
@@ -1431,21 +1275,8 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
 
                 <div id="editUserInstitutionBlock" style="display:none;">
                     <div style="margin-bottom:14px;">
-                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University</label>
-                        <select name="university_id" id="editUserUniSelect" onchange="toggleEditUserUniOther()" style="padding:10px 14px; font-size:13px; margin-bottom:8px;">
-                            <option value="">Select a university...</option>
-                            <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                                <?php if ($u['type'] !== $current_uni_type): $current_uni_type = $u['type']; if (isset($edit_opened_optgroup)) echo '</optgroup>'; ?>
-                                    <optgroup label="<?= $current_uni_type === 'public' ? 'Public Universities' : ($current_uni_type === 'private' ? 'Private Universities' : 'Other') ?>">
-                                    <?php $edit_opened_optgroup = true; ?>
-                                <?php endif; ?>
-                                <option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                            <?php endforeach; if (isset($edit_opened_optgroup)) echo '</optgroup>'; ?>
-                            <option value="other">Not listed / Other</option>
-                        </select>
-                        <div id="editUserInstitutionOtherBlock" style="display:none;">
-                            <input type="text" name="institution_name" id="editInstitutionName" placeholder="e.g. Universiti Putra Malaysia" style="padding:10px 14px; font-size:13px;">
-                        </div>
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Institution Name</label>
+                        <input type="text" name="institution_name" id="editInstitutionName" placeholder="e.g. Universiti Putra Malaysia" style="padding:10px 14px; font-size:13px;">
                     </div>
 
                     <div style="margin-bottom:14px;">
@@ -1681,22 +1512,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             document.getElementById('editUserPassword').value = '';
             document.getElementById('editUserRole').value = user.role || 'candidate';
             document.getElementById('editUserVerified').checked = (user.is_verified == 1);
-            var editUniSelect = document.getElementById('editUserUniSelect');
-            if (editUniSelect) {
-                if (user.university_id) {
-                    editUniSelect.value = String(user.university_id);
-                    if (editUniSelect.value !== String(user.university_id)) {
-                        // id wasn't in the list (shouldn't happen) -- fall back to Other
-                        editUniSelect.value = 'other';
-                    }
-                } else if (user.company_name) {
-                    editUniSelect.value = 'other';
-                } else {
-                    editUniSelect.value = '';
-                }
-            }
             document.getElementById('editInstitutionName').value = user.company_name || '';
-            toggleEditUserUniOther();
 
             var preview = document.getElementById('editInstitutionIconPreview');
             if (preview) {
@@ -1719,20 +1535,6 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         function toggleEditUserRoleFields() {
             var role = document.getElementById('editUserRole').value;
             document.getElementById('editUserInstitutionBlock').style.display = (role === 'university') ? 'block' : 'none';
-        }
-
-        function toggleEditUserUniOther() {
-            var sel = document.getElementById('editUserUniSelect');
-            var block = document.getElementById('editUserInstitutionOtherBlock');
-            if (!sel || !block) return;
-            block.style.display = (sel.value === 'other') ? 'block' : 'none';
-        }
-
-        function toggleAddUserUniOther() {
-            var sel = document.getElementById('addUserUniSelect');
-            var block = document.getElementById('addUserInstitutionOtherBlock');
-            if (!sel || !block) return;
-            block.style.display = (sel.value === 'other') ? 'block' : 'none';
         }
 
         function closeEditUserModal() {

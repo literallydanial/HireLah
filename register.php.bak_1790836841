@@ -4,9 +4,6 @@ require_once 'db.php';
 require_once 'mailer.php';
 require_once 'company_helpers.php';
 
-// Universities for the candidate-signup "school" dropdown (self-selected, no verification).
-$universities_list = $pdo->query("SELECT id, name, type FROM universities ORDER BY FIELD(type,'public','private','other'), name")->fetchAll();
-
 // A ?invite=TOKEN link (from a company's Settings > Team page, or its QR
 // code) always registers the new account as an employer joining that
 // specific company as HR — remembered across the OTP step via session so it
@@ -33,8 +30,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'];
     $role = $invite_company ? 'employer' : ($is_university_signup ? 'university' : $_POST['role']);
     $institution_name = null;
-    $university_id = null;
-    $matric_number = null;
 
     if (!isset($_POST['agree_terms'])) {
         $error = "You must agree to the Terms & Conditions and PDPA Act 2010 Policy to create an account.";
@@ -43,39 +38,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($role === 'university' && !isset($error)) {
-        // A university account may pick itself from the same universities list
-        // candidates use (so the dashboard can scope "my students" by a real
-        // university_id instead of matching free-text names), or choose
-        // "Not listed / Other" and type its own institution name instead.
-        $posted_uni_id = $_POST['university_id'] ?? '';
-        if ($posted_uni_id !== '') {
-            $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE id = ?");
-            $uni_check->execute([$posted_uni_id]);
-            $uni_row = $uni_check->fetch();
-            if ($uni_row) {
-                $university_id = (int) $uni_row['id'];
-                $institution_name = $uni_row['name'];
-            }
-        }
-        if ($university_id === null) {
-            $institution_name = trim($_POST['institution_name'] ?? '');
-        }
+        $institution_name = trim($_POST['institution_name'] ?? '');
         if ($institution_name === '') {
-            $error = "Please select your university, or choose \"Not listed / Other\" and enter its name.";
-        }
-    }
-
-    // A candidate may optionally self-link to their own university + matric number
-    // (self-reported, no verification — used to scope the university dashboard).
-    if ($role === 'candidate' && !isset($error)) {
-        $posted_uni_id = $_POST['university_id'] ?? '';
-        if ($posted_uni_id !== '') {
-            $uni_check = $pdo->prepare("SELECT id FROM universities WHERE id = ?");
-            $uni_check->execute([$posted_uni_id]);
-            if ($uni_check->fetch()) {
-                $university_id = (int) $posted_uni_id;
-                $matric_number = trim($_POST['matric_number'] ?? '') ?: null;
-            }
+            $error = "Institution name is required for a university account.";
         }
     }
 
@@ -90,8 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $otp = sprintf("%06d", mt_rand(100000, 999999));
         $otp_expires = date('Y-m-d H:i:s', strtotime('+15 minutes'));
 
-        $stmt = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, company_name, university_id, matric_number, is_verified, otp_code, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)");
-        if ($stmt->execute([$name, $email, $hash, $role, $institution_name, $university_id, $matric_number, $otp, $otp_expires])) {
+        $stmt = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, company_name, is_verified, otp_code, otp_expires_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?)");
+        if ($stmt->execute([$name, $email, $hash, $role, $institution_name, $otp, $otp_expires])) {
             $user_id = $pdo->lastInsertId();
             $_SESSION['pending_otp_user_id'] = $user_id;
 
@@ -174,20 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="POST"<?= $is_university_signup ? ' action="register.php?type=university"' : '' ?>>
             <?php if ($is_university_signup): ?>
-                <select name="university_id" id="registerUniSelect" required style="margin-bottom:12px;" onchange="toggleUniOtherField()">
-                    <option value="">Select your university...</option>
-                    <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                        <?php if ($u['type'] !== $current_uni_type): $current_uni_type = $u['type']; if ($current_uni_type !== null && isset($opened_optgroup)) echo '</optgroup>'; ?>
-                            <optgroup label="<?= $current_uni_type === 'public' ? 'Public Universities' : ($current_uni_type === 'private' ? 'Private Universities' : 'Other') ?>">
-                            <?php $opened_optgroup = true; ?>
-                        <?php endif; ?>
-                        <option value="<?= (int) $u['id'] ?>" <?= (string) ($_POST['university_id'] ?? $_GET['university_id'] ?? '') === (string) $u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['name']) ?></option>
-                    <?php endforeach; if (isset($opened_optgroup)) echo '</optgroup>'; ?>
-                    <option value="other" <?= ($_POST['university_id'] ?? '') === 'other' ? 'selected' : '' ?>>Not listed / Other</option>
-                </select>
-                <div id="uniOtherFieldBlock" style="display:none; margin-bottom:12px;">
-                    <input type="text" name="institution_name" placeholder="Institution / University Name" value="<?= htmlspecialchars($_POST['institution_name'] ?? '') ?>">
-                </div>
+                <input type="text" name="institution_name" placeholder="Institution / University Name" required value="<?= htmlspecialchars($_POST['institution_name'] ?? '') ?>" style="margin-bottom:12px;">
                 <input type="text" name="name" placeholder="Contact Person Name" required value="<?= htmlspecialchars($_POST['name'] ?? '') ?>" style="margin-bottom:12px;">
             <?php else: ?>
                 <input type="text" name="name" placeholder="Full Name" required value="<?= htmlspecialchars($_POST['name'] ?? '') ?>" style="margin-bottom:12px;">
@@ -203,40 +155,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="hidden" name="account_type" value="university">
                 <div style="margin-bottom:16px; text-align:left; font-size:12.5px; color:var(--mut); padding:8px 0;">Account type: <strong style="color:var(--txt);">University / Career Center</strong>.</div>
             <?php else: ?>
-                <select name="role" id="registerRoleSelect" required style="margin-bottom:12px;" onchange="toggleStudentFields()">
+                <select name="role" required style="margin-bottom:16px;">
                     <option value="candidate">I am a Candidate</option>
                     <option value="employer">I am an Employer</option>
                 </select>
-                <div id="studentFieldsBlock" style="margin-bottom:16px;">
-                    <select name="university_id" style="margin-bottom:12px;">
-                        <option value="">My university (optional — students only)</option>
-                        <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                            <?php if ($u['type'] !== $current_uni_type): ?>
-                                <?php if ($current_uni_type !== null): ?></optgroup><?php endif; ?>
-                                <optgroup label="<?= $u['type'] === 'public' ? 'Public Universities' : ($u['type'] === 'private' ? 'Private Universities' : 'Other') ?>">
-                                <?php $current_uni_type = $u['type']; ?>
-                            <?php endif; ?>
-                            <option value="<?= $u['id'] ?>" <?= (($_POST['university_id'] ?? '') == $u['id']) ? 'selected' : '' ?>><?= htmlspecialchars($u['name']) ?></option>
-                        <?php endforeach; ?>
-                        <?php if ($current_uni_type !== null): ?></optgroup><?php endif; ?>
-                    </select>
-                    <input type="text" name="matric_number" placeholder="Matric / Student ID Number (optional)" value="<?= htmlspecialchars($_POST['matric_number'] ?? '') ?>">
-                    <div style="font-size:11px; color:var(--mut); margin-top:6px; text-align:left;">Only fill this in if you're a student — it lets your university see your career-readiness activity on their dashboard.</div>
-                </div>
-                <script>
-                    function toggleStudentFields() {
-                        var role = document.getElementById('registerRoleSelect').value;
-                        document.getElementById('studentFieldsBlock').style.display = (role === 'candidate') ? 'block' : 'none';
-                    }
-                    document.addEventListener('DOMContentLoaded', toggleStudentFields);
-        function toggleUniOtherField() {
-            var sel = document.getElementById('registerUniSelect');
-            var block = document.getElementById('uniOtherFieldBlock');
-            if (!sel || !block) return;
-            block.style.display = (sel.value === 'other') ? 'block' : 'none';
-        }
-        document.addEventListener('DOMContentLoaded', toggleUniOtherField);
-                </script>
             <?php endif; ?>
 
             <div style="margin-bottom:20px; text-align:left; font-size:12px; color:var(--mut); display:flex; gap:10px; align-items:flex-start;">
