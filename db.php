@@ -26,6 +26,21 @@ $options = [
 
 try {
     $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+
+    // Auto-verify university schema availability (self-healing migration on deploy)
+    try {
+        $pdo->query("SELECT 1 FROM universities LIMIT 1");
+    } catch (\Throwable $e) {
+        $sql_file = __DIR__ . '/database/university.sql';
+        if (file_exists($sql_file)) {
+            try {
+                $sql = file_get_contents($sql_file);
+                $pdo->exec($sql);
+            } catch (\Throwable $migErr) {
+                error_log("University auto-migration notice: " . $migErr->getMessage());
+            }
+        }
+    }
 } catch (\PDOException $e) {
     error_log("Keria DB Connection Error: " . $e->getMessage());
     die("<div style='font-family:sans-serif; max-width:600px; margin:50px auto; padding:24px; border:1px solid #F87171; background:#FEF2F2; color:#991B1B; border-radius:12px; text-align:center;'>" .

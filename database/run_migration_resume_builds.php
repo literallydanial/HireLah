@@ -4,7 +4,7 @@
 // 'hirelah.resume_builds' doesn't exist" when saving a resume from the AI
 // Resume Builder (form mode or chat mode) — the table was defined in
 // hirelah.sql but never actually created in this database.
-require 'db.php';
+require_once __DIR__ . '/../db.php';
 header('Content-Type: text/plain');
 
 try {

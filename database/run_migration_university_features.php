@@ -9,7 +9,7 @@
 // Can be executed from CLI: php run_migration_university_features.php
 // Or opened in a browser while logged in as an admin.
 
-require_once 'db.php';
+require_once __DIR__ . '/../db.php';
 header('Content-Type: text/plain');
 
 function column_exists($pdo, $table, $column) {

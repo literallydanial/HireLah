@@ -361,9 +361,11 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
             <a href="university_dashboard.php" class="active">🎓 Student Activity</a>
             <a href="#at-risk">⚠️ At-Risk</a>
             <a href="#placements">📌 Placements</a>
+            <a href="university_settings.php">⚙️ Settings</a>
         </nav>
         <div class="header-right-actions">
             <span class="user-info-text" style="font-size:12px; color:var(--mut); margin-right:10px;">Logged in as <?= htmlspecialchars($_SESSION['user_name'] ?? 'Admin') ?></span>
+            <a href="university_settings.php" class="btn-secondary" style="padding:6px 12px; font-size:12px; text-decoration:none; margin-right:6px;">⚙️ Settings</a>
             <a href="logout.php" class="btn-secondary" style="padding:6px 14px; font-size:12px;">Logout</a>
         </div>
     </div>
@@ -372,19 +374,25 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
 <main>
 
     <?php if ($is_university_account && $university_filter_id === null): ?>
-        <div style="background:rgba(255, 196, 0, 0.1); border:1px solid rgba(255, 196, 0, 0.3); border-radius:12px; padding:12px 18px; margin-bottom:20px; font-size:12.5px; color:var(--txt); display:flex; align-items:center; gap:10px;">
-            <span style="font-size:16px;">ℹ️</span>
-            <div><strong><?= htmlspecialchars($institution_name) ?></strong> doesn't match any university in Keria's list yet, so no students are linked. Ask an admin to set this account's university from the same list students choose from in Admin → Registered Accounts.</div>
+        <div style="background:rgba(255, 196, 0, 0.1); border:1px solid rgba(255, 196, 0, 0.3); border-radius:12px; padding:12px 18px; margin-bottom:20px; font-size:12.5px; color:var(--txt); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:16px;">ℹ️</span>
+                <div><strong><?= htmlspecialchars($institution_name) ?></strong> is not matched to an institution in Keria's database yet. Set your university name in Settings to begin tracking student analytics.</div>
+            </div>
+            <a href="university_settings.php" class="btn-primary" style="padding:6px 14px; font-size:11.5px; text-decoration:none;">Open Settings &rarr;</a>
         </div>
     <?php elseif ($is_university_account && $legacy_name_fallback): ?>
         <div style="background:rgba(80,160,255,0.08); border:1px solid rgba(80,160,255,0.25); border-radius:12px; padding:12px 18px; margin-bottom:20px; font-size:12.5px; color:var(--txt); display:flex; align-items:center; gap:10px;">
             <span style="font-size:16px;">ℹ️</span>
-            <div>Matched to <strong><?= htmlspecialchars($institution_name) ?></strong> by name. An admin can link this account directly for a more reliable match.</div>
+            <div>Matched to <strong><?= htmlspecialchars($institution_name) ?></strong> by name. You can customize your institution branding anytime in <a href="university_settings.php" style="color:var(--acc); font-weight:700;">Settings</a>.</div>
         </div>
     <?php elseif (!$is_university_account): ?>
-        <div style="background:rgba(217, 255, 79, 0.1); border:1px solid rgba(217, 255, 79, 0.3); border-radius:12px; padding:12px 18px; margin-bottom:20px; font-size:12.5px; color:var(--txt); display:flex; align-items:center; gap:10px;">
-            <span style="font-size:16px;">🧪</span>
-            <div><strong>Admin preview</strong> — showing every student across all universities, since no single institution is selected. A real university account only sees its own linked students.</div>
+        <div style="background:rgba(217, 255, 79, 0.1); border:1px solid rgba(217, 255, 79, 0.3); border-radius:12px; padding:12px 18px; margin-bottom:20px; font-size:12.5px; color:var(--txt); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:16px;">🧪</span>
+                <div><strong>Admin preview</strong> — showing every student across all universities. A real university account only sees its own linked students.</div>
+            </div>
+            <a href="university_settings.php" class="btn-secondary" style="padding:6px 12px; font-size:11.5px; text-decoration:none;">Manage University Settings &rarr;</a>
         </div>
     <?php endif; ?>
 
@@ -416,14 +424,14 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
                 <div style="font-size:22px; font-weight:800; color:var(--txt);"><?= htmlspecialchars($institution_name) ?></div>
                 <div style="font-size:12.5px; color:var(--mut); margin-top:2px;">Monitoring student career-readiness and job-search activity on Keria</div>
                 <?php if ($is_university_account): ?>
-                    <form method="post" enctype="multipart/form-data" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-                        <input type="hidden" name="dashboard_action" value="upload_university_icon">
-                        <label class="btn-secondary" style="padding:5px 12px; font-size:11px; cursor:pointer;">
-                            🖼️ <?= $institution_logo ? 'Change Icon' : 'Upload Icon' ?>
-                            <input type="file" name="university_icon" accept=".jpg,.jpeg,.png,.webp,.gif" onchange="this.form.submit()" style="display:none;">
-                        </label>
-                        <span style="font-size:10.5px; color:var(--mut);">JPG, PNG, WEBP or GIF — up to 2MB</span>
-                    </form>
+                    <div style="display:flex; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;">
+                        <a href="university_settings.php#institutionTab" class="btn-secondary" style="padding:4px 10px; font-size:11px; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                            <span>⚙️ Edit Institution & Crest</span>
+                        </a>
+                        <a href="university_settings.php#qrTab" class="btn-secondary" style="padding:4px 10px; font-size:11px; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+                            <span>📱 Student Fair QR</span>
+                        </a>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>

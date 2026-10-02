@@ -12,7 +12,7 @@
 // Backfills every existing employer account into its own new company as the
 // sole 'admin', preserving current behaviour exactly (nothing changes for
 // existing accounts until they invite a teammate).
-require 'db.php';
+require_once __DIR__ . '/../db.php';
 header('Content-Type: text/plain');
 
 function column_exists($pdo, $table, $column) {

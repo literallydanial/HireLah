@@ -27,6 +27,33 @@ if ($invite_token && !$invite_company) {
 $account_type = $_GET['type'] ?? $_POST['account_type'] ?? null;
 $is_university_signup = ($account_type === 'university') && !$invite_company;
 
+// Resolve preset university if admin provided it in the link
+$admin_preset_uni_name = trim($_GET['university_name'] ?? $_GET['uni_name'] ?? $_POST['institution_name'] ?? '');
+$admin_preset_uni_type = trim($_GET['university_type'] ?? $_GET['uni_type'] ?? $_POST['university_type'] ?? 'public');
+$admin_preset_uni_id = (string) ($_GET['university_id'] ?? $_POST['university_id'] ?? '');
+
+if ($is_university_signup) {
+    if ($admin_preset_uni_id !== '' && $admin_preset_uni_id !== 'other' && $admin_preset_uni_name === '') {
+        foreach ($universities_list as $u) {
+            if ((string)$u['id'] === $admin_preset_uni_id) {
+                $admin_preset_uni_name = $u['name'];
+                $admin_preset_uni_type = $u['type'];
+                break;
+            }
+        }
+    }
+    if ($admin_preset_uni_name !== '' && $admin_preset_uni_id === '') {
+        foreach ($universities_list as $u) {
+            if (strcasecmp($u['name'], $admin_preset_uni_name) === 0) {
+                $admin_preset_uni_id = (string)$u['id'];
+                $admin_preset_uni_name = $u['name'];
+                $admin_preset_uni_type = $u['type'];
+                break;
+            }
+        }
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $name = trim($_POST['name']);
     $email = trim($_POST['email']);
@@ -43,40 +70,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($role === 'university' && !isset($error)) {
-        // A university account may pick itself from the same universities list
-        // candidates use (so the dashboard can scope "my students" by a real
-        // university_id instead of matching free-text names), or choose
-        // "Not listed / Other" and type its own institution name instead.
-        $posted_uni_id = $_POST['university_id'] ?? '';
-        if ($posted_uni_id !== '') {
-            $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE id = ?");
-            $uni_check->execute([$posted_uni_id]);
+        $uni_type = in_array($_POST['university_type'] ?? '', ['public', 'private'], true) ? $_POST['university_type'] : 'public';
+        $institution_name = trim($_POST['institution_name'] ?? $admin_preset_uni_name);
+        if ($institution_name === '') {
+            $error = "Please provide your university name.";
+        } else {
+            $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE LOWER(name) = LOWER(?) LIMIT 1");
+            $uni_check->execute([$institution_name]);
             $uni_row = $uni_check->fetch();
             if ($uni_row) {
-                $university_id = (int) $uni_row['id'];
-                $institution_name = $uni_row['name'];
+                $university_id = (int)$uni_row['id'];
+                $upd_uni = $pdo->prepare("UPDATE universities SET type = ? WHERE id = ?");
+                $upd_uni->execute([$uni_type, $university_id]);
+            } else {
+                $ins_uni = $pdo->prepare("INSERT INTO universities (name, type) VALUES (?, ?)");
+                $ins_uni->execute([$institution_name, $uni_type]);
+                $university_id = (int)$pdo->lastInsertId();
             }
-        }
-        if ($university_id === null) {
-            $institution_name = trim($_POST['institution_name'] ?? '');
-        }
-        if ($institution_name === '') {
-            $error = "Please select your university, or choose \"Not listed / Other\" and enter its name.";
         }
     }
 
     // A candidate may optionally self-link to their own university + matric number
-    // (self-reported, no verification — used to scope the university dashboard).
     if ($role === 'candidate' && !isset($error)) {
-        $posted_uni_id = $_POST['university_id'] ?? '';
-        if ($posted_uni_id !== '') {
-            $uni_check = $pdo->prepare("SELECT id FROM universities WHERE id = ?");
-            $uni_check->execute([$posted_uni_id]);
-            if ($uni_check->fetch()) {
-                $university_id = (int) $posted_uni_id;
-                $matric_number = trim($_POST['matric_number'] ?? '') ?: null;
+        $candidate_uni = trim($_POST['candidate_university_name'] ?? $_POST['university_name'] ?? '');
+        if ($candidate_uni !== '') {
+            $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE LOWER(name) = LOWER(?) LIMIT 1");
+            $uni_check->execute([$candidate_uni]);
+            $uni_row = $uni_check->fetch();
+            if ($uni_row) {
+                $university_id = (int)$uni_row['id'];
+                $institution_name = $uni_row['name'];
+            } else {
+                $institution_name = $candidate_uni;
             }
         }
+        $matric_number = trim($_POST['matric_number'] ?? '') ?: null;
     }
 
     // Check if email exists
@@ -153,7 +181,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php elseif ($is_university_signup): ?>
             <div style="background:rgba(217,255,79,0.1); border:1px solid rgba(217,255,79,0.35); border-radius:8px; padding:12px; margin-bottom:16px; text-align:left; font-size:13px; color:var(--txt);">
-                🎓 Registering as a <strong>University / Career Center</strong>. You'll get access to the university dashboard once your email is verified.
+                <?php if ($admin_preset_uni_name !== ''): ?>
+                    🎓 Registering for <strong><?= htmlspecialchars($admin_preset_uni_name) ?></strong> (University / Career Center).
+                <?php else: ?>
+                    🎓 Registering as a <strong>University / Career Center</strong>. You'll get access to the university dashboard once your email is verified.
+                <?php endif; ?>
             </div>
         <?php endif; ?>
 
@@ -172,22 +204,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
-        <form method="POST"<?= $is_university_signup ? ' action="register.php?type=university"' : '' ?>>
+        <form method="POST"<?= $is_university_signup ? ' action="register.php?type=university' . ($admin_preset_uni_name !== '' ? '&university_name=' . urlencode($admin_preset_uni_name) . ($admin_preset_uni_id !== '' ? '&university_id=' . urlencode($admin_preset_uni_id) : '') : '') . '"' : '' ?>>
             <?php if ($is_university_signup): ?>
-                <select name="university_id" id="registerUniSelect" required style="margin-bottom:12px;" onchange="toggleUniOtherField()">
-                    <option value="">Select your university...</option>
-                    <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                        <?php if ($u['type'] !== $current_uni_type): $current_uni_type = $u['type']; if ($current_uni_type !== null && isset($opened_optgroup)) echo '</optgroup>'; ?>
-                            <optgroup label="<?= $current_uni_type === 'public' ? 'Public Universities' : ($current_uni_type === 'private' ? 'Private Universities' : 'Other') ?>">
-                            <?php $opened_optgroup = true; ?>
-                        <?php endif; ?>
-                        <option value="<?= (int) $u['id'] ?>" <?= (string) ($_POST['university_id'] ?? $_GET['university_id'] ?? '') === (string) $u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['name']) ?></option>
-                    <?php endforeach; if (isset($opened_optgroup)) echo '</optgroup>'; ?>
-                    <option value="other" <?= ($_POST['university_id'] ?? '') === 'other' ? 'selected' : '' ?>>Not listed / Other</option>
-                </select>
-                <div id="uniOtherFieldBlock" style="display:none; margin-bottom:12px;">
-                    <input type="text" name="institution_name" placeholder="Institution / University Name" value="<?= htmlspecialchars($_POST['institution_name'] ?? '') ?>">
-                </div>
+                <?php if ($admin_preset_uni_name !== ''): ?>
+                    <!-- Pre-set by admin: Just use the one that admin put -->
+                    <input type="hidden" name="university_id" value="<?= htmlspecialchars($admin_preset_uni_id) ?>">
+                    <input type="hidden" name="university_type" value="<?= htmlspecialchars($admin_preset_uni_type) ?>">
+                    <input type="hidden" name="institution_name" value="<?= htmlspecialchars($admin_preset_uni_name) ?>">
+                    <div style="margin-bottom:14px; text-align:left;">
+                        <label style="display:block; font-size:11.5px; color:var(--mut); font-weight:700; margin-bottom:5px;">University / Institution</label>
+                        <div style="display:flex; align-items:center; gap:8px; padding:11px 14px; background:var(--surf); border:1px solid var(--bdr); border-radius:10px; font-size:13.5px; font-weight:700; color:var(--txt);">
+                            <span><?= $admin_preset_uni_type === 'private' ? '🏫' : '🏛️' ?></span>
+                            <span style="flex:1;"><?= htmlspecialchars($admin_preset_uni_name) ?></span>
+                            <span style="font-size:10px; font-weight:700; color:var(--mut); text-transform:uppercase;"><?= htmlspecialchars($admin_preset_uni_type) ?></span>
+                            <span style="font-size:10.5px; font-weight:700; color:var(--acc); background:rgba(217,255,79,0.15); padding:2px 8px; border-radius:6px;">Pre-set</span>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <!-- Generic signup: select Public or Private, and enter university name -->
+                    <div style="margin-bottom:12px; text-align:left;">
+                        <label style="display:block; font-size:11.5px; color:var(--mut); font-weight:700; margin-bottom:5px;">University Classification</label>
+                        <select name="university_type" required style="margin-bottom:0;">
+                            <option value="public" <?= (($_POST['university_type'] ?? '') === 'public') ? 'selected' : '' ?>>🏛️ Public University</option>
+                            <option value="private" <?= (($_POST['university_type'] ?? '') === 'private') ? 'selected' : '' ?>>🏫 Private University</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:12px; text-align:left;">
+                        <label style="display:block; font-size:11.5px; color:var(--mut); font-weight:700; margin-bottom:5px;">University Name</label>
+                        <input type="text" name="institution_name" list="existingUniversitiesDatalist" placeholder="e.g. Universiti Malaya" required value="<?= htmlspecialchars($_POST['institution_name'] ?? '') ?>" style="margin-bottom:0;">
+                    </div>
+                <?php endif; ?>
                 <input type="text" name="name" placeholder="Contact Person Name" required value="<?= htmlspecialchars($_POST['name'] ?? '') ?>" style="margin-bottom:12px;">
             <?php else: ?>
                 <input type="text" name="name" placeholder="Full Name" required value="<?= htmlspecialchars($_POST['name'] ?? '') ?>" style="margin-bottom:12px;">
@@ -201,25 +247,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php elseif ($is_university_signup): ?>
                 <input type="hidden" name="role" value="university">
                 <input type="hidden" name="account_type" value="university">
-                <div style="margin-bottom:16px; text-align:left; font-size:12.5px; color:var(--mut); padding:8px 0;">Account type: <strong style="color:var(--txt);">University / Career Center</strong>.</div>
+                <div style="margin-bottom:16px; text-align:left; font-size:12.5px; color:var(--mut); padding:8px 0;">Account type: <strong style="color:var(--txt);">University / Career Center</strong><?php if ($admin_preset_uni_name !== ''): ?> &mdash; pre-set for <strong style="color:var(--txt);"><?= htmlspecialchars($admin_preset_uni_name) ?></strong><?php endif; ?>.</div>
             <?php else: ?>
                 <select name="role" id="registerRoleSelect" required style="margin-bottom:12px;" onchange="toggleStudentFields()">
                     <option value="candidate">I am a Candidate</option>
                     <option value="employer">I am an Employer</option>
                 </select>
-                <div id="studentFieldsBlock" style="margin-bottom:16px;">
-                    <select name="university_id" style="margin-bottom:12px;">
-                        <option value="">My university (optional — students only)</option>
-                        <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                            <?php if ($u['type'] !== $current_uni_type): ?>
-                                <?php if ($current_uni_type !== null): ?></optgroup><?php endif; ?>
-                                <optgroup label="<?= $u['type'] === 'public' ? 'Public Universities' : ($u['type'] === 'private' ? 'Private Universities' : 'Other') ?>">
-                                <?php $current_uni_type = $u['type']; ?>
-                            <?php endif; ?>
-                            <option value="<?= $u['id'] ?>" <?= (($_POST['university_id'] ?? '') == $u['id']) ? 'selected' : '' ?>><?= htmlspecialchars($u['name']) ?></option>
-                        <?php endforeach; ?>
-                        <?php if ($current_uni_type !== null): ?></optgroup><?php endif; ?>
-                    </select>
+                <div id="studentFieldsBlock" style="margin-bottom:16px; text-align:left;">
+                    <label style="display:block; font-size:11.5px; color:var(--mut); font-weight:700; margin-bottom:5px;">My University (optional — students only)</label>
+                    <input type="text" name="candidate_university_name" list="existingUniversitiesDatalist" placeholder="e.g. Universiti Malaya, UniKL..." value="<?= htmlspecialchars($_POST['candidate_university_name'] ?? '') ?>" style="margin-bottom:12px;">
                     <input type="text" name="matric_number" placeholder="Matric / Student ID Number (optional)" value="<?= htmlspecialchars($_POST['matric_number'] ?? '') ?>">
                     <div style="font-size:11px; color:var(--mut); margin-top:6px; text-align:left;">Only fill this in if you're a student — it lets your university see your career-readiness activity on their dashboard.</div>
                 </div>
@@ -229,13 +265,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         document.getElementById('studentFieldsBlock').style.display = (role === 'candidate') ? 'block' : 'none';
                     }
                     document.addEventListener('DOMContentLoaded', toggleStudentFields);
-        function toggleUniOtherField() {
-            var sel = document.getElementById('registerUniSelect');
-            var block = document.getElementById('uniOtherFieldBlock');
-            if (!sel || !block) return;
-            block.style.display = (sel.value === 'other') ? 'block' : 'none';
-        }
-        document.addEventListener('DOMContentLoaded', toggleUniOtherField);
                 </script>
             <?php endif; ?>
 
@@ -254,5 +283,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php if ($invite_company): ?>&mdash; you'll be added to <?= htmlspecialchars($invite_company['name']) ?> right after you log in.<?php endif; ?>
         </div>
     </div>
+
+    <datalist id="existingUniversitiesDatalist">
+        <?php foreach ($universities_list as $u): ?>
+            <option value="<?= htmlspecialchars($u['name']) ?>"><?= htmlspecialchars($u['name']) ?> (<?= ucfirst($u['type']) ?>)</option>
+        <?php endforeach; ?>
+    </datalist>
+
 <script src="theme.js"></script></body>
 </html>

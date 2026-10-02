@@ -42,17 +42,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $institution_name = ($role === 'university') ? trim($_POST['institution_name'] ?? '') : null;
         $university_id = null;
         if ($role === 'university') {
-            // Same universities list candidates use, so a real university_id can
-            // scope "my students" on the university dashboard instead of matching
-            // free-text institution names.
-            $posted_uni_id = $_POST['university_id'] ?? '';
-            if ($posted_uni_id !== '' && $posted_uni_id !== 'other') {
-                $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE id = ?");
-                $uni_check->execute([$posted_uni_id]);
-                $uni_row = $uni_check->fetch();
-                if ($uni_row) {
-                    $university_id = (int) $uni_row['id'];
-                    $institution_name = $uni_row['name'];
+            $uni_type = in_array($_POST['university_type'] ?? '', ['public', 'private'], true) ? $_POST['university_type'] : 'public';
+            if ($institution_name !== '') {
+                $chk_uni = $pdo->prepare("SELECT id FROM universities WHERE LOWER(name) = LOWER(?) LIMIT 1");
+                $chk_uni->execute([$institution_name]);
+                $existing_uni_id = $chk_uni->fetchColumn();
+                if ($existing_uni_id) {
+                    $university_id = (int)$existing_uni_id;
+                    $upd_uni = $pdo->prepare("UPDATE universities SET type = ? WHERE id = ?");
+                    $upd_uni->execute([$uni_type, $university_id]);
+                } else {
+                    $ins_uni = $pdo->prepare("INSERT INTO universities (name, type) VALUES (?, ?)");
+                    $ins_uni->execute([$institution_name, $uni_type]);
+                    $university_id = (int)$pdo->lastInsertId();
                 }
             }
         }
@@ -157,27 +159,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $params[] = $role;
                     }
 
-                    // Institution name & icon (university accounts only) -- gives admin
+                    // Institution name, classification & icon (university accounts only) -- gives admin
                     // full control over a university account's profile without needing
                     // to log in as that account.
                     if ($role === 'university') {
-                        $university_id = null;
-                        $posted_uni_id = $_POST['university_id'] ?? '';
-                        if ($posted_uni_id !== '' && $posted_uni_id !== 'other') {
-                            $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE id = ?");
-                            $uni_check->execute([$posted_uni_id]);
-                            $uni_row = $uni_check->fetch();
-                            if ($uni_row) {
-                                $university_id = (int) $uni_row['id'];
-                            }
-                        }
-                        $institution_name = $university_id !== null
-                            ? $pdo->query("SELECT name FROM universities WHERE id = " . (int) $university_id)->fetchColumn()
-                            : trim($_POST['institution_name'] ?? '');
-                        if ($institution_name === '' || $institution_name === false) {
-                            $_SESSION['error'] = "Institution name is required for a university account.";
+                        $uni_type = in_array($_POST['university_type'] ?? '', ['public', 'private'], true) ? $_POST['university_type'] : 'public';
+                        $institution_name = trim($_POST['institution_name'] ?? '');
+                        if ($institution_name === '') {
+                            $_SESSION['error'] = "University name is required for a university account.";
                             $edit_valid = false;
                         } else {
+                            $chk_uni = $pdo->prepare("SELECT id FROM universities WHERE LOWER(name) = LOWER(?) LIMIT 1");
+                            $chk_uni->execute([$institution_name]);
+                            $existing_uni_id = $chk_uni->fetchColumn();
+                            if ($existing_uni_id) {
+                                $university_id = (int)$existing_uni_id;
+                                $upd_uni = $pdo->prepare("UPDATE universities SET type = ? WHERE id = ?");
+                                $upd_uni->execute([$uni_type, $university_id]);
+                            } else {
+                                $ins_uni = $pdo->prepare("INSERT INTO universities (name, type) VALUES (?, ?)");
+                                $ins_uni->execute([$institution_name, $uni_type]);
+                                $university_id = (int)$pdo->lastInsertId();
+                            }
                             $updates[] = "company_name = ?";
                             $params[] = $institution_name;
                             $updates[] = "university_id = ?";
@@ -447,7 +450,25 @@ $admin_job_funnels = $pdo->query("
 // ----------------------------------------------------
 // 3. FETCH USERS & JOBS LIST FOR TABLES
 // ----------------------------------------------------
-$users_list = $pdo->query("SELECT * FROM users ORDER BY created_at DESC")->fetchAll();
+$users_list = $pdo->query("SELECT u.*, un.type as university_type FROM users u LEFT JOIN universities un ON u.university_id = un.id ORDER BY u.created_at DESC")->fetchAll();
+$university_users_list = $pdo->query("
+    SELECT u.*, 
+           COALESCE(NULLIF(un.name, ''), NULLIF(u.company_name, ''), 'Unspecified') as institution_display,
+           COALESCE(un.type, 'other') as university_type,
+           (SELECT COUNT(*) FROM users s WHERE s.role = 'candidate' AND (s.university_id = u.university_id OR (u.university_id IS NULL AND u.company_name IS NOT NULL AND LOWER(s.company_name) = LOWER(u.company_name)))) as linked_students_count
+    FROM users u 
+    LEFT JOIN universities un ON u.university_id = un.id 
+    WHERE u.role = 'university' 
+    ORDER BY u.created_at DESC
+")->fetchAll(PDO::FETCH_ASSOC);
+
+$new_uni_signups_48h = 0;
+foreach ($university_users_list as $uu) {
+    if (strtotime($uu['created_at']) >= strtotime('-48 hours')) {
+        $new_uni_signups_48h++;
+    }
+}
+
 $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name FROM jobs j LEFT JOIN users u ON j.employer_id = u.id ORDER BY j.created_at DESC")->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -626,9 +647,24 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             border-left-color: var(--acc) !important;
             box-shadow: inset 0 0 0 1px rgba(217, 255, 79, 0.3);
         }
-        .admin-tr.accent-red   { border-left-color: #F43F5E; }
-        .admin-tr.accent-amber { border-left-color: #F59E0B; }
-        .admin-tr.accent-green { border-left-color: #10B981; }
+        .admin-tr.accent-red    { border-left-color: #F43F5E; }
+        .admin-tr.accent-amber  { border-left-color: #F59E0B; }
+        .admin-tr.accent-green  { border-left-color: #10B981; }
+        .admin-tr.accent-violet { border-left-color: #6366F1; }
+        .admin-tr.uni-row-item {
+            cursor: pointer;
+            transition: background 0.15s ease, box-shadow 0.15s ease;
+        }
+        .admin-tr.uni-row-item.is-selected {
+            background: rgba(99, 102, 241, 0.08) !important;
+            border-left-color: #6366F1 !important;
+            box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.35);
+        }
+        [data-theme="dark"] .admin-tr.uni-row-item.is-selected {
+            background: rgba(99, 102, 241, 0.15) !important;
+            border-left-color: #818CF8 !important;
+            box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.4);
+        }
         .admin-tr .chip-rejected {
             background: var(--grad-red) !important;
             color: #fff !important;
@@ -745,6 +781,9 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 <p style="font-size:13px; color:var(--mut); margin-top:4px; margin-bottom:0;">Monitor user accounts, database integrity, and Google Gemini AI resume screening engine health.</p>
             </div>
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <button type="button" onclick="openUniversityQrModal()" class="btn-secondary" style="padding:11px 18px; font-size:13.5px; width:auto; display:inline-flex; gap:8px; align-items:center; border-radius:10px; cursor:pointer; font-weight:700; border:1px solid var(--bdr); background:var(--surf); color:var(--txt);">
+                    <span>🎓 University Sign-Up Code</span>
+                </button>
                 <a href="admin_resumes.php" class="btn-secondary" style="padding:11px 20px; font-size:13.5px; width:auto; display:inline-flex; gap:8px; align-items:center; border-radius:10px; cursor:pointer; font-weight:700; border:1px solid var(--bdr); background:var(--surf); text-decoration:none;">
                     <span>📄 Resumes & Export Hub</span>
                 </a>
@@ -858,12 +897,12 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             </div>
         </div>
 
-        <!-- Section Tabs: User Management vs Job Moderation vs Funnel Analytics -->
+        <!-- Section Tabs: User Management vs University Accounts vs Job Moderation vs Funnel Analytics -->
         <div class="tab-controls">
             <button type="button" class="tab-btn active" onclick="switchAdminTab('usersTab', this)">👥 Registered Accounts (<?= count($users_list) ?>)<?php if($new_signups_48h > 0): ?> <span style="background:#EC4899; color:#fff; border-radius:8px; padding:1px 7px; font-size:10px; font-weight:800; margin-left:4px;">🆕 <?= $new_signups_48h ?> new</span><?php endif; ?></button>
+            <button type="button" class="tab-btn" onclick="switchAdminTab('universitiesTab', this)">🎓 Registered Universities (<?= count($university_users_list) ?>)<?php if($new_uni_signups_48h > 0): ?> <span style="background:#EC4899; color:#fff; border-radius:8px; padding:1px 7px; font-size:10px; font-weight:800; margin-left:4px;">🆕 <?= $new_uni_signups_48h ?> new</span><?php endif; ?></button>
             <button type="button" class="tab-btn" onclick="switchAdminTab('jobsTab', this)">💼 Job Postings Moderation (<?= count($jobs_list) ?>)</button>
             <button type="button" class="tab-btn" onclick="switchAdminTab('funnelTab', this)">🔻 Platform-Wide Hiring Funnel Analytics</button>
-            <button type="button" class="tab-btn" onclick="switchAdminTab('universityQrTab', this)">🎓 University Sign-Up QR Code</button>
         </div>
 
         <!-- Platform Hiring Funnel Analytics Panel (its own tab now, toggled via
@@ -1067,6 +1106,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                                        data-is-self="<?= $u_is_self ? '1' : '0' ?>"
                                        data-user-company-name="<?= htmlspecialchars($u['company_name'] ?? '', ENT_QUOTES) ?>"
                                        data-user-company-logo="<?= htmlspecialchars($u['company_logo'] ?? '', ENT_QUOTES) ?>"
+                                       data-user-uni-type="<?= htmlspecialchars($u['university_type'] ?? 'public', ENT_QUOTES) ?>"
                                        onclick="event.stopPropagation(); updateBulkSelection();" style="width:15px; height:15px; cursor:pointer;">
                             </div>
                             <div style="font-weight:700; color:var(--mut);">#<?= $u['id'] ?></div>
@@ -1100,6 +1140,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                                     "role" => $u["role"],
                                     "is_verified" => (int)$u["is_verified"],
                                     "is_self" => $u_is_self,
+                                    "university_type" => $u["university_type"] ?? "public",
                                     "company_name" => $u["company_name"] ?? '',
                                     "company_logo" => $u["company_logo"] ?? '',
                                     "university_id" => $u["university_id"] ?? ''
@@ -1129,6 +1170,201 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                     <?php endforeach; ?>
                 </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Tab: Registered University Accounts -->
+        <div id="universitiesTab" class="admin-tab-pane" style="display:none;">
+            <div class="panel" style="padding:20px; margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; flex:1;">
+                        <input type="text" id="uniSearchInput" onkeyup="filterUniversitiesTable()" placeholder="🔍 Search university name, contact person, or email..." style="max-width:340px; padding:9px 14px; font-size:13px; margin:0;">
+                        
+                        <select id="uniTypeFilterSelect" onchange="filterUniversitiesTable()" style="padding:9px 36px 9px 12px; font-size:13px; margin:0; width:auto;">
+                            <option value="">All Types</option>
+                            <option value="public">🏛️ Public Universities</option>
+                            <option value="private">🏫 Private Universities</option>
+                        </select>
+
+                        <select id="uniStatusFilterSelect" onchange="filterUniversitiesTable()" style="padding:9px 36px 9px 12px; font-size:13px; margin:0; width:auto;">
+                            <option value="">All Statuses</option>
+                            <option value="1">Verified</option>
+                            <option value="0">Pending OTP</option>
+                        </select>
+                    </div>
+
+                    <div style="display:flex; gap:8px;">
+                        <button type="button" onclick="openAddUniModal()" class="btn-primary" style="padding:9px 18px; font-size:13px; width:auto; display:inline-flex; gap:6px; align-items:center; border-radius:8px; cursor:pointer;">
+                            <span>+ Add University Account</span>
+                        </button>
+                        <button type="button" onclick="openUniversityQrModal()" class="btn-secondary" style="padding:9px 18px; font-size:13px; width:auto; display:inline-flex; gap:6px; align-items:center; border-radius:8px; cursor:pointer;">
+                            <span>🎓 University Sign-Up Code</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- University Selection Action Bar (Appears when rows selected) -->
+                <div id="uniSelectionToolbar" class="user-selection-bar">
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <span id="bulkUniSelectedCount" style="font-size:12px; font-weight:800; background:var(--dim); border:1px solid var(--bdr); border-radius:20px; padding:4px 12px; color:var(--txt);">0 selected</span>
+                        <div id="selectedUniPreview" style="display:none; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--txt);">
+                            <span id="selectedUniName"></span>
+                            <span id="selectedUniEmail" style="color:var(--mut); font-weight:500; font-size:11.5px;"></span>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <button type="button" id="editSelectedUniBtn" onclick="editSelectedUniAccount()" class="btn-primary" style="padding:7px 15px; font-size:12px; border-radius:8px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:700; width:auto; margin:0;">
+                            ✏️ Edit University
+                        </button>
+                        <button type="button" id="deleteSelectedUniBtn" onclick="confirmDeleteSelectedUnis()" style="background:rgba(255, 77, 106, 0.12); border:1px solid rgba(255, 77, 106, 0.35); border-radius:8px; color:var(--red); padding:7px 15px; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                            🗑️ Delete Account
+                        </button>
+                        <button type="button" onclick="clearUniSelection()" class="btn-secondary" style="padding:7px 12px; font-size:12px; border-radius:8px;" title="Clear Selection">
+                            ✕ Deselect
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Hidden form for bulk delete submission -->
+                <form method="POST" id="bulkDeleteUnisForm" style="display:none;">
+                    <input type="hidden" name="action" value="bulk_delete_users">
+                </form>
+
+                <?php if (empty($university_users_list)): ?>
+                    <div style="text-align:center; padding:48px 20px; background:var(--dim); border-radius:14px; border:1px dashed var(--bdr);">
+                        <div style="font-size:36px; margin-bottom:12px;">🎓</div>
+                        <div style="font-size:16px; font-weight:800; color:var(--txt); margin-bottom:6px;">No University Accounts Registered Yet</div>
+                        <p style="font-size:12.5px; color:var(--mut); max-width:440px; margin:0 auto 18px auto;">
+                            Share the university sign-up QR code or direct registration link with university career centers or liaisons to begin registering campus accounts.
+                        </p>
+                        <button type="button" onclick="openUniversityQrModal()" class="btn-primary" style="padding:10px 22px; font-size:13px; display:inline-flex; align-items:center; gap:8px;">
+                            <span>🎓 Open Sign-Up QR Code Modal</span>
+                        </button>
+                    </div>
+                <?php else: ?>
+                    <div class="admin-table-scroll">
+                    <div class="admin-table">
+                        <div class="admin-tr admin-th" style="grid-template-columns: 36px 50px 1.5fr 1.3fr 105px 95px 105px 145px; min-width:860px;">
+                            <div><input type="checkbox" id="selectAllUnis" onclick="toggleSelectAllUnis(this)" title="Select All" style="width:15px; height:15px; cursor:pointer;"></div>
+                            <div>ID</div>
+                            <div>University / Institution</div>
+                            <div>Representative & Email</div>
+                            <div>Status</div>
+                            <div>Students</div>
+                            <div class="admin-th-hide-mobile">Joined</div>
+                            <div>Actions</div>
+                        </div>
+
+                        <?php foreach($university_users_list as $uu): ?>
+                            <?php
+                                $uu_is_new = strtotime($uu['created_at']) >= strtotime('-48 hours');
+                                $uu_type_label = $uu['university_type'] === 'public' ? 'Public' : ($uu['university_type'] === 'private' ? 'Private' : 'Other / Custom');
+                                $uu_type_badge = $uu['university_type'] === 'public'
+                                    ? 'background:rgba(16, 185, 129, 0.12); color:var(--grn);'
+                                    : ($uu['university_type'] === 'private'
+                                        ? 'background:rgba(99, 102, 241, 0.12); color:#6366F1;'
+                                        : 'background:rgba(245, 158, 11, 0.12); color:var(--yel);');
+                            ?>
+                            <div class="admin-tr uni-row-item accent-violet"
+                                 style="grid-template-columns: 36px 50px 1.5fr 1.3fr 105px 95px 105px 145px; min-width:860px; <?= $uu_is_new ? 'background:rgba(236, 72, 153, 0.05);' : '' ?>"
+                                 data-uni-id="<?= $uu['id'] ?>"
+                                 data-uni-name="<?= htmlspecialchars($uu['name'], ENT_QUOTES) ?>"
+                                 data-uni-email="<?= htmlspecialchars($uu['email'], ENT_QUOTES) ?>"
+                                 data-uni-institution="<?= htmlspecialchars($uu['institution_display'], ENT_QUOTES) ?>"
+                                 data-uni-company-name="<?= htmlspecialchars($uu['company_name'] ?? '', ENT_QUOTES) ?>"
+                                 data-uni-company-logo="<?= htmlspecialchars($uu['company_logo'] ?? '', ENT_QUOTES) ?>"
+                                 data-uni-university-id="<?= htmlspecialchars($uu['university_id'] ?? '', ENT_QUOTES) ?>"
+                                 data-uni-verified="<?= $uu['is_verified'] ? '1' : '0' ?>"
+                                 data-type="<?= htmlspecialchars($uu['university_type']) ?>"
+                                 data-status="<?= $uu['is_verified'] ? '1' : '0' ?>"
+                                 data-search="<?= strtolower(htmlspecialchars($uu['institution_display'] . ' ' . $uu['name'] . ' ' . $uu['email'] . ' ' . $uu_type_label)) ?>"
+                                 onclick="handleUniRowClick(event, this)">
+                                
+                                <div onclick="event.stopPropagation()">
+                                    <input type="checkbox" class="uni-select-checkbox" value="<?= $uu['id'] ?>"
+                                           data-uni-id="<?= $uu['id'] ?>"
+                                           data-uni-name="<?= htmlspecialchars($uu['name'], ENT_QUOTES) ?>"
+                                           data-uni-email="<?= htmlspecialchars($uu['email'], ENT_QUOTES) ?>"
+                                           data-uni-institution="<?= htmlspecialchars($uu['institution_display'], ENT_QUOTES) ?>"
+                                           data-uni-company-name="<?= htmlspecialchars($uu['company_name'] ?? '', ENT_QUOTES) ?>"
+                                           data-uni-company-logo="<?= htmlspecialchars($uu['company_logo'] ?? '', ENT_QUOTES) ?>"
+                                           data-uni-university-id="<?= htmlspecialchars($uu['university_id'] ?? '', ENT_QUOTES) ?>"
+                                           data-uni-type="<?= htmlspecialchars($uu['university_type'] ?? 'public', ENT_QUOTES) ?>"
+                                           data-uni-verified="<?= $uu['is_verified'] ? '1' : '0' ?>"
+                                           onclick="event.stopPropagation(); updateBulkUniSelection();" style="width:15px; height:15px; cursor:pointer;">
+                                </div>
+
+                                <div style="font-weight:700; color:var(--mut);">#<?= $uu['id'] ?></div>
+
+                                <div style="font-weight:800; color:var(--txt); display:flex; align-items:center; gap:10px;">
+                                    <?php if (!empty($uu['company_logo'])): ?>
+                                        <img src="<?= htmlspecialchars($uu['company_logo']) ?>?v=<?= time() ?>" alt="Icon" style="width:30px; height:30px; object-fit:contain; border-radius:8px; background:#fff; padding:3px; border:1px solid var(--bdr); flex-shrink:0;">
+                                    <?php else: ?>
+                                        <div style="width:30px; height:30px; border-radius:8px; background:rgba(99, 102, 241, 0.12); display:flex; align-items:center; justify-content:center; font-size:15px; border:1px solid rgba(99, 102, 241, 0.25); flex-shrink:0;">🏛️</div>
+                                    <?php endif; ?>
+                                    <div style="min-width:0;">
+                                        <div style="font-size:13px; font-weight:800; color:var(--txt); line-height:1.25; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="<?= htmlspecialchars($uu['institution_display']) ?>">
+                                            <?= htmlspecialchars($uu['institution_display']) ?>
+                                        </div>
+                                        <div style="display:flex; gap:6px; align-items:center; margin-top:3px;">
+                                            <span class="chip" style="font-size:9.5px; padding:1px 6px; text-transform:uppercase; border-color:transparent; font-weight:700; <?= $uu_type_badge ?>">
+                                                <?= htmlspecialchars($uu_type_label) ?>
+                                            </span>
+                                            <?php if($uu_is_new): ?>
+                                                <span title="Registered in the last 48 hours" style="background:#EC4899; color:#fff; border-radius:6px; padding:1px 6px; font-size:9px; font-weight:800; letter-spacing:0.3px;">🆕 NEW</span>
+                                            <?php endif; ?>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div style="font-size:12.5px; font-weight:700; color:var(--txt);"><?= htmlspecialchars($uu['name']) ?></div>
+                                    <div style="font-size:11.5px; color:var(--mut); font-family:monospace;"><?= htmlspecialchars($uu['email']) ?></div>
+                                </div>
+
+                                <div>
+                                    <?php if ($uu['is_verified']): ?>
+                                        <span class="chip" style="font-size:10px; background:rgba(16, 185, 129, 0.12); color:var(--grn); border-color:transparent;">✅ Verified</span>
+                                    <?php else: ?>
+                                        <span class="chip" style="font-size:10px; background:rgba(245, 158, 11, 0.12); color:var(--yel); border-color:transparent;">⏳ Pending OTP</span>
+                                    <?php endif; ?>
+                                </div>
+
+                                <div>
+                                    <span class="chip" style="font-size:10.5px; font-weight:700; background:var(--dim); color:var(--txt);">
+                                        👥 <?= (int)$uu['linked_students_count'] ?>
+                                    </span>
+                                </div>
+
+                                <div class="admin-th-hide-mobile" style="font-size:11.5px; color:var(--mut);">
+                                    <?= date('M j, Y', strtotime($uu['created_at'])) ?>
+                                </div>
+
+                                <div style="display:flex; gap:6px; align-items:center;" onclick="event.stopPropagation()">
+                                    <button type="button" class="btn-secondary" style="padding:5px 10px; font-size:11px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; font-weight:700;" onclick="openEditUserModal({
+                                        id: <?= (int)$uu['id'] ?>,
+                                        name: '<?= addslashes(htmlspecialchars($uu['name'])) ?>',
+                                        email: '<?= addslashes(htmlspecialchars($uu['email'])) ?>',
+                                        role: 'university',
+                                        is_verified: <?= $uu['is_verified'] ? '1' : '0' ?>,
+                                        university_type: '<?= htmlspecialchars($uu['university_type'] ?? 'public') ?>',
+                                        institution_name: '<?= addslashes(htmlspecialchars($uu['company_name'] ?: $uu['institution_display'])) ?>',
+                                        company_name: '<?= addslashes(htmlspecialchars($uu['company_name'] ?? '')) ?>',
+                                        company_logo: '<?= addslashes(htmlspecialchars($uu['company_logo'] ?? '')) ?>'
+                                    })">✏️ Edit</button>
+
+                                    <form method="POST" onsubmit="return confirm('Permanently delete university account for <?= addslashes(htmlspecialchars($uu['name'])) ?> (<?= addslashes(htmlspecialchars($uu['institution_display'])) ?>)?');" style="margin:0; display:inline;">
+                                        <input type="hidden" name="action" value="delete_user">
+                                        <input type="hidden" name="user_id" value="<?= $uu['id'] ?>">
+                                        <button type="submit" style="background:rgba(255, 77, 106, 0.12); border:1px solid rgba(255, 77, 106, 0.35); border-radius:6px; color:var(--red); padding:5px 9px; font-size:11px; font-weight:700; cursor:pointer;" title="Delete University Account">🗑️</button>
+                                    </form>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -1169,106 +1405,81 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             </div>
         </div>
 
-        <!-- Tab: University Sign-Up QR Code -->
-        <div id="universityQrTab" class="admin-tab-pane" style="display:none;">
-            <div class="panel" style="padding:20px; max-width:620px;">
-                <div style="font-size:16px; font-weight:800; color:var(--txt); margin-bottom:6px;">🎓 University Sign-Up QR Code</div>
-                <p style="font-size:12.5px; color:var(--mut); margin:0 0 18px 0;">
-                    Print this at a career fair or share it with a university's career center. Scanning it opens Keria's
-                    university registration page, pre-set to sign up as a <strong>University / Career Center representative</strong>.
-                </p>
+    </main>
 
-                <div style="margin-bottom:16px;">
-                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Pre-select a university (optional)</label>
-                    <select id="uqrUniSelect" onchange="renderUniversityQr()" style="padding:10px 14px; font-size:13px;">
-                        <option value="">Let the representative pick at signup</option>
-                        <?php $uqr_opened_optgroup = null; foreach ($universities_list as $u): ?>
-                            <?php if ($u['type'] !== $uqr_opened_optgroup): $uqr_opened_optgroup = $u['type']; if (isset($uqr_group_started)) echo '</optgroup>'; ?>
-                                <optgroup label="<?= $uqr_opened_optgroup === 'public' ? 'Public Universities' : ($uqr_opened_optgroup === 'private' ? 'Private Universities' : 'Other') ?>">
-                                <?php $uqr_group_started = true; ?>
-                            <?php endif; ?>
-                            <option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                        <?php endforeach; if (isset($uqr_group_started)) echo '</optgroup>'; ?>
-                    </select>
-                    <div style="font-size:10.5px; color:var(--mut); margin-top:4px;">Picking one here just pre-fills the dropdown on the registration page — the representative can still change it.</div>
-                </div>
+    <!-- Modal: University Sign-Up QR Code -->
+    <div id="universityQrModal" onclick="if(event.target === this) closeUniversityQrModal()" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:4000; align-items:center; justify-content:center; padding:20px;">
+        <div class="panel" style="max-width:580px; width:100%; position:relative; border-radius:18px; box-shadow:var(--shadow-lg); padding:24px; max-height:90vh; overflow-y:auto;">
+            <button type="button" onclick="closeUniversityQrModal()" style="position:absolute; top:20px; right:20px; background:none; border:none; color:var(--mut); font-size:22px; cursor:pointer; line-height:1;">✕</button>
 
-                <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
-                    <div style="flex:1; min-width:260px;">
-                        <div style="display:flex; gap:8px; margin-bottom:10px;">
-                            <input type="text" readonly id="uqrLinkInput" value="<?= htmlspecialchars($university_signup_link) ?>" style="flex:1; font-family:monospace; font-size:12px;">
-                            <button type="button" class="btn-secondary" style="padding:9px 16px; font-size:12.5px; white-space:nowrap;" onclick="copyUniversityQrLink()">📋 Copy</button>
-                        </div>
-                        <button type="button" class="btn-secondary" style="padding:8px 16px; font-size:12px;" onclick="downloadUniversityQr()">⬇️ Download QR (PNG)</button>
-                    </div>
-                    <div style="text-align:center;">
-                        <div id="uqrCode" style="width:180px; height:180px; display:flex; align-items:center; justify-content:center; background:#fff; border-radius:10px; border:1px solid var(--bdr); padding:10px;"></div>
-                        <div style="font-size:11px; color:var(--mut); margin-top:6px;">Scan to register</div>
-                    </div>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                <div style="font-size:24px;">🎓</div>
+                <div>
+                    <div style="font-size:20px; font-weight:800; color:var(--txt);">University Sign-Up Code</div>
+                    <div style="font-size:12px; color:var(--mut);">Instant QR code & sign-up link for career fairs and university liaisons</div>
                 </div>
             </div>
 
-            <script src="qrcode.js?v=<?php echo @filemtime(__DIR__.'/qrcode.js'); ?>"></script>
-            <script>
-                var UQR_BASE_LINK = <?= json_encode($university_signup_link) ?>;
+            <p style="font-size:12.5px; color:var(--mut); margin:8px 0 16px 0; line-height:1.5;">
+                Print this at a career fair or share it with a university's career center. Scanning it opens Keria's
+                university registration page, pre-set to sign up as a <strong>University / Career Center representative</strong>.
+            </p>
 
-                function buildUniversityQrLink() {
-                    var sel = document.getElementById('uqrUniSelect');
-                    var uniId = sel ? sel.value : '';
-                    return uniId ? (UQR_BASE_LINK + '&university_id=' + encodeURIComponent(uniId)) : UQR_BASE_LINK;
-                }
+            <div style="margin-bottom:16px;">
+                <div style="display:grid; grid-template-columns: 140px 1fr; gap:10px; margin-bottom:8px;">
+                    <div>
+                        <label for="uqrUniType" style="display:block; font-size:12px; color:var(--mut); font-weight:700; margin-bottom:6px;">Classification</label>
+                        <select id="uqrUniType" onchange="renderUniversityQr()" style="padding:10px 12px; font-size:13px; width:100%; border-radius:10px;">
+                            <option value="public">🏛️ Public</option>
+                            <option value="private">🏫 Private</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <label for="uqrUniInput" style="font-size:12px; color:var(--mut); font-weight:700;">University Name</label>
+                            <span style="font-size:11px; color:var(--mut);">Optional</span>
+                        </div>
+                        <div style="position:relative;">
+                            <input type="text" id="uqrUniInput" list="uqrUniDatalist" placeholder="e.g. Universiti Malaya, Taylor's University..." oninput="renderUniversityQr()" autocomplete="off" style="padding:10px 38px 10px 14px; font-size:13px; width:100%; border-radius:10px;">
+                            <button type="button" onclick="clearUniversityQrInput()" id="uqrClearBtn" style="display:none; position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:var(--mut); font-size:14px; cursor:pointer; padding:4px;" title="Clear">✕</button>
+                        </div>
+                    </div>
+                </div>
+                <datalist id="uqrUniDatalist">
+                    <?php foreach ($universities_list as $u): ?>
+                        <option value="<?= htmlspecialchars($u['name']) ?>"><?= htmlspecialchars($u['name']) ?> (<?= ucfirst($u['type']) ?>)</option>
+                    <?php endforeach; ?>
+                </datalist>
+                <div style="font-size:11px; color:var(--mut); margin-top:5px;">Select Public or Private and enter the university name. The link and QR code will update dynamically to pre-fill this on registration.</div>
+            </div>
 
-                function renderUniversityQr() {
-                    var link = buildUniversityQrLink();
-                    document.getElementById('uqrLinkInput').value = link;
-                    var holder = document.getElementById('uqrCode');
-                    holder.innerHTML = '';
-                    try {
-                        var qr = qrcode(0, 'M');
-                        qr.addData(link);
-                        qr.make();
-                        holder.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
-                    } catch (e) {
-                        holder.textContent = 'QR unavailable';
-                    }
-                }
+            <div style="display:flex; gap:18px; flex-wrap:wrap; align-items:center; background:var(--dim); padding:16px; border-radius:14px; border:1px solid var(--bdr);">
+                <div style="flex:1; min-width:240px;">
+                    <label style="display:block; font-size:11.5px; color:var(--mut); margin-bottom:6px; font-weight:700;">Direct Registration Link</label>
+                    <div style="display:flex; gap:8px; margin-bottom:12px;">
+                        <input type="text" readonly id="uqrLinkInput" value="<?= htmlspecialchars($university_signup_link) ?>" style="flex:1; font-family:monospace; font-size:11.5px; padding:8px 10px;">
+                        <button type="button" id="uqrCopyBtn" class="btn-secondary" style="padding:8px 14px; font-size:12px; white-space:nowrap; border-radius:8px;" onclick="copyUniversityQrLink()">📋 Copy</button>
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" class="btn-secondary" style="padding:8px 14px; font-size:12px; border-radius:8px; display:inline-flex; align-items:center; gap:6px;" onclick="downloadUniversityQr()">
+                            <span>⬇️ Download QR (PNG)</span>
+                        </button>
+                        <a id="uqrOpenLinkBtn" href="<?= htmlspecialchars($university_signup_link) ?>" target="_blank" class="btn-secondary" style="padding:8px 14px; font-size:12px; border-radius:8px; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
+                            <span>🔗 Test Link &rarr;</span>
+                        </a>
+                    </div>
+                </div>
+                <div style="text-align:center; padding:4px;">
+                    <div id="uqrCode" style="width:160px; height:160px; display:flex; align-items:center; justify-content:center; background:#fff; border-radius:12px; border:1px solid var(--bdr); padding:8px; margin:0 auto; box-shadow:var(--shadow-xs);"></div>
+                    <div style="font-size:11px; color:var(--mut); margin-top:6px; font-weight:600;">Scan to register</div>
+                </div>
+            </div>
 
-                function copyUniversityQrLink() {
-                    var input = document.getElementById('uqrLinkInput');
-                    input.select();
-                    input.setSelectionRange(0, 99999);
-                    navigator.clipboard && navigator.clipboard.writeText(input.value).catch(function(){ document.execCommand('copy'); });
-                }
-
-                function downloadUniversityQr() {
-                    var svg = document.querySelector('#uqrCode svg');
-                    if (!svg) return;
-                    var svgData = new XMLSerializer().serializeToString(svg);
-                    var img = new Image();
-                    var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-                    var url = URL.createObjectURL(svgBlob);
-                    img.onload = function() {
-                        var scale = 4;
-                        var canvas = document.createElement('canvas');
-                        canvas.width = img.width * scale;
-                        canvas.height = img.height * scale;
-                        var ctx = canvas.getContext('2d');
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        URL.revokeObjectURL(url);
-                        var a = document.createElement('a');
-                        a.download = 'keria-university-signup-qr.png';
-                        a.href = canvas.toDataURL('image/png');
-                        a.click();
-                    };
-                    img.src = url;
-                }
-
-                document.addEventListener('DOMContentLoaded', renderUniversityQr);
-            </script>
+            <div style="margin-top:18px; display:flex; justify-content:flex-end;">
+                <button type="button" onclick="closeUniversityQrModal()" class="btn-secondary" style="padding:9px 20px; font-size:13px; border-radius:8px;">Close</button>
+            </div>
         </div>
-    </main>
+    </div>
 
     <!-- Modal: Edit Job Posting (admin override) -->
     <div id="editJobModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:4000; align-items:center; justify-content:center; padding:20px;">
@@ -1348,22 +1559,18 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 </div>
 
                 <div id="addUserInstitutionField" style="display:none; margin-bottom:16px;">
-                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University</label>
-                    <select name="university_id" id="addUserUniSelect" onchange="toggleAddUserUniOther()" style="padding:10px 14px; font-size:13px; margin-bottom:8px;">
-                        <option value="">Select a university...</option>
-                        <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                            <?php if ($u['type'] !== $current_uni_type): $current_uni_type = $u['type']; if (isset($add_opened_optgroup)) echo '</optgroup>'; ?>
-                                <optgroup label="<?= $current_uni_type === 'public' ? 'Public Universities' : ($current_uni_type === 'private' ? 'Private Universities' : 'Other') ?>">
-                                <?php $add_opened_optgroup = true; ?>
-                            <?php endif; ?>
-                            <option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                        <?php endforeach; if (isset($add_opened_optgroup)) echo '</optgroup>'; ?>
-                        <option value="other">Not listed / Other</option>
-                    </select>
-                    <div id="addUserInstitutionOtherBlock" style="display:none;">
-                        <input type="text" name="institution_name" placeholder="e.g. Universiti Putra Malaysia" style="padding:10px 14px; font-size:13px;">
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University Classification</label>
+                        <select name="university_type" id="addUserUniType" style="padding:10px 14px; font-size:13px;">
+                            <option value="public">🏛️ Public University</option>
+                            <option value="private">🏫 Private University</option>
+                        </select>
                     </div>
-                    <div style="font-size:10.5px; color:var(--mut); margin-top:4px;">The icon can be uploaded after the account is created, via Edit Account.</div>
+                    <div style="margin-bottom:6px;">
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University Name</label>
+                        <input type="text" name="institution_name" id="addUserInstitutionName" list="knownUniversitiesList" placeholder="e.g. Universiti Malaya, Taylor's University" style="padding:10px 14px; font-size:13px;">
+                    </div>
+                    <div style="font-size:10.5px; color:var(--mut); margin-top:4px;">The institution icon can be uploaded after creation via Edit Account.</div>
                 </div>
 
                 <div style="margin-bottom:20px; padding:10px 14px; background:var(--dim); border-radius:10px; display:flex; align-items:center; gap:10px;">
@@ -1430,22 +1637,16 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 </div>
 
                 <div id="editUserInstitutionBlock" style="display:none;">
-                    <div style="margin-bottom:14px;">
-                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University</label>
-                        <select name="university_id" id="editUserUniSelect" onchange="toggleEditUserUniOther()" style="padding:10px 14px; font-size:13px; margin-bottom:8px;">
-                            <option value="">Select a university...</option>
-                            <?php $current_uni_type = null; foreach ($universities_list as $u): ?>
-                                <?php if ($u['type'] !== $current_uni_type): $current_uni_type = $u['type']; if (isset($edit_opened_optgroup)) echo '</optgroup>'; ?>
-                                    <optgroup label="<?= $current_uni_type === 'public' ? 'Public Universities' : ($current_uni_type === 'private' ? 'Private Universities' : 'Other') ?>">
-                                    <?php $edit_opened_optgroup = true; ?>
-                                <?php endif; ?>
-                                <option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['name']) ?></option>
-                            <?php endforeach; if (isset($edit_opened_optgroup)) echo '</optgroup>'; ?>
-                            <option value="other">Not listed / Other</option>
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University Classification</label>
+                        <select name="university_type" id="editUserUniType" style="padding:10px 14px; font-size:13px;">
+                            <option value="public">🏛️ Public University</option>
+                            <option value="private">🏫 Private University</option>
                         </select>
-                        <div id="editUserInstitutionOtherBlock" style="display:none;">
-                            <input type="text" name="institution_name" id="editInstitutionName" placeholder="e.g. Universiti Putra Malaysia" style="padding:10px 14px; font-size:13px;">
-                        </div>
+                    </div>
+                    <div style="margin-bottom:14px;">
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University Name</label>
+                        <input type="text" name="institution_name" id="editInstitutionName" list="knownUniversitiesList" placeholder="e.g. Universiti Malaya" required style="padding:10px 14px; font-size:13px;">
                     </div>
 
                     <div style="margin-bottom:14px;">
@@ -1564,7 +1765,146 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         </div>
     </div>
 
+    <datalist id="knownUniversitiesList">
+        <?php foreach ($universities_list as $u): ?>
+            <option value="<?= htmlspecialchars($u['name']) ?>"><?= htmlspecialchars($u['name']) ?> (<?= ucfirst($u['type']) ?>)</option>
+        <?php endforeach; ?>
+    </datalist>
+
+    <script src="qrcode.js?v=<?php echo @filemtime(__DIR__.'/qrcode.js'); ?>"></script>
     <script>
+        var UQR_BASE_LINK = <?= json_encode($university_signup_link) ?>;
+        var UNI_MAP = <?= json_encode(array_column($universities_list, 'id', 'name')) ?>;
+
+        function openUniversityQrModal() {
+            var modal = document.getElementById('universityQrModal');
+            if (modal) modal.style.display = 'flex';
+            renderUniversityQr();
+            var input = document.getElementById('uqrUniInput');
+            if (input) setTimeout(function(){ input.focus(); }, 60);
+        }
+
+        function closeUniversityQrModal() {
+            var modal = document.getElementById('universityQrModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function clearUniversityQrInput() {
+            var input = document.getElementById('uqrUniInput');
+            if (input) {
+                input.value = '';
+                renderUniversityQr();
+                input.focus();
+            }
+        }
+
+        function buildUniversityQrLink() {
+            var input = document.getElementById('uqrUniInput');
+            var uniName = input ? input.value.trim() : '';
+            var typeEl = document.getElementById('uqrUniType');
+            var uniType = typeEl ? typeEl.value : 'public';
+            var clearBtn = document.getElementById('uqrClearBtn');
+            if (clearBtn) {
+                clearBtn.style.display = uniName ? 'block' : 'none';
+            }
+
+            if (!uniName) {
+                return UQR_BASE_LINK;
+            }
+
+            // Check if name matches a known university in UNI_MAP (case-insensitive)
+            var lowerName = uniName.toLowerCase();
+            var matchedId = null;
+            for (var name in UNI_MAP) {
+                if (name.toLowerCase() === lowerName) {
+                    matchedId = UNI_MAP[name];
+                    break;
+                }
+            }
+
+            var link = UQR_BASE_LINK + '&university_name=' + encodeURIComponent(uniName) + '&university_type=' + encodeURIComponent(uniType);
+            if (matchedId) {
+                link += '&university_id=' + encodeURIComponent(matchedId);
+            }
+            return link;
+        }
+
+        function renderUniversityQr() {
+            var link = buildUniversityQrLink();
+            var linkInput = document.getElementById('uqrLinkInput');
+            if (linkInput) linkInput.value = link;
+
+            var openBtn = document.getElementById('uqrOpenLinkBtn');
+            if (openBtn) openBtn.href = link;
+
+            var holder = document.getElementById('uqrCode');
+            if (!holder) return;
+            holder.innerHTML = '';
+            try {
+                if (typeof qrcode === 'function') {
+                    var qr = qrcode(0, 'M');
+                    qr.addData(link);
+                    qr.make();
+                    holder.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+                } else {
+                    holder.textContent = 'QR unavailable';
+                }
+            } catch (e) {
+                holder.textContent = 'QR unavailable';
+            }
+        }
+
+        function copyUniversityQrLink() {
+            var input = document.getElementById('uqrLinkInput');
+            var btn = document.getElementById('uqrCopyBtn');
+            if (!input) return;
+            input.select();
+            input.setSelectionRange(0, 99999);
+            var val = input.value;
+            function flashCopied() {
+                if (btn) {
+                    var origText = btn.innerHTML;
+                    btn.innerHTML = '✓ Copied!';
+                    btn.style.color = 'var(--acc)';
+                    setTimeout(function(){ btn.innerHTML = origText; btn.style.color = ''; }, 2000);
+                }
+            }
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(val).then(flashCopied).catch(function(){
+                    document.execCommand('copy');
+                    flashCopied();
+                });
+            } else {
+                document.execCommand('copy');
+                flashCopied();
+            }
+        }
+
+        function downloadUniversityQr() {
+            var svg = document.querySelector('#uqrCode svg');
+            if (!svg) return;
+            var svgData = new XMLSerializer().serializeToString(svg);
+            var img = new Image();
+            var svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            var url = URL.createObjectURL(svgBlob);
+            img.onload = function() {
+                var scale = 4;
+                var canvas = document.createElement('canvas');
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                var ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                URL.revokeObjectURL(url);
+                var a = document.createElement('a');
+                a.download = 'keria-university-signup-qr.png';
+                a.href = canvas.toDataURL('image/png');
+                a.click();
+            };
+            img.src = url;
+        }
+
         function openEditJobModal(job) {
             document.getElementById('editJobId').value = job.job_id || '';
             document.getElementById('editJobTitle').value = job.job_title || '';
@@ -1578,6 +1918,16 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
 
         function openAddUserModal() {
             document.getElementById('addUserModal').style.display = 'flex';
+        }
+        function openAddUniModal() {
+            openAddUserModal();
+            var role = document.getElementById('addUserRole');
+            if (role) {
+                role.value = 'university';
+                toggleAddUserRoleFields();
+            }
+            var nameInput = document.getElementById('addUserInstitutionName');
+            if (nameInput) setTimeout(function(){ nameInput.focus(); }, 80);
         }
         function closeAddUserModal() {
             document.getElementById('addUserModal').style.display = 'none';
@@ -1681,22 +2031,15 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             document.getElementById('editUserPassword').value = '';
             document.getElementById('editUserRole').value = user.role || 'candidate';
             document.getElementById('editUserVerified').checked = (user.is_verified == 1);
-            var editUniSelect = document.getElementById('editUserUniSelect');
-            if (editUniSelect) {
-                if (user.university_id) {
-                    editUniSelect.value = String(user.university_id);
-                    if (editUniSelect.value !== String(user.university_id)) {
-                        // id wasn't in the list (shouldn't happen) -- fall back to Other
-                        editUniSelect.value = 'other';
-                    }
-                } else if (user.company_name) {
-                    editUniSelect.value = 'other';
-                } else {
-                    editUniSelect.value = '';
-                }
+            
+            var editUniType = document.getElementById('editUserUniType');
+            if (editUniType) {
+                editUniType.value = (user.university_type === 'private') ? 'private' : 'public';
             }
-            document.getElementById('editInstitutionName').value = user.company_name || '';
-            toggleEditUserUniOther();
+            var editInstName = document.getElementById('editInstitutionName');
+            if (editInstName) {
+                editInstName.value = user.company_name || user.institution_name || user.institution_display || '';
+            }
 
             var preview = document.getElementById('editInstitutionIconPreview');
             if (preview) {
@@ -1719,20 +2062,6 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         function toggleEditUserRoleFields() {
             var role = document.getElementById('editUserRole').value;
             document.getElementById('editUserInstitutionBlock').style.display = (role === 'university') ? 'block' : 'none';
-        }
-
-        function toggleEditUserUniOther() {
-            var sel = document.getElementById('editUserUniSelect');
-            var block = document.getElementById('editUserInstitutionOtherBlock');
-            if (!sel || !block) return;
-            block.style.display = (sel.value === 'other') ? 'block' : 'none';
-        }
-
-        function toggleAddUserUniOther() {
-            var sel = document.getElementById('addUserUniSelect');
-            var block = document.getElementById('addUserInstitutionOtherBlock');
-            if (!sel || !block) return;
-            block.style.display = (sel.value === 'other') ? 'block' : 'none';
         }
 
         function closeEditUserModal() {
@@ -1769,6 +2098,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 role: cb.getAttribute('data-user-role'),
                 is_verified: cb.getAttribute('data-user-verified'),
                 is_self: cb.getAttribute('data-is-self') === '1',
+                university_type: cb.getAttribute('data-user-uni-type') || 'public',
                 company_name: cb.getAttribute('data-user-company-name') || '',
                 company_logo: cb.getAttribute('data-user-company-logo') || ''
             });
@@ -1908,11 +2238,166 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             }
         }
 
+        // ----------------------------------------------------
+        // Registered Universities Table Actions & Filtering
+        // ----------------------------------------------------
+        function filterUniversitiesTable() {
+            var search = (document.getElementById('uniSearchInput') ? document.getElementById('uniSearchInput').value : '').toLowerCase().trim();
+            var type = (document.getElementById('uniTypeFilterSelect') ? document.getElementById('uniTypeFilterSelect').value : '').toLowerCase();
+            var status = (document.getElementById('uniStatusFilterSelect') ? document.getElementById('uniStatusFilterSelect').value : '');
+            var rows = document.getElementsByClassName('uni-row-item');
+
+            for (var i = 0; i < rows.length; i++) {
+                var searchData = rows[i].getAttribute('data-search') || '';
+                var uniType = rows[i].getAttribute('data-type') || '';
+                var uniStatus = rows[i].getAttribute('data-status') || '';
+
+                var matchesSearch = !search || searchData.indexOf(search) > -1;
+                var matchesType = !type || uniType === type;
+                var matchesStatus = (status === '') || uniStatus === status;
+
+                if (matchesSearch && matchesType && matchesStatus) {
+                    rows[i].style.display = 'grid';
+                } else {
+                    rows[i].style.display = 'none';
+                    var cb = rows[i].querySelector('.uni-select-checkbox');
+                    if (cb) cb.checked = false;
+                }
+            }
+            updateBulkUniSelection();
+        }
+
+        function toggleSelectAllUnis(master) {
+            var checkboxes = document.querySelectorAll('.uni-row-item:not([style*="display: none"]) .uni-select-checkbox');
+            checkboxes.forEach(function(cb) {
+                cb.checked = master.checked;
+            });
+            updateBulkUniSelection();
+        }
+
+        function updateBulkUniSelection() {
+            var allCheckboxes = document.querySelectorAll('.uni-row-item .uni-select-checkbox');
+            var checked = document.querySelectorAll('.uni-row-item .uni-select-checkbox:checked');
+            var toolbar = document.getElementById('uniSelectionToolbar');
+            var countEl = document.getElementById('bulkUniSelectedCount');
+            var previewEl = document.getElementById('selectedUniPreview');
+            var editBtn = document.getElementById('editSelectedUniBtn');
+            var deleteBtn = document.getElementById('deleteSelectedUniBtn');
+            var master = document.getElementById('selectAllUnis');
+
+            allCheckboxes.forEach(function(cb) {
+                var row = cb.closest('.uni-row-item');
+                if (row) {
+                    if (cb.checked) row.classList.add('is-selected');
+                    else row.classList.remove('is-selected');
+                }
+            });
+
+            if (master && allCheckboxes.length > 0) {
+                master.checked = (checked.length === allCheckboxes.length);
+                master.indeterminate = (checked.length > 0 && checked.length < allCheckboxes.length);
+            }
+
+            if (!toolbar) return;
+
+            if (checked.length === 0) {
+                toolbar.classList.remove('is-visible');
+            } else {
+                toolbar.classList.add('is-visible');
+            }
+
+            if (checked.length === 1) {
+                var cb = checked[0];
+                if (countEl) countEl.textContent = '1 Selected';
+                if (previewEl) {
+                    previewEl.style.display = 'flex';
+                    var nameEl = document.getElementById('selectedUniName');
+                    var emailEl = document.getElementById('selectedUniEmail');
+                    if (nameEl) nameEl.textContent = cb.getAttribute('data-uni-institution') || cb.getAttribute('data-uni-name');
+                    if (emailEl) emailEl.textContent = cb.getAttribute('data-uni-email');
+                }
+                if (editBtn) editBtn.style.display = 'inline-flex';
+                if (deleteBtn) {
+                    deleteBtn.textContent = '🗑️ Delete Account';
+                    deleteBtn.title = 'Permanently delete this university account';
+                }
+            } else {
+                if (countEl) countEl.textContent = checked.length + ' Selected';
+                if (previewEl) previewEl.style.display = 'none';
+                if (editBtn) editBtn.style.display = 'none';
+                if (deleteBtn) {
+                    deleteBtn.textContent = '🗑️ Delete Selected (' + checked.length + ')';
+                    deleteBtn.title = 'Delete selected accounts';
+                }
+            }
+        }
+
+        function clearUniSelection() {
+            var checkboxes = document.querySelectorAll('.uni-select-checkbox');
+            checkboxes.forEach(function(cb) { cb.checked = false; });
+            var master = document.getElementById('selectAllUnis');
+            if (master) master.checked = false;
+            updateBulkUniSelection();
+        }
+
+        function handleUniRowClick(event, row) {
+            var tag = event.target.tagName.toLowerCase();
+            if (tag === 'button' || tag === 'input' || tag === 'a' || tag === 'select' || event.target.closest('form') || event.target.closest('button')) {
+                return;
+            }
+            var cb = row.querySelector('.uni-select-checkbox');
+            if (cb) {
+                cb.checked = !cb.checked;
+                updateBulkUniSelection();
+            }
+        }
+
+        function editSelectedUniAccount() {
+            var checked = document.querySelectorAll('.uni-select-checkbox:checked');
+            if (checked.length !== 1) return;
+            var cb = checked[0];
+            openEditUserModal({
+                id: cb.getAttribute('data-uni-id'),
+                name: cb.getAttribute('data-uni-name'),
+                email: cb.getAttribute('data-uni-email'),
+                role: 'university',
+                is_verified: cb.getAttribute('data-uni-verified'),
+                university_type: cb.getAttribute('data-uni-type') || 'public',
+                institution_name: cb.getAttribute('data-uni-institution') || cb.getAttribute('data-uni-company-name') || '',
+                company_name: cb.getAttribute('data-uni-company-name') || '',
+                company_logo: cb.getAttribute('data-uni-company-logo') || ''
+            });
+        }
+
+        function confirmDeleteSelectedUnis() {
+            var checked = document.querySelectorAll('.uni-select-checkbox:checked');
+            if (checked.length === 0) return;
+
+            var msg = (checked.length === 1)
+                ? "Are you sure you want to permanently delete this university account? This cannot be undone."
+                : "Are you sure you want to permanently delete these " + checked.length + " university accounts? This cannot be undone.";
+
+            if (!confirm(msg)) return;
+
+            var form = document.getElementById('bulkDeleteUnisForm');
+            form.innerHTML = '<input type="hidden" name="action" value="bulk_delete_users">';
+            checked.forEach(function(cb) {
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'user_ids[]';
+                input.value = cb.value;
+                form.appendChild(input);
+            });
+            form.submit();
+        }
+
         window.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeAddUserModal();
                 closeEditUserModal();
                 closeExportResumesModal();
+                closeUniversityQrModal();
+                clearUniSelection();
             }
         });
     </script>

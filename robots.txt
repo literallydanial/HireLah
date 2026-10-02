@@ -4,6 +4,7 @@ Disallow: /admin_
 Disallow: /employer_dashboard.php
 Disallow: /candidate_dashboard.php
 Disallow: /university_dashboard.php
+Disallow: /university_settings.php
 Disallow: /apply.php
 Disallow: /profile.php
 Disallow: /post_job.php
@@ -27,6 +28,7 @@ Disallow: /export_resumes.php
 Disallow: /mark_notifications.php
 Disallow: /switch_company.php
 Disallow: /join_company.php
+Disallow: /database/
 Disallow: /run_migration_
 Disallow: /_diag_
 Disallow: /*.php.backup$

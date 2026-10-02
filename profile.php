@@ -5,6 +5,11 @@ require_once 'notifications_helper.php';
 require_once 'company_helpers.php';
 require_login();
 
+if (($_SESSION['user_role'] ?? '') === 'university') {
+    header("Location: university_settings.php");
+    exit;
+}
+
 $user_id = $_SESSION['user_id'];
 $userNotifs = (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'candidate') 
     ? getCandidateNotifications($pdo, $user_id) 

@@ -2,7 +2,7 @@
 // ONE-TIME MIGRATION — safe to run more than once, delete this file afterward.
 // Fixes: "SQLSTATE[23000]: Integrity constraint violation: 1048 Column 'job_id'
 // cannot be null" when saving a questionnaire template with no job assigned.
-require 'db.php';
+require_once __DIR__ . '/../db.php';
 header('Content-Type: text/plain');
 
 try {
