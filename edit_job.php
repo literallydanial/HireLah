@@ -89,7 +89,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Job Title</label>
                 <input type="text" name="job_title" value="<?= htmlspecialchars($job['job_title']) ?>" required>
             </div>
-            
+
+            <div style="margin-bottom:14px;">
+                <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Location (State)</label>
+                <?php $uni_job_loc = $job['location'] ?? ''; ?>
+                <select name="location">
+                    <option value="" <?= $uni_job_loc === '' ? 'selected' : '' ?>>Select a state...</option>
+                    <option value="Johor" <?= $uni_job_loc === 'Johor' ? 'selected' : '' ?>>Johor</option>
+                    <option value="Kedah" <?= $uni_job_loc === 'Kedah' ? 'selected' : '' ?>>Kedah</option>
+                    <option value="Kelantan" <?= $uni_job_loc === 'Kelantan' ? 'selected' : '' ?>>Kelantan</option>
+                    <option value="Kuala Lumpur" <?= $uni_job_loc === 'Kuala Lumpur' ? 'selected' : '' ?>>Kuala Lumpur</option>
+                    <option value="Labuan" <?= $uni_job_loc === 'Labuan' ? 'selected' : '' ?>>Labuan</option>
+                    <option value="Melaka" <?= $uni_job_loc === 'Melaka' ? 'selected' : '' ?>>Melaka</option>
+                    <option value="Negeri Sembilan" <?= $uni_job_loc === 'Negeri Sembilan' ? 'selected' : '' ?>>Negeri Sembilan</option>
+                    <option value="Pahang" <?= $uni_job_loc === 'Pahang' ? 'selected' : '' ?>>Pahang</option>
+                    <option value="Penang" <?= $uni_job_loc === 'Penang' ? 'selected' : '' ?>>Penang</option>
+                    <option value="Perak" <?= $uni_job_loc === 'Perak' ? 'selected' : '' ?>>Perak</option>
+                    <option value="Perlis" <?= $uni_job_loc === 'Perlis' ? 'selected' : '' ?>>Perlis</option>
+                    <option value="Putrajaya" <?= $uni_job_loc === 'Putrajaya' ? 'selected' : '' ?>>Putrajaya</option>
+                    <option value="Sabah" <?= $uni_job_loc === 'Sabah' ? 'selected' : '' ?>>Sabah</option>
+                    <option value="Sarawak" <?= $uni_job_loc === 'Sarawak' ? 'selected' : '' ?>>Sarawak</option>
+                    <option value="Selangor" <?= $uni_job_loc === 'Selangor' ? 'selected' : '' ?>>Selangor</option>
+                    <option value="Terengganu" <?= $uni_job_loc === 'Terengganu' ? 'selected' : '' ?>>Terengganu</option>
+                </select>
+            </div>
+
             <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; margin-bottom:14px;">
                 <div>
                     <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Department</label>

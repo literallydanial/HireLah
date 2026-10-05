@@ -39,9 +39,9 @@ if ($filter_mode !== '') {
     $params[] = $filter_mode;
 }
 if ($filter_location !== '') {
-    $sql .= " AND (j.location LIKE ? OR j.department LIKE ?)";
-    $params[] = "%$filter_location%";
-    $params[] = "%$filter_location%";
+    $sql .= " AND (j.location = ? OR j.department = ?)";
+    $params[] = $filter_location;
+    $params[] = $filter_location;
 }
 if ($filter_min_salary !== null) {
     $sql .= " AND (COALESCE(j.salary_max, j.salary_min) >= ?)";
@@ -1784,7 +1784,25 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                         </div>
                         <div class="search-input-col location-col">
                             <span class="search-field-icon">📍</span>
-                            <input type="text" name="location" value="<?= htmlspecialchars($filter_location) ?>" placeholder="Location or City (e.g. KL)..." class="search-text-input">
+                            <select name="location" class="search-text-input" style="appearance:none; -webkit-appearance:none; cursor:pointer; background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236B7280' d='M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z'/%3E%3C/svg%3E&quot;); background-repeat:no-repeat; background-position:right 6px center; padding:7px 24px 7px 8px;">
+                                <option value="">All locations</option>
+                                <option value="Johor" <?= $filter_location === 'Johor' ? 'selected' : '' ?>>Johor</option>
+                                <option value="Kedah" <?= $filter_location === 'Kedah' ? 'selected' : '' ?>>Kedah</option>
+                                <option value="Kelantan" <?= $filter_location === 'Kelantan' ? 'selected' : '' ?>>Kelantan</option>
+                                <option value="Kuala Lumpur" <?= $filter_location === 'Kuala Lumpur' ? 'selected' : '' ?>>Kuala Lumpur</option>
+                                <option value="Labuan" <?= $filter_location === 'Labuan' ? 'selected' : '' ?>>Labuan</option>
+                                <option value="Melaka" <?= $filter_location === 'Melaka' ? 'selected' : '' ?>>Melaka</option>
+                                <option value="Negeri Sembilan" <?= $filter_location === 'Negeri Sembilan' ? 'selected' : '' ?>>Negeri Sembilan</option>
+                                <option value="Pahang" <?= $filter_location === 'Pahang' ? 'selected' : '' ?>>Pahang</option>
+                                <option value="Penang" <?= $filter_location === 'Penang' ? 'selected' : '' ?>>Penang</option>
+                                <option value="Perak" <?= $filter_location === 'Perak' ? 'selected' : '' ?>>Perak</option>
+                                <option value="Perlis" <?= $filter_location === 'Perlis' ? 'selected' : '' ?>>Perlis</option>
+                                <option value="Putrajaya" <?= $filter_location === 'Putrajaya' ? 'selected' : '' ?>>Putrajaya</option>
+                                <option value="Sabah" <?= $filter_location === 'Sabah' ? 'selected' : '' ?>>Sabah</option>
+                                <option value="Sarawak" <?= $filter_location === 'Sarawak' ? 'selected' : '' ?>>Sarawak</option>
+                                <option value="Selangor" <?= $filter_location === 'Selangor' ? 'selected' : '' ?>>Selangor</option>
+                                <option value="Terengganu" <?= $filter_location === 'Terengganu' ? 'selected' : '' ?>>Terengganu</option>
+                            </select>
                         </div>
                         <button type="submit" class="btn-search-find">
                             Find Jobs &rarr;

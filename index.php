@@ -1938,14 +1938,30 @@ if (file_exists('db.php')) {
                                     <circle cx="12" cy="9" r="3"></circle>
                                 </svg>
                             </span>
-                            <input 
-                                type="text" 
-                                name="location" 
+                            <select
+                                name="location"
                                 id="heroLocationInput"
-                                class="keria-search-input" 
-                                placeholder="All locations"
-                                autocomplete="off"
+                                class="keria-search-input"
+                                style="appearance:none; -webkit-appearance:none; cursor:pointer; background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236B7280' d='M1.41 0L6 4.58 10.59 0 12 1.41l-6 6-6-6z'/%3E%3C/svg%3E&quot;); background-repeat:no-repeat; background-position:right 6px center; padding:8px 24px 8px 8px;"
                             >
+                                <option value="">All locations</option>
+                                <option value="Johor">Johor</option>
+                                <option value="Kedah">Kedah</option>
+                                <option value="Kelantan">Kelantan</option>
+                                <option value="Kuala Lumpur">Kuala Lumpur</option>
+                                <option value="Labuan">Labuan</option>
+                                <option value="Melaka">Melaka</option>
+                                <option value="Negeri Sembilan">Negeri Sembilan</option>
+                                <option value="Pahang">Pahang</option>
+                                <option value="Penang">Penang</option>
+                                <option value="Perak">Perak</option>
+                                <option value="Perlis">Perlis</option>
+                                <option value="Putrajaya">Putrajaya</option>
+                                <option value="Sabah">Sabah</option>
+                                <option value="Sarawak">Sarawak</option>
+                                <option value="Selangor">Selangor</option>
+                                <option value="Terengganu">Terengganu</option>
+                            </select>
                         </div>
 
                         <button type="submit" class="keria-search-btn-submit" aria-label="Search">
