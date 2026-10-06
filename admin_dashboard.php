@@ -4,6 +4,7 @@ require_once 'db.php';
 require_once 'notifications_helper.php';
 require_once 'admin_logs_helper.php';
 require_once 'ai.php';
+require_once 'company_helpers.php';
 
 // Ensure user is logged in as admin
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'admin') {
@@ -39,8 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password = $_POST['password'] ?? '';
         $role = $_POST['role'] ?? 'candidate';
         $is_verified = isset($_POST['is_verified']) ? 1 : 0;
-        $institution_name = ($role === 'university') ? trim($_POST['institution_name'] ?? '') : null;
-        $ssm_number = ($role === 'university') ? trim($_POST['ssm_number'] ?? '') : null;
+        $institution_name = ($role === 'university') ? trim($_POST['institution_name'] ?? '') : (($role === 'employer') ? trim($_POST['company_name'] ?? '') : null);
+        $ssm_number = in_array($role, ['university', 'employer'], true) ? trim($_POST['ssm_number'] ?? '') : null;
         $university_id = null;
         if ($role === 'university') {
             $uni_type = in_array($_POST['university_type'] ?? '', ['public', 'private'], true) ? $_POST['university_type'] : 'public';
@@ -77,6 +78,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ins = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, company_name, university_id, is_verified, ssm_number, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
                 $ins->execute([$name, $email, $hash, $role, $institution_name, $university_id, $is_verified, $ssm_number]);
                 $new_user_id = $pdo->lastInsertId();
+
+                if ($role === 'employer') {
+                    try {
+                        create_company_for_new_employer($pdo, [
+                            'id' => $new_user_id,
+                            'name' => $name,
+                            'company_name' => $institution_name,
+                            'ssm_number' => $ssm_number
+                        ]);
+                    } catch (\Throwable $t) {}
+                }
 
                 log_admin_action($pdo, $admin_id, $admin_name, 'add_user', 'user', $new_user_id, "Created new $role account for '$name' ($email)");
                 $_SESSION['toast'] = "New user account created successfully (" . ucfirst($role) . ")!";
@@ -229,6 +241,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 }
                             }
                         }
+                    }
+
+                    if ($role === 'employer') {
+                        $employer_company = trim($_POST['company_name'] ?? '');
+                        $employer_ssm = trim($_POST['ssm_number'] ?? '');
+                        $updates[] = "company_name = ?";
+                        $params[] = $employer_company;
+                        $updates[] = "ssm_number = ?";
+                        $params[] = $employer_ssm;
+
+                        // Sync with companies table if employer belongs to one
+                        try {
+                            $c_chk = $pdo->prepare("
+                                SELECT c.id FROM companies c
+                                JOIN company_members cm ON c.id = cm.company_id
+                                WHERE cm.user_id = ?
+                                ORDER BY cm.joined_at ASC LIMIT 1
+                            ");
+                            $c_chk->execute([$target_id]);
+                            $c_id = $c_chk->fetchColumn();
+                            if ($c_id) {
+                                if ($employer_company !== '') {
+                                    $pdo->prepare("UPDATE companies SET name = ?, ssm_number = ? WHERE id = ?")->execute([$employer_company, $employer_ssm, $c_id]);
+                                } else {
+                                    $pdo->prepare("UPDATE companies SET ssm_number = ? WHERE id = ?")->execute([$employer_ssm, $c_id]);
+                                }
+                            }
+                        } catch (\Throwable $t) {}
                     }
 
                     $pw_changed = false;
@@ -438,23 +478,41 @@ $admin_funnel = [
 
 // Query candidate status breakdown per job for platform-wide monitoring
 $admin_job_funnels = $pdo->query("
-    SELECT j.id as job_id, j.job_title, j.department, j.status as job_status, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name,
-           COUNT(c.id) as applied,
-           SUM(CASE WHEN LOWER(COALESCE(c.status, '')) IN ('review', 'under review', 'reviewing', 'new', '') THEN 1 ELSE 0 END) as review,
-           SUM(CASE WHEN LOWER(COALESCE(c.status, '')) IN ('shortlisted', 'shortlist') THEN 1 ELSE 0 END) as shortlisted,
-           SUM(CASE WHEN c.interview_status IN ('Proposed', 'Confirmed') THEN 1 ELSE 0 END) as interviewing,
-           SUM(CASE WHEN LOWER(COALESCE(c.status, '')) = 'rejected' THEN 1 ELSE 0 END) as rejected
+    SELECT j.id as job_id, j.job_title, j.department, j.status as job_status, 
+           COALESCE(NULLIF(c.name, ''), NULLIF(u.company_name, ''), u.name) as employer_name,
+           COALESCE(NULLIF(c.ssm_number, ''), NULLIF(u.ssm_number, '')) as ssm_display,
+           COUNT(cand.id) as applied,
+           SUM(CASE WHEN LOWER(COALESCE(cand.status, '')) IN ('review', 'under review', 'reviewing', 'new', '') THEN 1 ELSE 0 END) as review,
+           SUM(CASE WHEN LOWER(COALESCE(cand.status, '')) IN ('shortlisted', 'shortlist') THEN 1 ELSE 0 END) as shortlisted,
+           SUM(CASE WHEN cand.interview_status IN ('Proposed', 'Confirmed') THEN 1 ELSE 0 END) as interviewing,
+           SUM(CASE WHEN LOWER(COALESCE(cand.status, '')) = 'rejected' THEN 1 ELSE 0 END) as rejected
     FROM jobs j
+    LEFT JOIN companies c ON j.company_id = c.id
     LEFT JOIN users u ON j.employer_id = u.id
-    LEFT JOIN candidates c ON c.job_id = j.id
-    GROUP BY j.id, j.job_title, j.department, j.status, u.name, u.company_name
+    LEFT JOIN candidates cand ON cand.job_id = j.id
+    GROUP BY j.id, j.job_title, j.department, j.status, u.name, u.company_name, c.name, c.ssm_number, u.ssm_number
     ORDER BY applied DESC, j.created_at DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
 // ----------------------------------------------------
 // 3. FETCH USERS & JOBS LIST FOR TABLES
 // ----------------------------------------------------
-$users_list = $pdo->query("SELECT u.*, un.type as university_type, COALESCE(NULLIF(u.ssm_number, ''), NULLIF(un.ssm_number, '')) as ssm_display FROM users u LEFT JOIN universities un ON u.university_id = un.id ORDER BY u.created_at DESC")->fetchAll();
+$users_list = $pdo->query("
+    SELECT u.*, 
+           un.type as university_type,
+           comp.name as employer_company_name,
+           COALESCE(NULLIF(comp.name, ''), NULLIF(u.company_name, '')) as company_display_name,
+           COALESCE(NULLIF(comp.ssm_number, ''), NULLIF(u.ssm_number, ''), NULLIF(un.ssm_number, '')) as ssm_display
+    FROM users u 
+    LEFT JOIN universities un ON u.university_id = un.id 
+    LEFT JOIN (
+        SELECT cm.user_id, c.name, c.ssm_number, c.logo
+        FROM company_members cm
+        JOIN companies c ON c.id = cm.company_id
+        GROUP BY cm.user_id
+    ) comp ON comp.user_id = u.id
+    ORDER BY u.created_at DESC
+")->fetchAll();
 $university_users_list = $pdo->query("
     SELECT u.*, 
            COALESCE(NULLIF(un.name, ''), NULLIF(u.company_name, ''), 'Unspecified') as institution_display,
@@ -474,7 +532,15 @@ foreach ($university_users_list as $uu) {
     }
 }
 
-$jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name FROM jobs j LEFT JOIN users u ON j.employer_id = u.id ORDER BY j.created_at DESC")->fetchAll();
+$jobs_list = $pdo->query("
+    SELECT j.*, 
+           COALESCE(NULLIF(c.name, ''), NULLIF(u.company_name, ''), u.name) as employer_name,
+           COALESCE(NULLIF(c.ssm_number, ''), NULLIF(u.ssm_number, '')) as ssm_display
+    FROM jobs j 
+    LEFT JOIN companies c ON j.company_id = c.id
+    LEFT JOIN users u ON j.employer_id = u.id 
+    ORDER BY j.created_at DESC
+")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -991,7 +1057,14 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                             <?php foreach($admin_job_funnels as $ajf): ?>
                                 <tr style="border-bottom:1px solid var(--bdr);">
                                     <td style="padding:10px 14px; font-weight:700; color:var(--txt);"><?= htmlspecialchars($ajf['job_title']) ?></td>
-                                    <td style="padding:10px 14px; color:var(--mut);"><?= htmlspecialchars($ajf['employer_name'] ?: 'System') ?></td>
+                                    <td style="padding:10px 14px; color:var(--mut);">
+                                        <div><?= htmlspecialchars($ajf['employer_name'] ?: 'System') ?></div>
+                                        <?php if(!empty($ajf['ssm_display'])): ?>
+                                            <div style="font-size:10px; color:var(--gold); font-weight:700; margin-top:2px; display:inline-flex; align-items:center; gap:3px;" title="SSM Registration Number">
+                                                <span style="opacity:0.8;">🏢 SSM:</span> <span><?= htmlspecialchars($ajf['ssm_display']) ?></span>
+                                            </div>
+                                        <?php endif; ?>
+                                    </td>
                                     <td style="padding:10px 14px; text-align:center; font-weight:700; color:var(--txt);"><?= (int)$ajf['applied'] ?></td>
                                     <td style="padding:10px 14px; text-align:center; color:var(--acc); font-weight:700;"><?= (int)$ajf['review'] ?></td>
                                     <td style="padding:10px 14px; text-align:center; color:var(--grn); font-weight:700;"><?= (int)$ajf['shortlisted'] ?></td>
@@ -1097,7 +1170,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                              data-user-role="<?= htmlspecialchars($u['role'], ENT_QUOTES) ?>"
                              data-user-verified="<?= $u['is_verified'] ? '1' : '0' ?>"
                              data-is-self="<?= $u_is_self ? '1' : '0' ?>"
-                             data-search="<?= strtolower(htmlspecialchars($u['name'] . ' ' . $u['email'] . ' ' . $u['role'])) ?>"
+                             data-search="<?= strtolower(htmlspecialchars($u['name'] . ' ' . $u['email'] . ' ' . $u['role'] . ' ' . ($u['company_display_name'] ?? '') . ' ' . ($u['ssm_display'] ?? ''))) ?>"
                              data-role="<?= htmlspecialchars($u['role']) ?>"
                              onclick="handleUserRowClick(event, this)"
                              <?= $u_is_new ? 'style="background:rgba(236, 72, 153, 0.05);"' : '' ?>>
@@ -1109,17 +1182,42 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                                        data-user-role="<?= htmlspecialchars($u['role'], ENT_QUOTES) ?>"
                                        data-user-verified="<?= $u['is_verified'] ? '1' : '0' ?>"
                                        data-is-self="<?= $u_is_self ? '1' : '0' ?>"
-                                       data-user-company-name="<?= htmlspecialchars($u['company_name'] ?? '', ENT_QUOTES) ?>"
+                                       data-user-company-name="<?= htmlspecialchars($u['company_display_name'] ?? $u['company_name'] ?? '', ENT_QUOTES) ?>"
                                        data-user-company-logo="<?= htmlspecialchars($u['company_logo'] ?? '', ENT_QUOTES) ?>"
                                        data-user-uni-type="<?= htmlspecialchars($u['university_type'] ?? 'public', ENT_QUOTES) ?>"
+                                       data-user-ssm="<?= htmlspecialchars($u['ssm_display'] ?? '', ENT_QUOTES) ?>"
                                        onclick="event.stopPropagation(); updateBulkSelection();" style="width:15px; height:15px; cursor:pointer;">
                             </div>
                             <div style="font-weight:700; color:var(--mut);">#<?= $u['id'] ?></div>
-                            <div style="font-weight:800; color:var(--txt); display:flex; align-items:center; gap:8px;">
-                                <span class="avatar-chip" style="background:<?= $u_grad ?>;"><?= strtoupper(substr($u['name'] ?: 'U', 0, 1)) ?></span>
-                                <span><?= htmlspecialchars($u['name']) ?></span>
-                                <?php if($u_is_new): ?>
-                                    <span title="Registered in the last 48 hours" style="background:#EC4899; color:#fff; border-radius:7px; padding:1px 6px; font-size:9px; font-weight:800; letter-spacing:0.3px;">🆕 NEW</span>
+                            <div style="font-weight:800; color:var(--txt); display:flex; flex-direction:column; gap:4px; min-width:0;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span class="avatar-chip" style="background:<?= $u_grad ?>;"><?= strtoupper(substr($u['name'] ?: 'U', 0, 1)) ?></span>
+                                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><?= htmlspecialchars($u['name']) ?></span>
+                                    <?php if($u_is_new): ?>
+                                        <span title="Registered in the last 48 hours" style="background:#EC4899; color:#fff; border-radius:7px; padding:1px 6px; font-size:9px; font-weight:800; letter-spacing:0.3px;">🆕 NEW</span>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if($u['role'] === 'employer'): ?>
+                                    <div style="display:flex; align-items:center; gap:6px; margin-left:34px; font-size:11px; flex-wrap:wrap;">
+                                        <span style="color:var(--mut); font-weight:600; display:inline-flex; align-items:center; gap:3px;">
+                                            🏢 <?= htmlspecialchars($u['company_display_name'] ?: 'No Company Set') ?>
+                                        </span>
+                                        <?php if(!empty($u['ssm_display'])): ?>
+                                            <span class="chip" style="font-size:9.5px; padding:1px 7px; border-radius:5px; border:1px solid rgba(245, 158, 11, 0.35); background:rgba(245, 158, 11, 0.12); color:var(--gold); font-weight:700; display:inline-flex; align-items:center; gap:3px;" title="Company SSM Registration Number">
+                                                <span>SSM:</span> <span><?= htmlspecialchars($u['ssm_display']) ?></span>
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="chip" style="font-size:9.5px; padding:1px 7px; border-radius:5px; border:1px solid rgba(239, 68, 68, 0.25); background:rgba(239, 68, 68, 0.08); color:#EF4444; font-weight:600; display:inline-flex; align-items:center; gap:3px;" title="Company SSM has not been filled yet">
+                                                <span>⚠️ No SSM</span>
+                                            </span>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php elseif($u['role'] === 'university' && !empty($u['ssm_display'])): ?>
+                                    <div style="display:flex; align-items:center; gap:6px; margin-left:34px; font-size:11px;">
+                                        <span class="chip" style="font-size:9.5px; padding:1px 7px; border-radius:5px; border:1px solid rgba(217, 255, 79, 0.35); background:rgba(217, 255, 79, 0.12); color:var(--txt); font-weight:700;" title="University Registration Number">
+                                            <span>SSM:</span> <span><?= htmlspecialchars($u['ssm_display']) ?></span>
+                                        </span>
+                                    </div>
                                 <?php endif; ?>
                             </div>
                             <div style="color:var(--mut); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><?= htmlspecialchars($u['email']) ?></div>
@@ -1146,7 +1244,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                                     "is_verified" => (int)$u["is_verified"],
                                     "is_self" => $u_is_self,
                                     "university_type" => $u["university_type"] ?? "public",
-                                    "company_name" => $u["company_name"] ?? '',
+                                    "company_name" => $u["company_display_name"] ?? $u["company_name"] ?? '',
                                     "company_logo" => $u["company_logo"] ?? '',
                                     "university_id" => $u["university_id"] ?? '',
                                     "ssm_number" => $u["ssm_display"] ?? ''
@@ -1404,7 +1502,14 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                         <div class="admin-tr accent-green" style="grid-template-columns: 60px 1.8fr 1.4fr 110px 110px 100px;">
                             <div style="font-weight:700; color:var(--mut);">#<?= $j['id'] ?></div>
                             <div style="font-weight:800; color:var(--txt);"><?= htmlspecialchars($j['job_title']) ?></div>
-                            <div style="color:var(--mut);"><?= htmlspecialchars($j['employer_name'] ?? 'System') ?></div>
+                            <div style="color:var(--mut);">
+                                <div><?= htmlspecialchars($j['employer_name'] ?? 'System') ?></div>
+                                <?php if(!empty($j['ssm_display'])): ?>
+                                    <div style="font-size:10px; color:var(--gold); font-weight:700; margin-top:2px; display:inline-flex; align-items:center; gap:3px;" title="SSM Registration Number">
+                                        <span style="opacity:0.8;">🏢 SSM:</span> <span><?= htmlspecialchars($j['ssm_display']) ?></span>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
                             <div style="color:var(--mut); font-size:11px;"><?= htmlspecialchars($j['department'] ?: 'General') ?></div>
                             <div>
                                 <span class="chip chip-shortlisted" style="font-size:10px;"><?= htmlspecialchars($j['status'] ?? 'Active') ?></span>
@@ -1595,6 +1700,17 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                     <div style="font-size:10.5px; color:var(--mut); margin-top:4px;">The institution icon can be uploaded after creation via Edit Account.</div>
                 </div>
 
+                <div id="addUserEmployerField" style="display:none; margin-bottom:16px;">
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company Name</label>
+                        <input type="text" name="company_name" id="addUserEmployerName" placeholder="e.g. Acme Corporation Sdn Bhd" style="padding:10px 14px; font-size:13px;">
+                    </div>
+                    <div style="margin-bottom:6px;">
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company SSM Registration Number</label>
+                        <input type="text" name="ssm_number" id="addUserEmployerSsm" placeholder="e.g. 201201012345 (1012345-X)" style="padding:10px 14px; font-size:13px;">
+                    </div>
+                </div>
+
                 <div style="margin-bottom:20px; padding:10px 14px; background:var(--dim); border-radius:10px; display:flex; align-items:center; gap:10px;">
                     <input type="checkbox" name="is_verified" id="modal_is_verified" value="1" checked style="width:18px; height:18px; cursor:pointer;">
                     <label for="modal_is_verified" style="font-size:12px; font-weight:600; color:var(--txt); cursor:pointer;">
@@ -1658,6 +1774,17 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                     </select>
                 </div>
 
+                <div id="editUserEmployerBlock" style="display:none;">
+                    <div style="margin-bottom:14px;">
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company Name</label>
+                        <input type="text" name="company_name" id="editEmployerCompanyName" placeholder="e.g. Acme Corporation Sdn Bhd" style="padding:10px 14px; font-size:13px;">
+                    </div>
+                    <div style="margin-bottom:14px;">
+                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company SSM Registration Number</label>
+                        <input type="text" name="ssm_number" id="editEmployerSsm" placeholder="e.g. 201201012345 (1012345-X)" style="padding:10px 14px; font-size:13px;">
+                    </div>
+                </div>
+
                 <div id="editUserInstitutionBlock" style="display:none;">
                     <div style="margin-bottom:12px;">
                         <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University Classification</label>
@@ -1668,7 +1795,7 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                     </div>
                     <div style="margin-bottom:14px;">
                         <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">University Name</label>
-                        <input type="text" name="institution_name" id="editInstitutionName" list="knownUniversitiesList" placeholder="e.g. Universiti Malaya" required style="padding:10px 14px; font-size:13px;">
+                        <input type="text" name="institution_name" id="editInstitutionName" list="knownUniversitiesList" placeholder="e.g. Universiti Malaya" style="padding:10px 14px; font-size:13px;">
                     </div>
                     <div style="margin-bottom:14px;">
                         <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">SSM / Registration Number</label>
@@ -1947,6 +2074,10 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
             if (ssmInput) ssmInput.value = '';
             var nameInput = document.getElementById('addUserInstitutionName');
             if (nameInput) nameInput.value = '';
+            var empName = document.getElementById('addUserEmployerName');
+            if (empName) empName.value = '';
+            var empSsm = document.getElementById('addUserEmployerSsm');
+            if (empSsm) empSsm.value = '';
             document.getElementById('addUserModal').style.display = 'flex';
         }
         function openAddUniModal() {
@@ -1964,7 +2095,10 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
         }
         function toggleAddUserRoleFields() {
             var role = document.getElementById('addUserRole').value;
-            document.getElementById('addUserInstitutionField').style.display = (role === 'university') ? 'block' : 'none';
+            var uniField = document.getElementById('addUserInstitutionField');
+            var empField = document.getElementById('addUserEmployerField');
+            if (uniField) uniField.style.display = (role === 'university') ? 'block' : 'none';
+            if (empField) empField.style.display = (role === 'employer') ? 'block' : 'none';
         }
 
         function openExportResumesModal() {
@@ -2076,6 +2210,16 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 editInstSsm.value = user.ssm_number || '';
             }
 
+            var editEmpName = document.getElementById('editEmployerCompanyName');
+            if (editEmpName) {
+                editEmpName.value = user.company_name || user.employer_company_name || '';
+            }
+
+            var editEmpSsm = document.getElementById('editEmployerSsm');
+            if (editEmpSsm) {
+                editEmpSsm.value = user.ssm_number || '';
+            }
+
             var preview = document.getElementById('editInstitutionIconPreview');
             if (preview) {
                 if (user.company_logo) {
@@ -2096,7 +2240,10 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
 
         function toggleEditUserRoleFields() {
             var role = document.getElementById('editUserRole').value;
-            document.getElementById('editUserInstitutionBlock').style.display = (role === 'university') ? 'block' : 'none';
+            var uniBlock = document.getElementById('editUserInstitutionBlock');
+            var empBlock = document.getElementById('editUserEmployerBlock');
+            if (uniBlock) uniBlock.style.display = (role === 'university') ? 'block' : 'none';
+            if (empBlock) empBlock.style.display = (role === 'employer') ? 'block' : 'none';
         }
 
         function closeEditUserModal() {
@@ -2135,7 +2282,8 @@ $jobs_list = $pdo->query("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.nam
                 is_self: cb.getAttribute('data-is-self') === '1',
                 university_type: cb.getAttribute('data-user-uni-type') || 'public',
                 company_name: cb.getAttribute('data-user-company-name') || '',
-                company_logo: cb.getAttribute('data-user-company-logo') || ''
+                company_logo: cb.getAttribute('data-user-company-logo') || '',
+                ssm_number: cb.getAttribute('data-user-ssm') || ''
             });
         }
 

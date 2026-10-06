@@ -13,7 +13,7 @@
 // ordered by when they joined (oldest/first membership first).
 function get_user_companies($pdo, $user_id) {
     $stmt = $pdo->prepare("
-        SELECT c.id, c.name, c.logo, c.website, c.contact_email, cm.role, cm.joined_at
+        SELECT c.id, c.name, c.logo, c.website, c.contact_email, c.address, c.ssm_number, cm.role, cm.joined_at
         FROM company_members cm
         JOIN companies c ON c.id = cm.company_id
         WHERE cm.user_id = ?
@@ -85,11 +85,12 @@ function create_company_for_new_employer($pdo, $user) {
     $company_name = trim($user['company_name'] ?? '') !== '' ? $user['company_name'] : ($user['name'] . "'s Company");
     $token = bin2hex(random_bytes(20));
 
-    $ins = $pdo->prepare("INSERT INTO companies (name, website, address, logo, contact_email, invite_token, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $ins = $pdo->prepare("INSERT INTO companies (name, website, address, ssm_number, logo, contact_email, invite_token, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     $ins->execute([
         $company_name,
         $user['company_website'] ?? null,
         $user['company_address'] ?? null,
+        $user['ssm_number'] ?? null,
         $user['company_logo'] ?? null,
         $user['contact_email'] ?? null,
         $token,

@@ -246,6 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $company_name = trim($_POST['company_name'] ?? '');
         $company_website = trim($_POST['company_website'] ?? '');
         $company_address = trim($_POST['company_address'] ?? '');
+        $ssm_number = trim($_POST['ssm_number'] ?? '');
         $contact_email = trim($_POST['contact_email'] ?? '');
 
         if ($contact_email !== '' && !filter_var($contact_email, FILTER_VALIDATE_EMAIL)) {
@@ -254,8 +255,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $stmt = $pdo->prepare("UPDATE companies SET name = ?, website = ?, address = ?, contact_email = ? WHERE id = ?");
-        if ($stmt->execute([$company_name, $company_website, $company_address, $contact_email, $company_id])) {
+        $stmt = $pdo->prepare("UPDATE companies SET name = ?, website = ?, address = ?, contact_email = ?, ssm_number = ? WHERE id = ?");
+        if ($stmt->execute([$company_name, $company_website, $company_address, $contact_email, $ssm_number, $company_id])) {
+            try {
+                $upd_user = $pdo->prepare("UPDATE users SET ssm_number = ?, company_name = ? WHERE id = ?");
+                $upd_user->execute([$ssm_number, $company_name, $user_id]);
+            } catch (\Throwable $t) {}
+
             $_SESSION['toast'] = "Company settings saved.";
         } else {
             $_SESSION['error'] = "Failed to save company settings.";
@@ -831,14 +837,20 @@ if ($user['role'] === 'candidate') {
                                 <input type="text" name="company_name" placeholder="Acme Corporation Sdn Bhd" value="<?= htmlspecialchars($active_company['name'] ?? '') ?>">
                             </div>
                             <div>
-                                <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Official Website</label>
-                                <input type="url" name="company_website" placeholder="https://acme.com" value="<?= htmlspecialchars($active_company['website'] ?? '') ?>">
+                                <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">SSM Registration Number</label>
+                                <input type="text" name="ssm_number" placeholder="e.g. 201201012345 (1012345-X)" value="<?= htmlspecialchars($active_company['ssm_number'] ?? $user['ssm_number'] ?? '') ?>">
                             </div>
                         </div>
 
-                        <div style="margin-bottom:18px;">
-                            <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Candidate Contact Email (Optional)</label>
-                            <input type="email" name="contact_email" placeholder="careers@acme.com &mdash; leave blank to use account email" value="<?= htmlspecialchars($active_company['contact_email'] ?? '') ?>">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:18px;">
+                            <div>
+                                <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Official Website</label>
+                                <input type="url" name="company_website" placeholder="https://acme.com" value="<?= htmlspecialchars($active_company['website'] ?? '') ?>">
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Candidate Contact Email (Optional)</label>
+                                <input type="email" name="contact_email" placeholder="careers@acme.com &mdash; leave blank to use account email" value="<?= htmlspecialchars($active_company['contact_email'] ?? '') ?>">
+                            </div>
                         </div>
 
                         <div style="margin-bottom:24px;">

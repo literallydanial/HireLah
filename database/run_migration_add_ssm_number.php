@@ -33,6 +33,13 @@ try {
         echo "SKIP: universities.ssm_number already exists.\n";
     }
 
+    if (!col_exists($pdo, 'companies', 'ssm_number')) {
+        $pdo->exec("ALTER TABLE `companies` ADD COLUMN `ssm_number` VARCHAR(100) NULL AFTER `address`");
+        echo "OK: Added ssm_number column to companies table.\n";
+    } else {
+        echo "SKIP: companies.ssm_number already exists.\n";
+    }
+
     echo "\n=== Migration Finished Successfully ===\n";
 } catch (Exception $e) {
     http_response_code(500);
