@@ -41,6 +41,26 @@ try {
             }
         }
     }
+
+    // Auto-verify ssm_number columns availability
+    try {
+        $pdo->query("SELECT ssm_number FROM users LIMIT 1");
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec("ALTER TABLE users ADD COLUMN ssm_number VARCHAR(100) NULL AFTER matric_number");
+        } catch (\Throwable $migErr) {
+            error_log("Users ssm_number migration notice: " . $migErr->getMessage());
+        }
+    }
+    try {
+        $pdo->query("SELECT ssm_number FROM universities LIMIT 1");
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec("ALTER TABLE universities ADD COLUMN ssm_number VARCHAR(100) NULL AFTER type");
+        } catch (\Throwable $migErr) {
+            error_log("Universities ssm_number migration notice: " . $migErr->getMessage());
+        }
+    }
 } catch (\PDOException $e) {
     error_log("Keria DB Connection Error: " . $e->getMessage());
     die("<div style='font-family:sans-serif; max-width:600px; margin:50px auto; padding:24px; border:1px solid #F87171; background:#FEF2F2; color:#991B1B; border-radius:12px; text-align:center;'>" .

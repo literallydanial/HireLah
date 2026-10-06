@@ -147,6 +147,22 @@ try {
     ");
     echo "OK: internship_placements table ready.\n";
 
+    // 7. Add ssm_number column to users table
+    if (!column_exists($pdo, 'users', 'ssm_number')) {
+        $pdo->exec("ALTER TABLE `users` ADD COLUMN `ssm_number` varchar(100) DEFAULT NULL AFTER `matric_number`");
+        echo "OK: Added users.ssm_number column.\n";
+    } else {
+        echo "SKIP: users.ssm_number already exists.\n";
+    }
+
+    // 8. Add ssm_number column to universities table
+    if (!column_exists($pdo, 'universities', 'ssm_number')) {
+        $pdo->exec("ALTER TABLE `universities` ADD COLUMN `ssm_number` varchar(100) DEFAULT NULL AFTER `type`");
+        echo "OK: Added universities.ssm_number column.\n";
+    } else {
+        echo "SKIP: universities.ssm_number already exists.\n";
+    }
+
     echo "\n=== MIGRATION COMPLETE ===\n";
 } catch (Exception $e) {
     http_response_code(500);

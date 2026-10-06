@@ -16,7 +16,7 @@ $is_university = ($_SESSION['user_role'] ?? '') === 'university';
 $all_universities_accounts = [];
 if ($is_admin) {
     $all_universities_accounts = $pdo->query("
-        SELECT u.id, u.name, u.email, u.company_name, u.company_logo, u.university_id, un.name AS uni_table_name, un.type AS uni_type
+        SELECT u.id, u.name, u.email, u.company_name, u.company_logo, u.university_id, u.ssm_number, un.name AS uni_table_name, un.type AS uni_type, un.ssm_number AS uni_table_ssm
         FROM users u
         LEFT JOIN universities un ON u.university_id = un.id
         WHERE u.role = 'university'
@@ -34,7 +34,7 @@ if ($is_admin && isset($_GET['user_id']) && (int)$_GET['user_id'] > 0) {
 
 // Fetch the targeted user account
 $stmt = $pdo->prepare("
-    SELECT u.*, un.name AS linked_uni_name, un.type AS linked_uni_type
+    SELECT u.*, un.name AS linked_uni_name, un.type AS linked_uni_type, un.ssm_number AS linked_uni_ssm
     FROM users u
     LEFT JOIN universities un ON u.university_id = un.id
     WHERE u.id = ?
@@ -56,6 +56,8 @@ if (!$target_user && $is_admin) {
         'university_id' => null,
         'linked_uni_name' => 'Demo University',
         'linked_uni_type' => 'public',
+        'ssm_number' => '',
+        'linked_uni_ssm' => '',
         'password_hash' => ''
     ];
 } elseif (!$target_user) {
@@ -77,6 +79,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($action === 'update_institution') {
         $institution_name = trim($_POST['institution_name'] ?? '');
         $uni_type = in_array($_POST['university_type'] ?? '', ['public', 'private'], true) ? $_POST['university_type'] : 'public';
+        $ssm_number = trim($_POST['ssm_number'] ?? '');
         $company_website = trim($_POST['company_website'] ?? '');
         $company_address = trim($_POST['company_address'] ?? '');
         $contact_email = trim($_POST['contact_email'] ?? '');
@@ -91,8 +94,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $university_id = (int)($target_user['university_id'] ?? 0);
             if ($university_id > 0) {
                 // Update existing linked university
-                $up_uni = $pdo->prepare("UPDATE universities SET name = ?, type = ? WHERE id = ?");
-                $up_uni->execute([$institution_name, $uni_type, $university_id]);
+                $up_uni = $pdo->prepare("UPDATE universities SET name = ?, type = ?, ssm_number = ? WHERE id = ?");
+                $up_uni->execute([$institution_name, $uni_type, $ssm_number, $university_id]);
             } else {
                 // Check if an existing university matches by name
                 $chk_uni = $pdo->prepare("SELECT id FROM universities WHERE LOWER(name) = LOWER(?) LIMIT 1");
@@ -100,11 +103,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $found_id = $chk_uni->fetchColumn();
                 if ($found_id) {
                     $university_id = (int)$found_id;
-                    $up_uni = $pdo->prepare("UPDATE universities SET type = ? WHERE id = ?");
-                    $up_uni->execute([$uni_type, $university_id]);
+                    $up_uni = $pdo->prepare("UPDATE universities SET type = ?, ssm_number = ? WHERE id = ?");
+                    $up_uni->execute([$uni_type, $ssm_number, $university_id]);
                 } else {
-                    $ins_uni = $pdo->prepare("INSERT INTO universities (name, type) VALUES (?, ?)");
-                    $ins_uni->execute([$institution_name, $uni_type]);
+                    $ins_uni = $pdo->prepare("INSERT INTO universities (name, type, ssm_number) VALUES (?, ?, ?)");
+                    $ins_uni->execute([$institution_name, $uni_type, $ssm_number]);
                     $university_id = (int)$pdo->lastInsertId();
                 }
             }
@@ -147,10 +150,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             // Update user record
             $stmt = $pdo->prepare("
                 UPDATE users 
-                SET company_name = ?, university_id = ?, company_website = ?, company_address = ?, contact_email = ?, company_logo = ?
+                SET company_name = ?, university_id = ?, company_website = ?, company_address = ?, contact_email = ?, company_logo = ?, ssm_number = ?
                 WHERE id = ?
             ");
-            $stmt->execute([$institution_name, $university_id, $company_website, $company_address, $contact_email, $new_logo_path, $target_user_id]);
+            $stmt->execute([$institution_name, $university_id, $company_website, $company_address, $contact_email, $new_logo_path, $ssm_number, $target_user_id]);
 
             if (empty($_SESSION['error'])) {
                 $_SESSION['toast'] = "Institution profile and branding updated successfully!";
@@ -221,13 +224,22 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
 // Re-read current values after changes
 $stmt = $pdo->prepare("
-    SELECT u.*, un.name AS linked_uni_name, un.type AS linked_uni_type
+    SELECT u.*, un.name AS linked_uni_name, un.type AS linked_uni_type, un.ssm_number AS linked_uni_ssm
     FROM users u
     LEFT JOIN universities un ON u.university_id = un.id
     WHERE u.id = ?
 ");
 $stmt->execute([$target_user_id]);
 $current = $stmt->fetch(PDO::FETCH_ASSOC) ?: $target_user;
+
+if (empty($current['ssm_number']) && !empty($current['linked_uni_ssm'])) {
+    $current['ssm_number'] = $current['linked_uni_ssm'];
+}
+
+$ssm_val = trim((string)($current['ssm_number'] ?? ''));
+$has_ssm = ($ssm_val !== '');
+$ssm_incomplete = !$has_ssm;
+$incomplete_count = $ssm_incomplete ? 1 : 0;
 
 $institution_display_name = !empty($current['company_name']) ? $current['company_name'] : ($current['name'] ?? 'University');
 $institution_logo = (!empty($current['company_logo']) && file_exists($current['company_logo'])) 
@@ -453,6 +465,11 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
         .uni-menu-child { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 8px; color: #5B6B3A; font-size: 12.5px; font-weight: 600; text-decoration: none; width: 100%; border: none; background: transparent; font-family: inherit; cursor: pointer; text-align: left; }
         .uni-menu-child:hover { background: rgba(10,10,10,0.05); color: #0F1300; }
         .uni-menu-child.active { background: #0A0A0A; color: #FFFFFF; }
+        .uni-menu-badge { font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: rgba(10,10,10,0.06); color: #5B6B3A; display: inline-flex; align-items: center; justify-content: center; line-height: 1.2; }
+        .uni-menu-badge.danger { background: #EF4444; color: #FFFFFF; font-weight: 800; box-shadow: 0 1px 3px rgba(239, 68, 68, 0.35); }
+        .uni-menu-badge.success { background: rgba(16,185,129,0.14); color: #047857; }
+        .uni-menu-parent.active .uni-menu-badge.danger,
+        .uni-menu-child.active .uni-menu-badge.danger { background: #EF4444; color: #FFFFFF; }
         .uni-sidebar-bottom { margin-top: auto; padding-top: 16px; border-top: 1px solid rgba(10,10,10,0.07); }
         .uni-sidebar-institution-card { display: flex; align-items: center; gap: 10px; padding: 10px 8px; }
         .uni-sidebar-institution-icon { width: 36px; height: 36px; border-radius: 9px; overflow: hidden; display: flex; align-items: center; justify-content: center; background: #FFFFFF; flex-shrink: 0; font-size: 17px; box-shadow: 0 1px 3px rgba(10,10,10,0.08); }
@@ -502,11 +519,21 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
 
         <div class="uni-menu-group open">
             <button type="button" class="uni-menu-parent active" onclick="toggleUniMenu(this)">
-                <span class="uni-menu-parent-left"><span>⚙️</span> Settings</span>
+                <span class="uni-menu-parent-left">
+                    <span>⚙️</span> Settings
+                    <?php if ($incomplete_count > 0): ?>
+                        <span class="uni-menu-badge danger" style="margin-left:4px;" title="1 incomplete requirement"><?= $incomplete_count ?></span>
+                    <?php endif; ?>
+                </span>
                 <span class="uni-menu-chevron">&#9662;</span>
             </button>
             <div class="uni-menu-children">
-                <button type="button" class="uni-menu-child active" onclick="switchTab('institutionTab', this)"><span>🏛️ Institution Profile</span></button>
+                <button type="button" class="uni-menu-child active" onclick="switchTab('institutionTab', this)">
+                    <span>🏛️ Institution Profile</span>
+                    <?php if ($ssm_incomplete): ?>
+                        <span class="uni-menu-badge danger" title="SSM registration number is incomplete">1</span>
+                    <?php endif; ?>
+                </button>
                 <button type="button" class="uni-menu-child" onclick="switchTab('liaisonTab', this)"><span>👤 Career Officer Liaison</span></button>
                 <button type="button" class="uni-menu-child" onclick="switchTab('qrTab', this)"><span>▦ Career Fair QR &amp; Link</span></button>
                 <button type="button" class="uni-menu-child" onclick="switchTab('securityTab', this)"><span>🔒 Security &amp; Password</span></button>
@@ -632,6 +659,18 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
                         <p class="card-desc">Configure your university's official name, higher-education classification, crest logo, and campus contact details.</p>
                     </div>
 
+                    <?php if ($ssm_incomplete): ?>
+                        <div style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.28); border-radius:12px; padding:12px 16px; margin-bottom:18px; display:flex; align-items:center; gap:12px;">
+                            <span style="font-size:20px;">⚠️</span>
+                            <div style="flex:1;">
+                                <div style="font-size:13px; font-weight:800; color:#EF4444;">1 Incomplete Detail: University SSM Number</div>
+                                <div style="font-size:12px; color:var(--mut); margin-top:2px;">
+                                    Please enter your university's SSM registration number below to complete your institutional verification.
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
                     <div class="form-grid-2">
                         <div class="form-group">
                             <label for="institution_name">Institution / University Name *</label>
@@ -649,6 +688,22 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
                             </select>
                             <div class="hint">Determines Ministry (KPT) tracer classification benchmarks.</div>
                         </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top:4px;">
+                        <label for="ssm_number" style="display:flex; align-items:center; justify-content:space-between;">
+                            <span>SSM / University Registration Number *</span>
+                            <?php if ($ssm_incomplete): ?>
+                                <span class="uni-menu-badge danger" style="font-size:10px; padding:2px 8px;">1 Incomplete</span>
+                            <?php else: ?>
+                                <span class="uni-menu-badge success" style="font-size:10px; padding:2px 8px;">✓ Completed</span>
+                            <?php endif; ?>
+                        </label>
+                        <input type="text" id="ssm_number" name="ssm_number" class="rb-input" 
+                               placeholder="e.g. 201201012345 (1012345-X) or DU001(B)" 
+                               value="<?= htmlspecialchars($current['ssm_number'] ?? '') ?>"
+                               style="<?= $ssm_incomplete ? 'border-color: rgba(239,68,68,0.5);' : '' ?>">
+                        <div class="hint">Official Companies Commission of Malaysia (SSM) or Ministry entity registration number for institution verification.</div>
                     </div>
 
                     <!-- Logo / Crest Upload -->

@@ -80,10 +80,12 @@ $institution_logo = null;
 $university_filter_id = null;
 $legacy_name_fallback = false;
 if ($is_university_account) {
-    $stmt = $pdo->prepare("SELECT company_name, company_logo, university_id FROM users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT company_name, company_logo, university_id, ssm_number FROM users WHERE id = ?");
     $stmt->execute([$_SESSION['user_id']]);
     $row = $stmt->fetch();
     $institution_name = !empty($row['company_name']) ? $row['company_name'] : $_SESSION['user_name'];
+    $uni_ssm = trim($row['ssm_number'] ?? '');
+    $settings_incomplete_count = empty($uni_ssm) ? 1 : 0;
     if (!empty($row['company_logo']) && file_exists($row['company_logo'])) {
         $institution_logo = $row['company_logo'] . '?v=' . @filemtime($row['company_logo']);
     }
@@ -376,8 +378,8 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
     .uni-menu-group:not(.open) .uni-menu-children { display: none; }
     .uni-menu-child { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; border-radius: 8px; color: #5B6B3A; font-size: 12.5px; font-weight: 600; text-decoration: none; }
     .uni-menu-child:hover { background: rgba(10,10,10,0.05); color: #0F1300; }
-    .uni-menu-badge { font-size: 10px; font-weight: 800; padding: 1px 7px; border-radius: 999px; background: rgba(10,10,10,0.06); color: #5B6B3A; }
-    .uni-menu-badge.danger { background: rgba(239,68,68,0.12); color: #B91C1C; }
+    .uni-menu-badge { font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: rgba(10,10,10,0.06); color: #5B6B3A; display: inline-flex; align-items: center; justify-content: center; line-height: 1.2; }
+    .uni-menu-badge.danger { background: #EF4444; color: #FFFFFF; font-weight: 800; box-shadow: 0 1px 3px rgba(239, 68, 68, 0.35); }
     .uni-menu-badge.success { background: rgba(16,185,129,0.12); color: #047857; }
     .uni-sidebar-bottom { margin-top: auto; padding-top: 16px; border-top: 1px solid rgba(10,10,10,0.07); }
     .uni-sidebar-institution-card { display: flex; align-items: center; gap: 10px; padding: 10px 8px; }
@@ -428,11 +430,21 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
 
         <div class="uni-menu-group open">
             <button type="button" class="uni-menu-parent" onclick="toggleUniMenu(this)">
-                <span class="uni-menu-parent-left"><span>⚙️</span> Settings</span>
+                <span class="uni-menu-parent-left">
+                    <span>⚙️</span> Settings
+                    <?php if (($settings_incomplete_count ?? 0) > 0): ?>
+                        <span class="uni-menu-badge danger" style="margin-left:4px;" title="1 incomplete requirement"><?= $settings_incomplete_count ?></span>
+                    <?php endif; ?>
+                </span>
                 <span class="uni-menu-chevron">&#9662;</span>
             </button>
             <div class="uni-menu-children">
-                <a href="university_settings.php#institutionTab" class="uni-menu-child"><span>🏛️ Institution Profile</span></a>
+                <a href="university_settings.php#institutionTab" class="uni-menu-child">
+                    <span>🏛️ Institution Profile</span>
+                    <?php if (($settings_incomplete_count ?? 0) > 0): ?>
+                        <span class="uni-menu-badge danger" title="SSM registration number is incomplete"><?= $settings_incomplete_count ?></span>
+                    <?php endif; ?>
+                </a>
                 <a href="university_settings.php#liaisonTab" class="uni-menu-child"><span>👤 Career Officer Liaison</span></a>
                 <a href="university_settings.php#qrTab" class="uni-menu-child"><span>▦ Career Fair QR &amp; Link</span></a>
                 <a href="university_settings.php#securityTab" class="uni-menu-child"><span>🔒 Security &amp; Password</span></a>

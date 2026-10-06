@@ -14,12 +14,28 @@ CREATE TABLE IF NOT EXISTS `universities` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,
   `type` enum('public','private','other') NOT NULL DEFAULT 'public',
+  `ssm_number` varchar(100) DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- 2. Add university_id column to users table if not exists
+-- 2. Add ssm_number column to universities table if not exists (for existing tables)
 SET @dbname = DATABASE();
+SET @tablename = 'universities';
+SET @columnname = 'ssm_number';
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = @tablename AND COLUMN_NAME = @columnname
+  ) > 0,
+  'SELECT 1',
+  'ALTER TABLE `universities` ADD COLUMN `ssm_number` varchar(100) DEFAULT NULL AFTER `type`;'
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+-- 3. Add university_id column to users table if not exists
 SET @tablename = 'users';
 
 SET @columnname = 'university_id';
@@ -35,7 +51,7 @@ PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
 DEALLOCATE PREPARE alterIfNotExists;
 
--- 3. Add matric_number column to users table if not exists
+-- 4. Add matric_number column to users table if not exists
 SET @columnname = 'matric_number';
 SET @preparedStatement = (SELECT IF(
   (
@@ -44,6 +60,20 @@ SET @preparedStatement = (SELECT IF(
   ) > 0,
   'SELECT 1',
   'ALTER TABLE `users` ADD COLUMN `matric_number` varchar(50) DEFAULT NULL;'
+));
+PREPARE alterIfNotExists FROM @preparedStatement;
+EXECUTE alterIfNotExists;
+DEALLOCATE PREPARE alterIfNotExists;
+
+-- 5. Add ssm_number column to users table if not exists
+SET @columnname = 'ssm_number';
+SET @preparedStatement = (SELECT IF(
+  (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = @dbname AND TABLE_NAME = @tablename AND COLUMN_NAME = @columnname
+  ) > 0,
+  'SELECT 1',
+  'ALTER TABLE `users` ADD COLUMN `ssm_number` varchar(100) DEFAULT NULL AFTER `matric_number`;'
 ));
 PREPARE alterIfNotExists FROM @preparedStatement;
 EXECUTE alterIfNotExists;
