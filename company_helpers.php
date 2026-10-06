@@ -12,15 +12,29 @@
 // Returns every company the given user belongs to, with their role in each,
 // ordered by when they joined (oldest/first membership first).
 function get_user_companies($pdo, $user_id) {
-    $stmt = $pdo->prepare("
-        SELECT c.id, c.name, c.logo, c.website, c.contact_email, c.address, c.ssm_number, cm.role, cm.joined_at
-        FROM company_members cm
-        JOIN companies c ON c.id = cm.company_id
-        WHERE cm.user_id = ?
-        ORDER BY cm.joined_at ASC, cm.id ASC
-    ");
-    $stmt->execute([$user_id]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $stmt = $pdo->prepare("
+            SELECT c.id, c.name, c.logo, c.website, c.contact_email, c.address, c.ssm_number, cm.role, cm.joined_at
+            FROM company_members cm
+            JOIN companies c ON c.id = cm.company_id
+            WHERE cm.user_id = ?
+            ORDER BY cm.joined_at ASC, cm.id ASC
+        ");
+        $stmt->execute([$user_id]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (\Throwable $e) {
+        $stmt = $pdo->prepare("
+            SELECT c.id, c.name, c.logo, c.website, c.contact_email, c.address, cm.role, cm.joined_at
+            FROM company_members cm
+            JOIN companies c ON c.id = cm.company_id
+            WHERE cm.user_id = ?
+            ORDER BY cm.joined_at ASC, cm.id ASC
+        ");
+        $stmt->execute([$user_id]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) { $r['ssm_number'] = null; }
+        return $rows;
+    }
 }
 
 // This user's role ('admin' | 'hr') in a specific company, or null if they
@@ -85,17 +99,30 @@ function create_company_for_new_employer($pdo, $user) {
     $company_name = trim($user['company_name'] ?? '') !== '' ? $user['company_name'] : ($user['name'] . "'s Company");
     $token = bin2hex(random_bytes(20));
 
-    $ins = $pdo->prepare("INSERT INTO companies (name, website, address, ssm_number, logo, contact_email, invite_token, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    $ins->execute([
-        $company_name,
-        $user['company_website'] ?? null,
-        $user['company_address'] ?? null,
-        $user['ssm_number'] ?? null,
-        $user['company_logo'] ?? null,
-        $user['contact_email'] ?? null,
-        $token,
-        $user['id'],
-    ]);
+    try {
+        $ins = $pdo->prepare("INSERT INTO companies (name, website, address, ssm_number, logo, contact_email, invite_token, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $ins->execute([
+            $company_name,
+            $user['company_website'] ?? null,
+            $user['company_address'] ?? null,
+            $user['ssm_number'] ?? null,
+            $user['company_logo'] ?? null,
+            $user['contact_email'] ?? null,
+            $token,
+            $user['id'],
+        ]);
+    } catch (\Throwable $t) {
+        $ins = $pdo->prepare("INSERT INTO companies (name, website, address, logo, contact_email, invite_token, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $ins->execute([
+            $company_name,
+            $user['company_website'] ?? null,
+            $user['company_address'] ?? null,
+            $user['company_logo'] ?? null,
+            $user['contact_email'] ?? null,
+            $token,
+            $user['id'],
+        ]);
+    }
     $company_id = $pdo->lastInsertId();
 
     $mem = $pdo->prepare("INSERT INTO company_members (company_id, user_id, role) VALUES (?, ?, 'admin')");

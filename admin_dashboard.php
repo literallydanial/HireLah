@@ -479,18 +479,17 @@ $admin_funnel = [
 // Query candidate status breakdown per job for platform-wide monitoring
 $admin_job_funnels = $pdo->query("
     SELECT j.id as job_id, j.job_title, j.department, j.status as job_status, 
-           COALESCE(NULLIF(c.name, ''), NULLIF(u.company_name, ''), u.name) as employer_name,
-           COALESCE(NULLIF(c.ssm_number, ''), NULLIF(u.ssm_number, '')) as ssm_display,
+           COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name,
+           u.ssm_number as ssm_display,
            COUNT(cand.id) as applied,
            SUM(CASE WHEN LOWER(COALESCE(cand.status, '')) IN ('review', 'under review', 'reviewing', 'new', '') THEN 1 ELSE 0 END) as review,
            SUM(CASE WHEN LOWER(COALESCE(cand.status, '')) IN ('shortlisted', 'shortlist') THEN 1 ELSE 0 END) as shortlisted,
            SUM(CASE WHEN cand.interview_status IN ('Proposed', 'Confirmed') THEN 1 ELSE 0 END) as interviewing,
            SUM(CASE WHEN LOWER(COALESCE(cand.status, '')) = 'rejected' THEN 1 ELSE 0 END) as rejected
     FROM jobs j
-    LEFT JOIN companies c ON j.company_id = c.id
     LEFT JOIN users u ON j.employer_id = u.id
     LEFT JOIN candidates cand ON cand.job_id = j.id
-    GROUP BY j.id, j.job_title, j.department, j.status, u.name, u.company_name, c.name, c.ssm_number, u.ssm_number
+    GROUP BY j.id, j.job_title, j.department, j.status, u.name, u.company_name, u.ssm_number
     ORDER BY applied DESC, j.created_at DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -500,17 +499,10 @@ $admin_job_funnels = $pdo->query("
 $users_list = $pdo->query("
     SELECT u.*, 
            un.type as university_type,
-           comp.name as employer_company_name,
-           COALESCE(NULLIF(comp.name, ''), NULLIF(u.company_name, '')) as company_display_name,
-           COALESCE(NULLIF(comp.ssm_number, ''), NULLIF(u.ssm_number, ''), NULLIF(un.ssm_number, '')) as ssm_display
+           u.company_name as company_display_name,
+           COALESCE(NULLIF(u.ssm_number, ''), NULLIF(un.ssm_number, '')) as ssm_display
     FROM users u 
     LEFT JOIN universities un ON u.university_id = un.id 
-    LEFT JOIN (
-        SELECT cm.user_id, c.name, c.ssm_number, c.logo
-        FROM company_members cm
-        JOIN companies c ON c.id = cm.company_id
-        GROUP BY cm.user_id
-    ) comp ON comp.user_id = u.id
     ORDER BY u.created_at DESC
 ")->fetchAll();
 $university_users_list = $pdo->query("
@@ -534,10 +526,9 @@ foreach ($university_users_list as $uu) {
 
 $jobs_list = $pdo->query("
     SELECT j.*, 
-           COALESCE(NULLIF(c.name, ''), NULLIF(u.company_name, ''), u.name) as employer_name,
-           COALESCE(NULLIF(c.ssm_number, ''), NULLIF(u.ssm_number, '')) as ssm_display
+           COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name,
+           u.ssm_number as ssm_display
     FROM jobs j 
-    LEFT JOIN companies c ON j.company_id = c.id
     LEFT JOIN users u ON j.employer_id = u.id 
     ORDER BY j.created_at DESC
 ")->fetchAll();

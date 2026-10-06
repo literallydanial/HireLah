@@ -42,12 +42,12 @@ try {
         }
     }
 
-    // Auto-verify ssm_number columns availability
+    // Auto-verify ssm_number columns availability (fail-safe on any schema state)
     try {
         $pdo->query("SELECT ssm_number FROM users LIMIT 1");
     } catch (\Throwable $e) {
         try {
-            $pdo->exec("ALTER TABLE users ADD COLUMN ssm_number VARCHAR(100) NULL AFTER matric_number");
+            $pdo->exec("ALTER TABLE users ADD COLUMN ssm_number VARCHAR(100) NULL");
         } catch (\Throwable $migErr) {
             error_log("Users ssm_number migration notice: " . $migErr->getMessage());
         }
@@ -56,7 +56,7 @@ try {
         $pdo->query("SELECT ssm_number FROM universities LIMIT 1");
     } catch (\Throwable $e) {
         try {
-            $pdo->exec("ALTER TABLE universities ADD COLUMN ssm_number VARCHAR(100) NULL AFTER type");
+            $pdo->exec("ALTER TABLE universities ADD COLUMN ssm_number VARCHAR(100) NULL");
         } catch (\Throwable $migErr) {
             error_log("Universities ssm_number migration notice: " . $migErr->getMessage());
         }
@@ -65,7 +65,7 @@ try {
         $pdo->query("SELECT ssm_number FROM companies LIMIT 1");
     } catch (\Throwable $e) {
         try {
-            $pdo->exec("ALTER TABLE companies ADD COLUMN ssm_number VARCHAR(100) NULL AFTER address");
+            $pdo->exec("ALTER TABLE companies ADD COLUMN ssm_number VARCHAR(100) NULL");
         } catch (\Throwable $migErr) {
             error_log("Companies ssm_number migration notice: " . $migErr->getMessage());
         }
