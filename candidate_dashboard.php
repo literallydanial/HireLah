@@ -846,7 +846,12 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
                     $score = (int)($app['overall_score'] ?? 0);
                     $score_color = $score >= 70 ? '#15803D' : ($score >= 50 ? '#D97706' : '#DC2626');
                     $strengths = !empty($app['strengths']) ? (json_decode($app['strengths'], true) ?: []) : [];
-                    $app_resume = !empty($app['filename']) ? ('uploads/resumes/' . $app['filename']) : '';
+                    // resume_path is the actual on-disk location apply.php saved this
+                    // file at (it varies: uploads/<id>_name.pdf for a fresh upload at
+                    // apply time, or uploads/resumes/<id>_name.pdf if they used "Quick
+                    // Apply with Saved Resume"). filename is only ever the original
+                    // display name with neither of those -- never a real, loadable path.
+                    $app_resume = !empty($app['resume_path']) ? $app['resume_path'] : (!empty($app['filename']) ? ('uploads/resumes/' . $app['filename']) : '');
                     $un_cnt = $unread_msgs_counts[$app['id']] ?? 0;
                 ?>
                     <div class="app-card-box" data-title="<?= htmlspecialchars(strtolower($app['job_title'])) ?>" data-employer="<?= htmlspecialchars(strtolower($app['employer_name'] ?? 'keria')) ?>">

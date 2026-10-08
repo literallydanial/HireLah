@@ -128,6 +128,7 @@ if ($stats_student_count < 100) $stats_student_count = 2840;
             font-size: 13.5px;
             font-weight: 600;
             text-decoration: none;
+            white-space: nowrap;
             transition: color 0.2s ease, transform 0.2s ease;
             position: relative;
         }
