@@ -1,6 +1,7 @@
 # Secrets — contains Gemini API key and SMTP/Gmail app password.
 # Keep this file on the server, just don't track it in git.
 config.json
+config.php
 
 # OS / editor junk
 .DS_Store

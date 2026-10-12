@@ -1,6 +1,7 @@
 <?php
 require_once 'auth.php';
 require_once 'ai.php';
+require_once 'config_manager.php';
 require_once 'notifications_helper.php';
 require_once 'company_helpers.php';
 require_login();
@@ -93,9 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $smtp_secure = trim($_POST['smtp_secure'] ?? 'tls');
         $smtp_from_name = trim($_POST['smtp_from_name'] ?? '');
 
-        $config_file = __DIR__ . '/config.json';
-        $curr_config = file_exists($config_file) ? json_decode(file_get_contents($config_file), true) : [];
-        if (!is_array($curr_config)) $curr_config = [];
+        $curr_config = load_app_config();
 
         if (!empty($api_key)) {
             $curr_config['api_key'] = $api_key;
@@ -111,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $curr_config['smtp_secure'] = $smtp_secure;
         $curr_config['smtp_from_name'] = $smtp_from_name;
 
-        file_put_contents($config_file, json_encode($curr_config, JSON_PRETTY_PRINT));
+        save_app_config($curr_config);
         $_SESSION['toast'] = "Settings & PHPMailer SMTP Configuration saved!";
         header("Location: profile.php");
         exit;
@@ -577,18 +576,446 @@ if ($user['role'] === 'candidate') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profile & Account Settings - Keria</title>
+    <title>Profile &amp; Account Settings — Keria</title>
+
+    <!-- Google Fonts matching jobs.php & candidate_dashboard.php -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css?v=<?php echo @filemtime(__DIR__.'/style.css'); ?>">
+
     <style>
+        :root {
+            --keria-lime: #D2FF3A;
+            --keria-lime-hover: #C2F025;
+            --keria-lime-light: #EBFFAA;
+            --keria-green-text: #15803D;
+            --keria-green-bg: #DCFCE7;
+            --keria-dark: #0A0A0A;
+            --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-hand: 'Caveat', cursive;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: #F8FAF8 !important;
+            color: var(--keria-dark, #0A0A0A);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+
+        /* Screen-filling Header Width matching jobs.php */
+        header .header-inner {
+            max-width: 1560px !important;
+            width: 100% !important;
+            padding: 0 16px !important;
+        }
+
+        /* ================= HERO BANNER SECTION (matching jobs.php) ================= */
+        .keria-hero-banner {
+            position: relative;
+            width: 100%;
+            background-image: url('assets/Keria_banner.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner.jpg'); ?>');
+            background-size: cover;
+            background-position: center top;
+            background-repeat: no-repeat;
+            padding: 36px 32px 40px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+        }
+
+        .banner-content-inner {
+            max-width: 1560px;
+            width: 100%;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            position: relative;
+            z-index: 5;
+        }
+
+        .banner-left-intro {
+            flex: 1;
+            max-width: 720px;
+            position: relative;
+        }
+
+        .banner-title-text {
+            font-size: 38px;
+            font-weight: 900;
+            color: #0A0A0A;
+            line-height: 1.1;
+            letter-spacing: -1.2px;
+            margin-bottom: 10px;
+        }
+
+        .banner-sub-text {
+            font-size: 14.5px;
+            font-weight: 500;
+            color: #374151;
+            line-height: 1.45;
+            max-width: 580px;
+            margin-bottom: 6px;
+        }
+
+        .banner-sub-smile {
+            font-family: var(--font-hand);
+            font-size: 26px;
+            font-weight: 700;
+            color: #0A0A0A;
+            display: inline-block;
+            transform: rotate(6deg);
+            margin-top: -2px;
+        }
+
+        /* Right Banner Doodle Area */
+        .banner-right-doodle-box {
+            flex: 0 0 200px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            margin-right: 40px;
+            user-select: none;
+        }
+
+        .banner-doodle-text {
+            font-family: var(--font-hand);
+            font-size: 25px;
+            font-weight: 700;
+            line-height: 1.15;
+            color: #0A0A0A;
+            transform: rotate(6deg);
+            position: relative;
+        }
+
+        .banner-doodle-sparks {
+            position: absolute;
+            top: -12px;
+            right: -16px;
+            width: 26px;
+            height: 26px;
+        }
+
+        /* ================= MAIN CONTAINER ================= */
+        .keria-main-container {
+            flex: 1 0 auto;
+            max-width: 1560px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 28px 24px 64px;
+            box-sizing: border-box;
+        }
+
+        /* Modern Keria Cards */
+        .keria-card, .panel {
+            background: #FFFFFF !important;
+            border: 1px solid #E5E7EB !important;
+            border-radius: 20px !important;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02) !important;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .keria-card:hover, .panel:hover {
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.04) !important;
+            border-color: #D1D5DB !important;
+        }
+
+        /* Profile Header Overview Card */
+        .profile-overview-card {
+            background: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            border-radius: 20px;
+            padding: 24px 32px;
+            margin-bottom: 28px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 24px;
+        }
+
+        .profile-avatar-wrap {
+            position: relative;
+            flex-shrink: 0;
+            width: 88px;
+            height: 88px;
+        }
+
         .profile-pic {
-            width: 96px;
-            height: 96px;
+            width: 88px;
+            height: 88px;
             border-radius: 50%;
             object-fit: cover;
-            border: 3px solid var(--acc);
-            margin-bottom: 12px;
-            background: var(--dim);
-            box-shadow: var(--shadow-md);
+            border: 3px solid #E5E7EB;
+            background: #F3F4F6;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            display: block;
+            margin-bottom: 0;
+        }
+
+        .profile-avatar-placeholder {
+            width: 88px;
+            height: 88px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: 800;
+            color: #0A0A0A;
+            background: var(--keria-lime, #D2FF3A);
+            border: 3px solid #E5E7EB;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            margin-bottom: 0;
+        }
+
+        .avatar-cam-btn {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #0A0A0A;
+            color: #FFFFFF;
+            border: 2px solid #FFFFFF;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            transition: all 0.2s ease;
+            padding: 0;
+        }
+
+        .avatar-cam-btn:hover {
+            transform: scale(1.08);
+            background: #262626;
+        }
+
+        .profile-title-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 6px;
+            flex-wrap: wrap;
+        }
+
+        .profile-name-text {
+            font-size: 24px;
+            font-weight: 900;
+            color: #0A0A0A;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+
+        .role-chip {
+            background: #DCFCE7;
+            color: #15803D;
+            border: 1px solid #BBF7D0;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .role-chip-employer {
+            background: #EFF6FF;
+            color: #1D4ED8;
+            border-color: #BFDBFE;
+        }
+
+        .role-chip-admin {
+            background: #FEF3C7;
+            color: #B45309;
+            border-color: #FDE68A;
+        }
+
+        .profile-email-text {
+            font-size: 13.5px;
+            font-weight: 500;
+            color: #6B7280;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-badge-verified {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #F0FDF4;
+            border: 1px solid #DCFCE7;
+            color: #15803D;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 6px 14px;
+            border-radius: 999px;
+        }
+
+        .status-pulse-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #16A34A;
+            display: inline-block;
+        }
+
+        /* Settings Grid Layout */
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 28px;
+            align-items: start;
+        }
+
+        @media (max-width: 992px) {
+            .settings-grid {
+                grid-template-columns: 1fr !important;
+                gap: 20px !important;
+            }
+            .banner-right-doodle-box {
+                display: none;
+            }
+        }
+
+        /* Form elements */
+        .settings-grid label {
+            display: block;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+
+        .settings-grid input[type="text"],
+        .settings-grid input[type="email"],
+        .settings-grid input[type="password"],
+        .settings-grid input[type="number"],
+        .settings-grid input[type="url"],
+        .settings-grid select,
+        .settings-grid textarea {
+            width: 100%;
+            box-sizing: border-box;
+            background: #FFFFFF;
+            border: 1.5px solid #E5E7EB;
+            border-radius: 12px;
+            padding: 11px 14px;
+            font-size: 13.5px;
+            font-family: var(--font-sans);
+            color: #0A0A0A;
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .settings-grid input:focus,
+        .settings-grid select:focus,
+        .settings-grid textarea:focus {
+            border-color: #0A0A0A;
+            box-shadow: 0 0 0 3px rgba(10, 10, 10, 0.05);
+        }
+
+        .btn-primary {
+            background: #0A0A0A !important;
+            color: #FFFFFF !important;
+            font-family: var(--font-sans);
+            font-size: 13.5px;
+            font-weight: 700;
+            padding: 11px 22px;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-decoration: none;
+        }
+
+        .btn-primary:hover {
+            background: #262626 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-secondary {
+            background: #FFFFFF !important;
+            color: #0A0A0A !important;
+            border: 1.5px solid #E5E7EB !important;
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 700;
+            padding: 9px 18px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            text-decoration: none;
+        }
+
+        .btn-secondary:hover {
+            border-color: #0A0A0A !important;
+            background: #F9FAFB !important;
+            transform: translateY(-1px);
+        }
+
+        .panel-title {
+            font-size: 16.5px;
+            font-weight: 800;
+            color: #0A0A0A;
+            letter-spacing: -0.3px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .danger-zone-panel {
+            background: #FEF2F2 !important;
+            border: 1px solid #FECACA !important;
+            border-radius: 20px !important;
+        }
+
+        .btn-danger {
+            background: #DC2626 !important;
+            color: #FFFFFF !important;
+            border: none !important;
+            padding: 11px 24px;
+            font-size: 13px;
+            font-weight: 800;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-danger:hover {
+            background: #B91C1C !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(220, 38, 38, 0.28);
         }
 
         @media (max-width: 700px) {
@@ -612,7 +1039,6 @@ if ($user['role'] === 'candidate') {
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=<?php echo @filemtime(__DIR__.'/apple-touch-icon.png'); ?>">
 </head>
 <body>
-    <div class="bg-watermark-logo"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Watermark Logo"></div>
     <header>
         <div class="header-inner">
             <div style="display:flex; align-items:center; gap:10px;">
@@ -685,62 +1111,89 @@ if ($user['role'] === 'candidate') {
         </div>
     </header>
 
-    <main style="max-width:1180px; width:100%; box-sizing:border-box; margin:36px auto; padding:0 24px;">
+    <!-- ================= FULL-WIDTH KERIA HERO BANNER ================= -->
+    <section class="keria-hero-banner">
+        <div class="banner-content-inner">
+            <div class="banner-left-intro">
+                <h1 class="banner-title-text">Profile &amp;<br>Account Settings <span class="banner-sub-smile">⚙️</span></h1>
+                <p class="banner-sub-text">Manage your personal credentials, university affiliation, team workspace, and application preferences seamlessly.</p>
+            </div>
+
+            <div class="banner-right-doodle-box">
+                <div class="banner-doodle-text">
+                    Keep<br>It Fresh<br>&amp; Updated! ☺
+                    <svg class="banner-doodle-sparks" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2.5" stroke-linecap="round"><path d="M12 3v3m0 12v3M3 12h3m12 0h3m-2.6-6.4l-2.1 2.1m-8.6 8.6l-2.1 2.1m0-12.8l2.1 2.1m8.6 8.6l2.1 2.1"/></svg>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <main class="keria-main-container">
         <?php if(isset($_SESSION['toast'])): ?>
-            <div class="toast-notification">
-                <span class="toast-icon-badge">🌿</span>
-                <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
-                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()">✕</button>
+            <div class="toast-notification" style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:14px; padding:14px 20px; margin-bottom:24px; color:#065F46; font-size:13.5px; font-weight:600; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 10px rgba(0,0,0,0.02);">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:16px;">🌿</span>
+                    <span><?= htmlspecialchars($_SESSION['toast']) ?></span>
+                </div>
+                <button type="button" class="toast-close-btn" onclick="this.parentElement.remove()" style="background:none; border:none; color:#065F46; font-size:16px; cursor:pointer;">✕</button>
                 <?php unset($_SESSION['toast']); ?>
             </div>
         <?php endif; ?>
 
         <?php if(isset($_SESSION['error'])): ?>
-            <div style="background:rgba(255, 77, 106, 0.1); border:1px solid rgba(255, 77, 106, 0.35); border-radius:12px; padding:12px 20px; margin-bottom:24px; color:var(--red); font-size:13.5px; display:flex; align-items:center; gap:10px;">
-                <span>⚠️</span>
+            <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:14px; padding:14px 20px; margin-bottom:24px; color:#991B1B; font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:10px; box-shadow:0 2px 10px rgba(0,0,0,0.02);">
+                <span style="font-size:16px;">⚠️</span>
                 <span><?= htmlspecialchars($_SESSION['error']) ?></span>
                 <?php unset($_SESSION['error']); ?>
             </div>
         <?php endif; ?>
 
-        <!-- Desktop Hero Header Card -->
-        <div class="panel" style="margin-bottom:28px; padding:28px 36px; background:linear-gradient(135deg, var(--card) 0%, var(--surf) 100%); border-radius:18px; box-shadow:var(--shadow-md);">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:24px;">
-                <div style="display:flex; gap:24px; align-items:center; flex-wrap:wrap;">
-                    <div style="position:relative; flex-shrink:0;">
-                        <?php if(!empty($user['profile_picture']) && file_exists($user['profile_picture'])): ?>
-                            <img src="<?= htmlspecialchars($user['profile_picture']) ?>" alt="Profile Picture" class="profile-pic" style="width:84px; height:84px; margin-bottom:0; box-shadow:0 0 20px rgba(107, 138, 0, 0.2);">
-                        <?php else: ?>
-                            <div class="profile-pic" style="width:84px; height:84px; margin-bottom:0; display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:800; color:#fff; background:var(--grad-purple); box-shadow:0 0 20px rgba(0, 0, 0, 0.25);">
-                                <?= strtoupper(substr($user['name'] ?: 'U', 0, 1)) ?>
-                            </div>
-                        <?php endif; ?>
-                        
-                        <form id="avatarForm" method="POST" enctype="multipart/form-data" style="position:absolute; bottom:-4px; right:-4px;">
-                            <input type="hidden" name="action" value="upload_picture">
-                            <input type="hidden" name="profile_picture_base64" id="pic_base64">
-                            <input type="file" name="profile_picture" id="pic_input" accept="image/png, image/jpeg, image/webp" style="display:none" onchange="handleAvatarUpload(this)">
-                            <button type="button" class="btn-secondary" style="padding:4px 8px; font-size:11px; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-md);" onclick="document.getElementById('pic_input').click()" title="Change Avatar">📷</button>
-                        </form>
-                    </div>
-
-                    <div>
-                        <div style="display:flex; align-items:center; gap:12px; margin-bottom:4px; flex-wrap:wrap;">
-                            <h1 style="font-size:24px; font-weight:800; margin:0; letter-spacing:-0.025em; color:var(--txt);"><?= htmlspecialchars($user['name']) ?></h1>
-                            <span class="chip" style="background:rgba(107, 138, 0, 0.12); border-color:rgba(107, 138, 0, 0.25); color:var(--acc); font-weight:700; font-size:11px; padding:3px 10px;">
-                                🛡️ <?= strtoupper(htmlspecialchars($user['role'])) ?>
-                            </span>
+        <!-- Modern Profile Overview Card -->
+        <div class="profile-overview-card">
+            <div style="display:flex; gap:22px; align-items:center; flex-wrap:wrap;">
+                <div class="profile-avatar-wrap">
+                    <?php if(!empty($user['profile_picture']) && file_exists($user['profile_picture'])): ?>
+                        <img src="<?= htmlspecialchars($user['profile_picture']) ?>" alt="Profile Picture" class="profile-pic">
+                    <?php else: ?>
+                        <div class="profile-avatar-placeholder">
+                            <?= strtoupper(substr($user['name'] ?: 'U', 0, 1)) ?>
                         </div>
-                        <div style="font-size:14px; color:var(--mut); font-weight:500;"><?= htmlspecialchars($user['email']) ?></div>
-                    </div>
+                    <?php endif; ?>
+                    
+                    <form id="avatarForm" method="POST" enctype="multipart/form-data" style="margin:0;">
+                        <input type="hidden" name="action" value="upload_picture">
+                        <input type="hidden" name="profile_picture_base64" id="pic_base64">
+                        <input type="file" name="profile_picture" id="pic_input" accept="image/png, image/jpeg, image/webp" style="display:none" onchange="handleAvatarUpload(this)">
+                        <button type="button" class="avatar-cam-btn" onclick="document.getElementById('pic_input').click()" title="Change Profile Photo">📷</button>
+                    </form>
                 </div>
 
-                <div style="display:flex; gap:12px; align-items:center;">
-                    <div style="text-align:right;" class="user-info-text">
-                        <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.8px; color:var(--mut); font-weight:700;">Account Status</div>
-                        <div style="font-size:13px; font-weight:700; color:var(--grn); display:flex; align-items:center; gap:5px; justify-content:flex-end; margin-top:2px;">
-                            <span style="width:7px; height:7px; border-radius:50%; background:var(--grn); display:inline-block;"></span> Active & Verified
-                        </div>
+                <div>
+                    <div class="profile-title-row">
+                        <h2 class="profile-name-text"><?= htmlspecialchars($user['name']) ?></h2>
+                        <?php if($user['role'] === 'candidate'): ?>
+                            <span class="role-chip">🌿 Candidate</span>
+                        <?php elseif($user['role'] === 'employer'): ?>
+                            <span class="role-chip role-chip-employer">💼 Employer</span>
+                        <?php else: ?>
+                            <span class="role-chip role-chip-admin">👑 Admin</span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="profile-email-text">
+                        <span>✉️ <?= htmlspecialchars($user['email']) ?></span>
+                        <?php if(!empty($active_company['name'])): ?>
+                            <span style="color:#D1D5DB;">&bull;</span>
+                            <span style="color:#374151; font-weight:600;">🏢 <?= htmlspecialchars($active_company['name']) ?></span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+                <div style="text-align:right;">
+                    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.8px; color:#6B7280; font-weight:700; margin-bottom:4px;">Account Status</div>
+                    <div class="status-badge-verified">
+                        <span class="status-pulse-dot"></span> Active &amp; Verified
                     </div>
                 </div>
             </div>
@@ -1016,8 +1469,8 @@ if ($user['role'] === 'candidate') {
             <?php if($user['role'] === 'employer'): ?>
                 <?php $deletion_impact = get_employer_deletion_impact($pdo, $user_id); ?>
                 <!-- Danger Zone: Account Deletion Panel -->
-                <div class="panel" style="grid-column: 1 / -1; border-color: rgba(255, 77, 106, 0.35); background: rgba(255, 77, 106, 0.03); padding:32px;">
-                    <div class="panel-title" style="color: var(--red); display:flex; align-items:center; gap:8px;">
+                <div class="panel danger-zone-panel" style="grid-column: 1 / -1; padding:32px;">
+                    <div class="panel-title" style="color: #DC2626; display:flex; align-items:center; gap:8px;">
                         <span>⚠️</span> Danger Zone: Account Deletion
                     </div>
                     <p style="font-size:13px; color:var(--mut); margin-bottom:16px; line-height:1.5;">
@@ -1051,7 +1504,7 @@ if ($user['role'] === 'candidate') {
                             <label style="display:block; font-size:11.5px; font-weight:700; color:var(--red); margin-bottom:6px;">Type DELETE to confirm account deletion:</label>
                             <input type="text" name="confirm_delete" placeholder="DELETE" required style="padding:10px 14px; font-size:13px; font-weight:700; letter-spacing:1px; border-color: rgba(255, 77, 106, 0.4);">
                         </div>
-                        <button type="submit" class="btn-secondary" style="padding:11px 24px; font-size:13px; font-weight:800; color:var(--red); border-color:rgba(255, 77, 106, 0.5); background:rgba(255, 77, 106, 0.1);">
+                        <button type="submit" class="btn-danger">
                             🗑️ Permanently Delete My Account
                         </button>
                     </form>
@@ -1060,9 +1513,7 @@ if ($user['role'] === 'candidate') {
 
             <?php if($user['role'] === 'admin'): ?>
                 <?php
-                    $c_file = __DIR__ . '/config.json';
-                    $cfg = file_exists($c_file) ? json_decode(file_get_contents($c_file), true) : [];
-                    if (!is_array($cfg)) $cfg = [];
+                    $cfg = load_app_config();
 
                     $existing_key = get_api_key();
                     $api_key_hint = $existing_key
@@ -1270,8 +1721,8 @@ if ($user['role'] === 'candidate') {
 
 
                 <!-- Danger Zone: Account Deletion Panel -->
-                <div class="panel" style="grid-column: 1 / -1; border-color: rgba(255, 77, 106, 0.35); background: rgba(255, 77, 106, 0.03); padding:32px;">
-                    <div class="panel-title" style="color: var(--red); display:flex; align-items:center; gap:8px;">
+                <div class="panel danger-zone-panel" style="grid-column: 1 / -1; padding:32px;">
+                    <div class="panel-title" style="color: #DC2626; display:flex; align-items:center; gap:8px;">
                         <span>⚠️</span> Danger Zone: Account Deletion
                     </div>
                     <p style="font-size:13px; color:var(--mut); margin-bottom:20px; line-height:1.5;">
@@ -1285,7 +1736,7 @@ if ($user['role'] === 'candidate') {
                             <label style="display:block; font-size:11.5px; font-weight:700; color:var(--red); margin-bottom:6px;">Type DELETE to confirm account deletion:</label>
                             <input type="text" name="confirm_delete" placeholder="DELETE" required style="padding:10px 14px; font-size:13px; font-weight:700; letter-spacing:1px; border-color: rgba(255, 77, 106, 0.4);">
                         </div>
-                        <button type="submit" class="btn-secondary" style="padding:11px 24px; font-size:13px; font-weight:800; color:var(--red); border-color:rgba(255, 77, 106, 0.5); background:rgba(255, 77, 106, 0.1);">
+                        <button type="submit" class="btn-danger">
                             🗑️ Permanently Delete My Account
                         </button>
                     </form>

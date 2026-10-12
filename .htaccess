@@ -4,7 +4,7 @@
 # =========================================================================
 
 # Block direct web access to configuration, secrets, dependencies, backups & SQL/zip artifacts
-<FilesMatch "^(config\.json|composer\.(json|lock|phar|setup\.php)|schema.*\.sql|\.htaccess|\.git.*|.*\.log|.*\.sql|.*\.zip|.*\.bak|.*\.env.*)$">
+<FilesMatch "^(config\.(json|php)|composer\.(json|lock|phar|setup\.php)|schema.*\.sql|\.htaccess|\.git.*|.*\.log|.*\.sql|.*\.zip|.*\.bak|.*\.env.*)$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/questionnaire_helpers.php';
+require_once __DIR__ . '/config_manager.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
@@ -26,11 +27,7 @@ use PHPMailer\PHPMailer\Exception;
 function create_base_mailer($default_from_name = 'KERIA Recruitment Team', $reply_to_email = '', $reply_to_name = '') {
     $mail = new PHPMailer(true);
 
-    $config_file = __DIR__ . '/config.json';
-    $config = [];
-    if (file_exists($config_file)) {
-        $config = json_decode(file_get_contents($config_file), true) ?: [];
-    }
+    $config = load_app_config();
 
     $is_smtp = !empty($config['smtp_host']);
     if ($is_smtp) {
