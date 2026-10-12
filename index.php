@@ -334,6 +334,11 @@ if (file_exists('db.php')) {
             position: relative;
             min-height: 100vh;
             width: 100%;
+            /* Compensates for .keria-navbar now being position:fixed (so
+               removed from normal flow) -- matches its rendered height
+               (20px padding top/bottom + 44px logo) so the hero content
+               below isn't pushed up underneath the floating navbar. */
+            padding-top: 84px;
             background-color: #F8F9FA;
             background-image: url('assets/keria_hero_bg.jpg?v=<?php echo @filemtime(__DIR__.'/assets/keria_hero_bg.jpg'); ?>');
             background-size: cover;
@@ -362,8 +367,20 @@ if (file_exists('db.php')) {
 
         /* ================= NAVBAR ================= */
         .keria-navbar {
-            position: relative;
-            z-index: 50;
+            /* position:sticky doesn't work here -- .keria-hero-wrapper
+               (its own parent) has overflow:hidden, and body has an
+               overflow-x rule that forces overflow-y to compute as
+               non-visible too; both silently break sticky for any
+               descendant. position:fixed sidesteps ancestor overflow
+               entirely, so it's used instead. Since fixed removes the
+               navbar from normal flow, .keria-hero-wrapper gets a
+               matching padding-top (at each breakpoint below) so the
+               rest of the hero content doesn't shift up underneath it. */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 100;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -1644,6 +1661,9 @@ if (file_exists('db.php')) {
             }
             .keria-hero-wrapper {
                 min-height: 100svh;
+                /* Matches .keria-navbar's height at this breakpoint
+                   (16px padding top/bottom + 44px logo). */
+                padding-top: 76px;
                 background-position: 75% top;
                 background-size: cover;
             }
@@ -1737,6 +1757,9 @@ if (file_exists('db.php')) {
                 height: 38px;
             }
             .keria-hero-wrapper {
+                /* Matches .keria-navbar's height at this breakpoint
+                   (12px padding top/bottom + 34px logo). */
+                padding-top: 58px;
                 background-position: 85% top;
             }
             .keria-hero-wrapper::before {

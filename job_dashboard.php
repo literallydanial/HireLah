@@ -216,6 +216,19 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
         @media (max-width: 900px) {
             .stats-summary-grid { grid-template-columns: 1fr 1fr; }
         }
+
+        @media (max-width: 840px) {
+            /* This page has no hero banner, so it relies on style.css's
+               generic main{margin-top:170px!important} for header
+               clearance -- but with the bell/notification icon and a
+               min-height:44px Logout button in the top row (the mobile
+               tap-target rule), this header renders taller in practice
+               than that shared estimate assumed, so page content was
+               getting covered. Bumping it a bit higher here. */
+            main {
+                margin-top: 195px !important;
+            }
+        }
     </style>
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=<?php echo @filemtime(__DIR__.'/favicon-32x32.png'); ?>">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=<?php echo @filemtime(__DIR__.'/favicon-16x16.png'); ?>">

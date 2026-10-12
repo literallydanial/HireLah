@@ -68,9 +68,18 @@ if ($stats_student_count < 100) $stats_student_count = 2840;
 
         /* ---------------- Floating Sticky Navigation ---------------- */
         .uni-navbar-wrapper {
-            position: sticky;
+            /* position:fixed, not sticky: body's overflow-x rule (see
+               style.css) forces its overflow-y to compute as non-visible
+               too, which silently breaks position:sticky for any
+               descendant -- confirmed first on index.php's own navbar.
+               .uni-hero-banner below gets matching top padding since
+               fixed removes this from normal flow. */
+            position: fixed;
             top: 0;
+            left: 0;
+            width: 100%;
             z-index: 100;
+            box-sizing: border-box;
             backdrop-filter: blur(20px) saturate(160%);
             -webkit-backdrop-filter: blur(20px) saturate(160%);
             background: var(--uni-glass);
@@ -208,7 +217,11 @@ if ($stats_student_count < 100) $stats_student_count = 2840;
             background-size: cover;
             background-position: 28% 38%;
             background-repeat: no-repeat;
-            padding: 70px 6vw 75px;
+            /* top padding bumped from 70px to 136px (+66px, matching
+               .uni-navbar-wrapper's rendered height: 16px padding top/
+               bottom + 34px logo) now that the navbar is position:fixed
+               and out of normal flow. */
+            padding: 136px 6vw 75px;
             min-height: 540px;
             aspect-ratio: 2.35 / 1;
             box-sizing: border-box;
@@ -367,7 +380,11 @@ if ($stats_student_count < 100) $stats_student_count = 2840;
             .uni-hero-banner {
                 aspect-ratio: auto;
                 min-height: 520px;
-                padding: 50px 24px;
+                /* top padding bumped from 50px to 112px (+62px, matching
+                   .uni-navbar's reduced height at this width: 14px
+                   padding top/bottom + 34px logo, from its own 980px
+                   breakpoint already in effect here). */
+                padding: 112px 24px 50px;
                 justify-content: center;
                 background-position: 32% 30%;
             }
@@ -378,7 +395,11 @@ if ($stats_student_count < 100) $stats_student_count = 2840;
 
         @media (max-width: 600px) {
             .uni-hero-banner {
-                padding: 40px 16px 50px;
+                /* top padding bumped from 40px to 102px (+62px, matching
+                   .uni-navbar's height at this width -- same as the
+                   900px tier, since its own padding/logo size don't
+                   change again below 980px). */
+                padding: 102px 16px 50px;
                 background-position: center 20%;
                 min-height: 640px;
             }

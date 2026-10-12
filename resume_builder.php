@@ -224,9 +224,38 @@ try {
             background-size: cover;
             background-position: center top;
             background-repeat: no-repeat;
+            /* This section sits directly after <header>, outside <main>,
+               so it didn't get style.css's main{margin-top} compensation
+               for the header now being position:fixed. Clearance is
+               margin-top, not padding -- padding would grow this box
+               and force background-size:cover to zoom in further to
+               still fill it, cropping the mascots. margin sits outside
+               the box, so the image keeps its original sizing/crop. */
+            margin-top: 72px;
             padding: 36px 32px 40px;
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             overflow: hidden;
+        }
+
+        @media (max-width: 840px) {
+            /* Below 840px style.css's header switches from a fixed
+               72px to auto-height (its nav can wrap to a second line),
+               so 72px of clearance stops being enough and the title
+               gets covered. 170px errs generous, same estimate used
+               for main{margin-top} at this breakpoint. */
+            .keria-hero-banner {
+                margin-top: 170px;
+                padding: 24px 20px 28px;
+            }
+            /* style.css also forces main{margin-top:170px!important} at
+               this breakpoint, assuming main sits directly under the
+               fixed header. Here the hero banner above already provides
+               that clearance, so without this override the two stack
+               and leave a large empty gap between the banner and the
+               page content. */
+            .keria-main-container {
+                margin-top: 0 !important;
+            }
         }
 
         .banner-content-inner {

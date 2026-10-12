@@ -185,12 +185,42 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
             background-size: cover;
             background-position: center center;
             background-repeat: no-repeat;
+            /* This section sits directly after <header>, outside <main>,
+               so it didn't get style.css's main{margin-top} compensation
+               for the header now being position:fixed. Clearance is
+               margin-top, not padding -- padding would grow this box
+               and force background-size:cover to zoom in further to
+               still fill it, cropping the mascots. margin sits outside
+               the box, so the image keeps its original sizing/crop. */
+            margin-top: 72px;
             padding: 44px 32px 48px;
             min-height: 280px;
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             overflow: hidden;
             display: flex;
             align-items: center;
+        }
+
+        @media (max-width: 840px) {
+            /* Below 840px style.css's header switches from a fixed
+               72px to auto-height (its nav can wrap to a second line),
+               so 72px of clearance stops being enough and the title
+               gets covered. 170px errs generous, same estimate used
+               for main{margin-top} at this breakpoint. */
+            .keria-hero-banner {
+                margin-top: 170px;
+                padding: 28px 20px 32px;
+                min-height: 0;
+            }
+            /* style.css also forces main{margin-top:170px!important} at
+               this breakpoint, assuming main sits directly under the
+               fixed header. Here the hero banner above already provides
+               that clearance, so without this override the two stack
+               and leave a large empty gap between the banner and the
+               page content. */
+            .keria-main-container {
+                margin-top: 0 !important;
+            }
         }
 
         .banner-content-inner {
@@ -591,7 +621,11 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
     <header>
         <div class="header-inner">
             <div style="display:flex; align-items:center; gap:10px;">
-                <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
+                <div class="logo-box">
+                    <a href="index.php" style="display:flex; align-items:center;">
+                        <img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;">
+                    </a>
+                </div>
             </div>
 
             <nav style="display:flex; gap:4px; margin-left:24px">

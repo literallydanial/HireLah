@@ -318,6 +318,15 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             background-size: cover;
             background-position: center top;
             background-repeat: no-repeat;
+            /* This section sits directly after <header>, outside <main>,
+               so it didn't get style.css's main{margin-top} compensation
+               for the header now being position:fixed. Clearance is
+               margin-top, not padding -- padding would grow this box
+               and force background-size:cover to zoom in further to
+               still fill it, which is what cropped the mascots last
+               time. margin sits outside the box, so the image keeps
+               its original sizing/crop untouched. */
+            margin-top: 72px;
             padding: 32px 32px 36px;
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             overflow: hidden;
@@ -1334,10 +1343,21 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 display: none;
             }
             .keria-hero-banner {
+                /* margin, not padding -- see the desktop rule above for
+                   why. 170px errs generous since the header's height
+                   isn't a fixed 72px below 840px (it can wrap to two
+                   lines). */
+                margin-top: 170px;
                 padding: 20px 16px;
             }
             .keria-main-container {
                 padding: 16px 14px;
+                /* style.css also forces main{margin-top:170px!important}
+                   at this breakpoint, assuming main sits directly under
+                   the fixed header. Here the hero banner above already
+                   provides that clearance, so without this override the
+                   two stack and leave a large empty gap. */
+                margin-top: 0 !important;
             }
 
             /* The search bar (job title + location + submit) stays a
@@ -1676,7 +1696,11 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
     <header>
         <div class="header-inner">
             <div style="display:flex; align-items:center; gap:10px;">
-                <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
+                <div class="logo-box">
+                    <a href="index.php" style="display:flex; align-items:center;">
+                        <img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;">
+                    </a>
+                </div>
             </div>
 
             <nav style="display:flex; gap:4px; margin-left:24px">
@@ -2538,7 +2562,13 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 initialJobId = jobsData[0].id;
             }
 
-            if (initialJobId) {
+            // selectJob() opens a full-screen modal at this same width,
+            // so auto-firing it on load (meant to pre-fill the desktop
+            // split-pane preview) would pop that modal open unrequested
+            // on every mobile load/refresh. Only auto-select on wide
+            // screens; a tap on a job card still calls selectJob()
+            // directly and opens the modal as expected on mobile.
+            if (initialJobId && window.innerWidth > 1080) {
                 selectJob(initialJobId);
             }
         });

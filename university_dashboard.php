@@ -400,6 +400,19 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
         .uni-main-area { margin-left: 0; }
         .uni-topbar { padding: 16px 18px; }
     }
+
+    /* This page uses its own .uni-topbar, which sits in normal document
+       flow -- not the shared site <header>, which is position:fixed and
+       needs content pushed down to clear it. Without this, style.css's
+       generic main{margin:112px auto 40px} (desktop) and its mobile
+       main{margin-top:170px!important} (<=840px) -- both written for
+       that fixed header -- still apply here too, since <main> above is
+       a bare tag with nothing of its own to override them. That left a
+       large dead gap under a topbar that was never covering anything,
+       at every width, not just mobile. */
+    main {
+        margin-top: 24px !important;
+    }
 </style>
 </head>
 <body>
@@ -417,7 +430,7 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
 
         <div class="uni-menu-label">MENU</div>
 
-        <div class="uni-menu-group open">
+        <div class="uni-menu-group" id="uniMenuGroupActivity">
             <button type="button" class="uni-menu-parent active" onclick="toggleUniMenu(this)">
                 <span class="uni-menu-parent-left"><span>🎓</span> Student Activity</span>
                 <span class="uni-menu-chevron">&#9662;</span>
@@ -428,7 +441,7 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
             </div>
         </div>
 
-        <div class="uni-menu-group open">
+        <div class="uni-menu-group" id="uniMenuGroupSettings">
             <button type="button" class="uni-menu-parent" onclick="toggleUniMenu(this)">
                 <span class="uni-menu-parent-left">
                     <span>⚙️</span> Settings
@@ -738,6 +751,18 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
     function toggleUniMenu(btn) {
         var group = btn.closest('.uni-menu-group');
         if (group) group.classList.toggle('open');
+    }
+
+    // Sidebar menu groups start collapsed in the markup (no "open" class)
+    // so mobile -- where .uni-sidebar stacks in normal flow instead of
+    // being a fixed column -- doesn't load with both groups' full link
+    // lists already expanded above the actual page content. On desktop,
+    // where there's room for a permanent sidebar, open them by default
+    // same as before; this matches the 900px breakpoint where
+    // .uni-sidebar itself switches from fixed to static.
+    if (window.innerWidth > 900) {
+        document.getElementById('uniMenuGroupActivity').classList.add('open');
+        document.getElementById('uniMenuGroupSettings').classList.add('open');
     }
 
     function filterRoster() {

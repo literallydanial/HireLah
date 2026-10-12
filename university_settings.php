@@ -489,6 +489,38 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
             .uni-main-area { margin-left: 0; }
             .uni-topbar { padding: 16px 18px; }
         }
+
+        @media (max-width: 840px) {
+            /* This page uses its own .uni-topbar, which sits in normal
+               document flow -- not the shared site <header>, which is
+               position:fixed and needs content pushed down to clear it.
+               Without this, style.css's generic main{margin-top:170px
+               !important} (written for that fixed header) still applies
+               here too, since it's a bare tag selector -- it even beats
+               this page's own inline margin:24px on <main> below, since
+               !important always wins over a non-important inline style.
+               Left a large dead gap under a topbar that was never
+               covering anything. */
+            main {
+                margin-top: 16px !important;
+            }
+        }
+
+        /* This field reuses resume_builder.php's "rb-input" markup
+           pattern, but that class is only ever defined locally on that
+           page -- it doesn't exist here or in style.css, so without
+           this the input rendered with no width/padding/border at all
+           and shrank to almost nothing next to the Copy Link button. */
+        #studentLinkInput {
+            flex: 1;
+            min-width: 0;
+            width: 100%;
+            background: #FAFAFA;
+            border: 1px solid #E5E7EB;
+            border-radius: 10px;
+            padding: 10px 14px;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
@@ -827,7 +859,7 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
                             </label>
                             <div style="display:flex; gap:8px; margin-bottom:12px;">
                                 <input type="text" id="studentLinkInput" class="rb-input" value="<?= htmlspecialchars($student_signup_url) ?>" readonly style="font-family:monospace; font-size:12px;">
-                                <button type="button" class="btn-primary" onclick="copyStudentLink()" style="padding:8px 18px; font-size:12px; flex-shrink:0;">
+                                <button type="button" class="btn-primary" onclick="copyStudentLink()" style="width:auto; padding:8px 18px; font-size:12px; flex-shrink:0; white-space:nowrap;">
                                     <span id="copyBtnText">📋 Copy Link</span>
                                 </button>
                             </div>

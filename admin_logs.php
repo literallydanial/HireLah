@@ -109,12 +109,18 @@ $actions_list = $pdo->query("SELECT DISTINCT action FROM admin_logs ORDER BY act
             max-width: 100% !important;
             width: 100% !important;
             padding: 24px 36px 40px !important;
-            margin: 0 auto !important;
+            /* 72px = the shared header's fixed desktop height, now that
+               it's position:fixed instead of sticky (see style.css) --
+               without this, content would start underneath it. */
+            margin: 72px auto 0 !important;
             box-sizing: border-box !important;
         }
         @media (max-width: 1024px) {
             .header-inner { padding: 0 16px !important; }
-            main { padding: 16px 16px 32px !important; }
+            /* 170px: the header's height stops being a fixed 72px below
+               840px (its content can wrap to two lines), so this errs
+               generous rather than risk content hidden underneath it. */
+            main { padding: 16px 16px 32px !important; margin-top: 170px !important; }
         }
     </style>
 </head>

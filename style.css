@@ -164,13 +164,22 @@ header {
   background: var(--surf);
   border-bottom: 1px solid var(--bdr);
   padding: 0 24px;
-  position: sticky;
+  /* position:fixed, not sticky: on every page using this shared header,
+     body's overflow-x rule forces its overflow-y to compute as non-
+     visible too, which silently breaks position:sticky for any
+     descendant (confirmed first on index.php's own navbar). fixed
+     isn't affected by ancestor overflow at all. Since fixed removes
+     the header from normal flow, main's top margin (below) is bumped
+     to match its height so page content doesn't start underneath it. */
+  position: fixed;
   top: 0;
+  left: 0;
   z-index: 100;
   backdrop-filter: blur(18px) saturate(180%);
   -webkit-backdrop-filter: blur(18px) saturate(180%);
   box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.05);
   width: 100%;
+  box-sizing: border-box;
 }
 
 .header-inner {
@@ -241,7 +250,11 @@ nav a.active {
 
 main {
   max-width: 1360px;
-  margin: 40px auto;
+  /* top margin bumped from 40px to 112px (40px original spacing + 72px,
+     the shared header's fixed desktop height, .header-inner's own
+     height:72px) -- now that header is position:fixed and out of
+     normal flow, content needs this to not start underneath it. */
+  margin: 112px auto 40px;
   padding: 0 24px;
   animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
@@ -490,9 +503,10 @@ input:focus, select:focus, textarea:focus {
 
 @media (max-width: 840px) {
   header {
-    padding: 8px 12px !important;
-    position: sticky;
+    padding: 4px 12px !important;
+    position: fixed;
     top: 0;
+    left: 0;
     width: 100% !important;
     box-sizing: border-box !important;
   }
@@ -502,11 +516,20 @@ input:focus, select:focus, textarea:focus {
     flex-wrap: wrap !important;
     align-items: center !important;
     justify-content: space-between !important;
-    padding: 4px 0 !important;
-    gap: 8px !important;
+    padding: 0 !important;
+    gap: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
+  }
+  /* At this width the header's own height stops being a fixed 72px and
+     becomes auto/wrapping instead (its nav row can drop to a second
+     line), so this number is a generous estimate rather than an exact
+     match -- deliberately erring a little tall (small gap) rather than
+     a little short (content hidden under the header). May need a small
+     per-page nudge after a real visual check. */
+  main {
+    margin-top: 170px !important;
   }
   /* :not(.keria-nav-center) excludes the Keria homepage's own custom
      hero navbar, which ships its own complete mobile treatment (a
@@ -522,7 +545,7 @@ input:focus, select:focus, textarea:focus {
     margin-left: 0 !important;
     overflow-x: auto !important;
     white-space: nowrap !important;
-    padding: 8px 4px 4px 4px !important;
+    padding: 2px 4px 2px 4px !important;
     -webkit-overflow-scrolling: touch !important;
     width: 100% !important;
     max-width: 100% !important;
