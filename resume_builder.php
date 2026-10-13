@@ -220,7 +220,7 @@ try {
         .keria-hero-banner {
             position: relative;
             width: 100%;
-            background-image: url('assets/Keria_banner.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner.jpg'); ?>');
+            background-image: url('assets/Keria_banner_v2.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner_v2.jpg'); ?>');
             background-size: cover;
             background-position: center top;
             background-repeat: no-repeat;
@@ -322,7 +322,14 @@ try {
             justify-content: center;
             text-align: center;
             position: relative;
-            margin-right: 40px;
+            /* Pushed well left of its old 40px, which sat right on top
+               of the mascots with the new banner photo -- they sit much
+               further right in this image than the old illustration
+               did, and the box's own height matches its text (no extra
+               room inside it), so nothing short of actually moving the
+               whole box clears them. This lands it over the open lake/
+               sky area instead, left of the mascots entirely. */
+            margin-right: 600px;
             user-select: none;
         }
 

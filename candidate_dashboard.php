@@ -181,7 +181,7 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
         .keria-hero-banner {
             position: relative;
             width: 100%;
-            background-image: url('assets/Keria_banner.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner.jpg'); ?>');
+            background-image: url('assets/Keria_banner_v2.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner_v2.jpg'); ?>');
             background-size: cover;
             background-position: center center;
             background-repeat: no-repeat;

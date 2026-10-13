@@ -254,7 +254,7 @@ function score_badge_class($score) {
         .keria-hero-banner {
             position: relative;
             width: 100%;
-            background-image: url('assets/Keria_banner.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner.jpg'); ?>');
+            background-image: url('assets/Keria_banner_v2.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner_v2.jpg'); ?>');
             background-size: cover;
             background-position: center top;
             background-repeat: no-repeat;
@@ -356,7 +356,14 @@ function score_badge_class($score) {
             justify-content: center;
             text-align: center;
             position: relative;
-            margin-right: 40px;
+            /* Pushed well left of its old 40px, which sat right on top
+               of the mascots with the new banner photo -- they sit much
+               further right in this image than the old illustration
+               did, and the box's own height matches its text (no extra
+               room inside it), so nothing short of actually moving the
+               whole box clears them. This lands it over the open lake/
+               sky area instead, left of the mascots entirely. */
+            margin-right: 600px;
             user-select: none;
         }
 
@@ -440,7 +447,7 @@ function score_badge_class($score) {
 
         .explainer-desc {
             font-size: 13.5px;
-            color: #4B5563;
+            color: var(--mut);
             line-height: 1.55;
             margin: 14px 0 26px;
         }
@@ -495,13 +502,13 @@ function score_badge_class($score) {
         .step-heading {
             font-size: 14px;
             font-weight: 800;
-            color: #0A0A0A;
+            color: var(--txt);
             margin-bottom: 2px;
         }
 
         .step-caption {
             font-size: 12px;
-            color: #6B7280;
+            color: var(--mut);
         }
 
         .step-line {
@@ -548,13 +555,13 @@ function score_badge_class($score) {
         .dropzone-heading {
             font-size: 17px;
             font-weight: 800;
-            color: #0A0A0A;
+            color: var(--txt);
             margin-bottom: 6px;
         }
 
         .dropzone-note {
             font-size: 12.5px;
-            color: #6B7280;
+            color: var(--mut);
             margin-bottom: 20px;
         }
 
@@ -715,7 +722,7 @@ function score_badge_class($score) {
         .recent-filename {
             font-size: 13.5px;
             font-weight: 700;
-            color: #0A0A0A;
+            color: var(--txt);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -730,7 +737,7 @@ function score_badge_class($score) {
 
         .recent-date {
             font-size: 12px;
-            color: #6B7280;
+            color: var(--mut);
             display: flex;
             align-items: center;
             gap: 5px;
@@ -971,10 +978,10 @@ function score_badge_class($score) {
                                 <?= (int)($result['overall_score'] ?? 0) ?>
                             </div>
                             <div>
-                                <div style="font-size:11.5px; color:#6B7280; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">
+                                <div style="font-size:11.5px; color:var(--mut); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px;">
                                     Resume Score &middot; <?= htmlspecialchars($uploaded_filename ?? 'Resume.pdf') ?>
                                 </div>
-                                <div style="font-size:22px; font-weight:900; color:#0A0A0A;">
+                                <div style="font-size:22px; font-weight:900; color:var(--txt);">
                                     <?= htmlspecialchars($result['rating_label'] ?? 'Reviewed') ?>
                                 </div>
                             </div>
@@ -986,7 +993,7 @@ function score_badge_class($score) {
                         </div>
                     </div>
 
-                    <div style="font-size:14px; color:#374151; line-height:1.65;">
+                    <div style="font-size:14px; color:var(--mut); line-height:1.65;">
                         <?= nl2br(htmlspecialchars($summary_teaser)) ?>
                         <?php if ($summary_rest !== ''): ?>
                             <span style="filter:blur(4px); user-select:none;"><?= nl2br(htmlspecialchars($summary_rest)) ?></span>
@@ -1001,13 +1008,13 @@ function score_badge_class($score) {
                             <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
                                 <div class="keria-card">
                                     <div style="font-weight:800; color:#15803D; margin-bottom:12px;">✅ Strengths</div>
-                                    <div style="font-size:13px; color:#374151; margin-bottom:6px;">&bull; Clear, relevant work history</div>
-                                    <div style="font-size:13px; color:#374151; margin-bottom:6px;">&bull; Good use of measurable results</div>
+                                    <div style="font-size:13px; color:var(--mut); margin-bottom:6px;">&bull; Clear, relevant work history</div>
+                                    <div style="font-size:13px; color:var(--mut); margin-bottom:6px;">&bull; Good use of measurable results</div>
                                 </div>
                                 <div class="keria-card">
                                     <div style="font-weight:800; color:#D97706; margin-bottom:12px;">🛠️ Areas to Improve</div>
-                                    <div style="font-size:13px; color:#374151; margin-bottom:6px;">&bull; Tighten the summary section</div>
-                                    <div style="font-size:13px; color:#374151; margin-bottom:6px;">&bull; Fix formatting inconsistencies</div>
+                                    <div style="font-size:13px; color:var(--mut); margin-bottom:6px;">&bull; Tighten the summary section</div>
+                                    <div style="font-size:13px; color:var(--mut); margin-bottom:6px;">&bull; Fix formatting inconsistencies</div>
                                 </div>
                             </div>
                         </div>
@@ -1015,8 +1022,8 @@ function score_badge_class($score) {
                         <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:20px;">
                             <div class="keria-card" style="max-width:440px; width:100%; text-align:center; box-shadow:0 18px 44px rgba(0,0,0,0.18); border-color:#D1D5DB;">
                                 <div style="font-size:36px; margin-bottom:8px;">🔒</div>
-                                <div style="font-size:18px; font-weight:800; color:#0A0A0A; margin-bottom:6px;">Unlock Your Full Resume Report</div>
-                                <div style="font-size:13px; color:#64748B; margin-bottom:20px; line-height:1.5;">
+                                <div style="font-size:18px; font-weight:800; color:var(--txt); margin-bottom:6px;">Unlock Your Full Resume Report</div>
+                                <div style="font-size:13px; color:var(--mut); margin-bottom:20px; line-height:1.5;">
                                     Log in or create a free account to view your full strengths, areas to improve, formatting breakdown, and ATS compatibility tips.
                                 </div>
                                 <a href="register.php" class="btn-primary-action" style="margin-bottom:10px;">Create Free Account &rarr;</a>
@@ -1033,12 +1040,12 @@ function score_badge_class($score) {
                             </div>
                             <?php if(!empty($result['strengths'])): ?>
                                 <?php foreach($result['strengths'] as $s): ?>
-                                    <div style="font-size:13px; color:#374151; margin-bottom:10px; padding-left:18px; position:relative; line-height:1.55;">
+                                    <div style="font-size:13px; color:var(--mut); margin-bottom:10px; padding-left:18px; position:relative; line-height:1.55;">
                                         <span style="position:absolute; left:0; color:#16A34A; font-weight:bold;">&bull;</span><?= htmlspecialchars($s) ?>
                                     </div>
                                 <?php endforeach; ?>
                             <?php else: ?>
-                                <div style="font-size:13px; color:#6B7280;">No specific strengths identified.</div>
+                                <div style="font-size:13px; color:var(--mut);">No specific strengths identified.</div>
                             <?php endif; ?>
                         </div>
 
@@ -1048,22 +1055,22 @@ function score_badge_class($score) {
                             </div>
                             <?php if(!empty($result['improvements'])): ?>
                                 <?php foreach($result['improvements'] as $s): ?>
-                                    <div style="font-size:13px; color:#374151; margin-bottom:10px; padding-left:18px; position:relative; line-height:1.55;">
+                                    <div style="font-size:13px; color:var(--mut); margin-bottom:10px; padding-left:18px; position:relative; line-height:1.55;">
                                         <span style="position:absolute; left:0; color:#F59E0B; font-weight:bold;">&bull;</span><?= htmlspecialchars($s) ?>
                                     </div>
                                 <?php endforeach; ?>
                             <?php else: ?>
-                                <div style="font-size:13px; color:#6B7280;">No improvement suggestions noted.</div>
+                                <div style="font-size:13px; color:var(--mut);">No improvement suggestions noted.</div>
                             <?php endif; ?>
                         </div>
                     </div>
 
                     <?php if(!empty($result['formatting_notes'])): ?>
                         <div class="keria-card" style="margin-bottom:22px;">
-                            <div style="font-size:14.5px; font-weight:800; color:#0A0A0A; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                            <div style="font-size:14.5px; font-weight:800; color:var(--txt); margin-bottom:10px; display:flex; align-items:center; gap:8px;">
                                 <span>📐</span> Formatting &amp; Layout Notes
                             </div>
-                            <div style="font-size:13px; color:#374151; line-height:1.65;"><?= htmlspecialchars($result['formatting_notes']) ?></div>
+                            <div style="font-size:13px; color:var(--mut); line-height:1.65;"><?= htmlspecialchars($result['formatting_notes']) ?></div>
                         </div>
                     <?php endif; ?>
 
@@ -1242,7 +1249,7 @@ function score_badge_class($score) {
                                                 <?= $score ?>
                                             </div>
 
-                                            <div style="color:#9CA3AF; font-size:16px; font-weight:700;">&rsaquo;</div>
+                                            <div style="color:var(--mut); font-size:16px; font-weight:700;">&rsaquo;</div>
                                         </div>
                                     </a>
                                 <?php endforeach; ?>

@@ -619,7 +619,7 @@ if ($user['role'] === 'candidate') {
         .keria-hero-banner {
             position: relative;
             width: 100%;
-            background-image: url('assets/Keria_banner.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner.jpg'); ?>');
+            background-image: url('assets/Keria_banner_v2.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner_v2.jpg'); ?>');
             background-size: cover;
             background-position: center top;
             background-repeat: no-repeat;
@@ -712,7 +712,14 @@ if ($user['role'] === 'candidate') {
             justify-content: center;
             text-align: center;
             position: relative;
-            margin-right: 40px;
+            /* Pushed well left of its old 40px, which sat right on top
+               of the mascots with the new banner photo -- they sit much
+               further right in this image than the old illustration
+               did, and the box's own height matches its text (no extra
+               room inside it), so nothing short of actually moving the
+               whole box clears them. This lands it over the open lake/
+               sky area instead, left of the mascots entirely. */
+            margin-right: 600px;
             user-select: none;
         }
 
@@ -1012,7 +1019,7 @@ if ($user['role'] === 'candidate') {
         .panel-title {
             font-size: 16.5px;
             font-weight: 800;
-            color: #0A0A0A;
+            color: var(--txt);
             letter-spacing: -0.3px;
             margin-bottom: 16px;
             display: flex;
@@ -1060,6 +1067,57 @@ if ($user['role'] === 'candidate') {
             .settings-grid .panel {
                 padding: 20px 18px !important;
             }
+        }
+
+        /* Dark mode cohesion -- this page had no dark-mode rules at all,
+           so its cards/inputs were hardcoded white and stayed that way
+           regardless of theme. Matches the palette already used on
+           resume_check.php etc. (#18191C body, #26272C card, #383940
+           border, #F9FAFB text) so it's consistent across pages. */
+        [data-theme="dark"] body {
+            background: #18191C !important;
+            color: #F9FAFB;
+        }
+        [data-theme="dark"] .keria-card,
+        [data-theme="dark"] .panel,
+        [data-theme="dark"] .profile-overview-card {
+            background: #26272C !important;
+            border-color: #383940 !important;
+        }
+        [data-theme="dark"] .profile-name-text {
+            color: #F9FAFB;
+        }
+        [data-theme="dark"] .profile-email-text,
+        [data-theme="dark"] .settings-grid label {
+            color: #A5ACB8;
+        }
+        [data-theme="dark"] .profile-pic {
+            background: #1F2024;
+            border-color: #383940;
+        }
+        [data-theme="dark"] .avatar-cam-btn {
+            border-color: #26272C;
+        }
+        [data-theme="dark"] .settings-grid input[type="text"],
+        [data-theme="dark"] .settings-grid input[type="email"],
+        [data-theme="dark"] .settings-grid input[type="password"],
+        [data-theme="dark"] .settings-grid input[type="number"],
+        [data-theme="dark"] .settings-grid input[type="url"],
+        [data-theme="dark"] .settings-grid select,
+        [data-theme="dark"] .settings-grid textarea {
+            background: #1F2024;
+            border-color: #383940;
+            color: #F9FAFB;
+        }
+        [data-theme="dark"] .settings-grid input:focus,
+        [data-theme="dark"] .settings-grid select:focus,
+        [data-theme="dark"] .settings-grid textarea:focus {
+            border-color: #D2FF3A;
+        }
+        [data-theme="dark"] .btn-secondary {
+            background: #26272C !important;
+            color: #F9FAFB !important;
+            border-color: #383940 !important;
         }
     </style>
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=<?php echo @filemtime(__DIR__.'/favicon-32x32.png'); ?>">
@@ -1216,7 +1274,7 @@ if ($user['role'] === 'candidate') {
                         <span>✉️ <?= htmlspecialchars($user['email']) ?></span>
                         <?php if(!empty($active_company['name'])): ?>
                             <span style="color:#D1D5DB;">&bull;</span>
-                            <span style="color:#374151; font-weight:600;">🏢 <?= htmlspecialchars($active_company['name']) ?></span>
+                            <span style="color:var(--mut); font-weight:600;">🏢 <?= htmlspecialchars($active_company['name']) ?></span>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1224,7 +1282,7 @@ if ($user['role'] === 'candidate') {
 
             <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
                 <div style="text-align:right;">
-                    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.8px; color:#6B7280; font-weight:700; margin-bottom:4px;">Account Status</div>
+                    <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.8px; color:var(--mut); font-weight:700; margin-bottom:4px;">Account Status</div>
                     <div class="status-badge-verified">
                         <span class="status-pulse-dot"></span> Active &amp; Verified
                     </div>

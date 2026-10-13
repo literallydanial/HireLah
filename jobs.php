@@ -13,6 +13,7 @@ $filter_mode = trim($_GET['mode'] ?? '');
 $filter_location = trim($_GET['location'] ?? '');
 $filter_min_salary = !empty($_GET['min_salary']) ? (int)$_GET['min_salary'] : null;
 $filter_max_salary = !empty($_GET['max_salary']) ? (int)$_GET['max_salary'] : null;
+$filter_saved = (($_GET['saved'] ?? '') === '1');
 $sort_by = trim($_GET['sort'] ?? 'newest');
 
 $sql = "SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name, u.company_logo 
@@ -50,6 +51,14 @@ if ($filter_min_salary !== null) {
 if ($filter_max_salary !== null) {
     $sql .= " AND (COALESCE(j.salary_min, j.salary_max) <= ?)";
     $params[] = $filter_max_salary;
+}
+if ($filter_saved) {
+    if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate') {
+        $sql .= " AND EXISTS (SELECT 1 FROM saved_jobs sv WHERE sv.job_id = j.id AND sv.user_id = ?)";
+        $params[] = $_SESSION['user_id'];
+    } else {
+        $sql .= " AND 1=0";
+    }
 }
 
 if ($sort_by === 'salary_high') {
@@ -244,6 +253,19 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         $candidate_scores = [];
     }
 }
+
+// Fetch the set of job IDs the logged-in candidate has saved, tied to
+// their account (not the old localStorage-only version of this feature).
+$saved_job_ids = [];
+if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate') {
+    try {
+        $saved_stmt = $pdo->prepare("SELECT job_id FROM saved_jobs WHERE user_id = ?");
+        $saved_stmt->execute([$_SESSION['user_id']]);
+        $saved_job_ids = array_map('intval', array_column($saved_stmt->fetchAll(PDO::FETCH_ASSOC), 'job_id'));
+    } catch (\Throwable $e) {
+        $saved_job_ids = [];
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -314,7 +336,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         .keria-hero-banner {
             position: relative;
             width: 100%;
-            background-image: url('assets/Keria_banner.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner.jpg'); ?>');
+            background-image: url('assets/Keria_banner_v2.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner_v2.jpg'); ?>');
             background-size: cover;
             background-position: center top;
             background-repeat: no-repeat;
@@ -1799,7 +1821,8 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             <!-- Floating Search and Filters Card -->
             <div class="banner-search-wrapper">
                 <form method="GET" class="banner-search-card" id="jobsSearchForm">
-                    
+                    <input type="hidden" name="saved" value="<?= $filter_saved ? '1' : '' ?>">
+
                     <!-- Search Inputs Row -->
                     <div class="search-inputs-row">
                         <div class="search-input-col">
@@ -1879,9 +1902,14 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
 
                     <!-- Quick Filter Chips Row -->
                     <div class="quick-filter-pills-row">
-                        <button type="button" onclick="applyQuickPill('reset', '')" class="quick-pill-btn <?= (!$filter_mode && !$filter_type && !$search && !$filter_location && !$filter_min_salary) ? 'active' : '' ?>">
+                        <button type="button" onclick="applyQuickPill('reset', '')" class="quick-pill-btn <?= (!$filter_mode && !$filter_type && !$search && !$filter_location && !$filter_min_salary && !$filter_saved) ? 'active' : '' ?>">
                             All Positions
                         </button>
+                        <?php if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate'): ?>
+                        <button type="button" onclick="applyQuickPill('saved', '1')" class="quick-pill-btn <?= $filter_saved ? 'active' : '' ?>">
+                            🔖 Saved Jobs
+                        </button>
+                        <?php endif; ?>
                         <button type="button" onclick="applyQuickPill('mode', 'Remote')" class="quick-pill-btn <?= $filter_mode === 'Remote' ? 'active' : '' ?>">
                             ⚡ Remote Only
                         </button>
@@ -1902,15 +1930,12 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 </form>
             </div>
 
-            <!-- Right Banner Doodle Area over Mascots -->
-            <div class="banner-right-doodle-box">
-                <div class="banner-doodle-text">
-                    good<br>jobs<br>await! ☺
-                    <svg class="banner-doodle-sparks" viewBox="0 0 30 30">
-                        <path d="M6 14 L2 14 M8 8 L4 4 M14 6 L14 2 M20 8 L24 4 M22 14 L26 14" stroke="#0A0A0A" stroke-width="2.5" stroke-linecap="round"/>
-                    </svg>
-                </div>
-            </div>
+            <!-- Empty spacer reserving room for the mascots on the right.
+                 Removing this div outright (instead of just its text)
+                 let .banner-search-wrapper's flex:1 grow into the space
+                 this used to reserve, so the search card expanded right
+                 over the mascots instead of stopping short of them. -->
+            <div class="banner-right-doodle-box"></div>
 
         </div>
     </section>
@@ -2096,7 +2121,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         const appliedJobIds = <?= json_encode($applied_job_ids, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
         const userRole = <?= json_encode($_SESSION['user_role'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 
-        let savedJobIds = JSON.parse(localStorage.getItem('keria_saved_jobs') || '[]');
+        let savedJobIds = <?= json_encode($saved_job_ids, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
 
         function showKeriaToast(msg) {
             const existing = document.querySelector('.keria-toast');
@@ -2116,27 +2141,48 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
 
         function toggleSaveJob(jobId) {
             jobId = parseInt(jobId);
+
+            if (userRole !== 'candidate') {
+                showKeriaToast('Please log in as a candidate to save jobs.');
+                return;
+            }
+
             const isSavedNow = savedJobIds.includes(jobId);
-            if (isSavedNow) {
-                savedJobIds = savedJobIds.filter(id => id !== jobId);
-                showKeriaToast('Job removed from saved bookmarks');
-            } else {
-                savedJobIds.push(jobId);
-                showKeriaToast('Job saved to your bookmarks!');
-            }
-            localStorage.setItem('keria_saved_jobs', JSON.stringify(savedJobIds));
+            const action = isSavedNow ? 'unsave' : 'save';
 
-            const saveBtn = document.getElementById('saveBtn_' + jobId);
-            if (saveBtn) {
-                const isSaved = savedJobIds.includes(jobId);
-                saveBtn.classList.toggle('is-saved', isSaved);
-                saveBtn.innerHTML = isSaved ? '✓ Saved' : '🔖 Save Job';
-            }
+            fetch('save_job.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_id: jobId, action: action })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    showKeriaToast('Could not save job, please try again.');
+                    return;
+                }
 
-            const headerSaveIcon = document.getElementById('headerSaveIcon_' + jobId);
-            if (headerSaveIcon) {
-                headerSaveIcon.classList.toggle('is-saved', savedJobIds.includes(jobId));
-            }
+                if (isSavedNow) {
+                    savedJobIds = savedJobIds.filter(id => id !== jobId);
+                    showKeriaToast('Job removed from Saved Jobs');
+                } else {
+                    savedJobIds.push(jobId);
+                    showKeriaToast('Job saved! Find it anytime under the Saved Jobs filter.');
+                }
+
+                const saveBtn = document.getElementById('saveBtn_' + jobId);
+                if (saveBtn) {
+                    const isSaved = savedJobIds.includes(jobId);
+                    saveBtn.classList.toggle('is-saved', isSaved);
+                    saveBtn.innerHTML = isSaved ? '✓ Saved' : '🔖 Save Job';
+                }
+
+                const headerSaveIcon = document.getElementById('headerSaveIcon_' + jobId);
+                if (headerSaveIcon) {
+                    headerSaveIcon.classList.toggle('is-saved', savedJobIds.includes(jobId));
+                }
+            })
+            .catch(() => showKeriaToast('Could not save job, please try again.'));
         }
 
         function shareJob(jobId, jobTitle) {
@@ -2477,8 +2523,10 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             if (name === 'reset') {
                 const s = form.querySelector('input[name="search"]');
                 const l = form.querySelector('input[name="location"]');
+                const sv = form.querySelector('input[name="saved"]');
                 if (s) s.value = '';
                 if (l) l.value = '';
+                if (sv) sv.value = '';
                 form.querySelectorAll('select').forEach(sel => sel.selectedIndex = 0);
                 form.submit();
                 return;

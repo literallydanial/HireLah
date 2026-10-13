@@ -42,6 +42,21 @@ try {
         }
     }
 
+    // Auto-verify saved_jobs schema availability (self-healing migration on deploy)
+    try {
+        $pdo->query("SELECT 1 FROM saved_jobs LIMIT 1");
+    } catch (\Throwable $e) {
+        $sql_file = __DIR__ . '/database/saved_jobs.sql';
+        if (file_exists($sql_file)) {
+            try {
+                $sql = file_get_contents($sql_file);
+                $pdo->exec($sql);
+            } catch (\Throwable $migErr) {
+                error_log("Saved jobs auto-migration notice: " . $migErr->getMessage());
+            }
+        }
+    }
+
     // Auto-verify ssm_number columns availability (fail-safe on any schema state)
     try {
         $pdo->query("SELECT ssm_number FROM users LIMIT 1");
