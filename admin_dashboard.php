@@ -445,12 +445,13 @@ $key_check = check_api_key_status($configured_api_key, $_SESSION['ai_model'] ?? 
 $gemini_latency_ms = round((microtime(true) - $gemini_start_time) * 1000, 2);
 
 $key_status_map = [
-    'active'          => ['label' => 'API Key Active',         'color' => '#00E87A'],
-    'not_configured'  => ['label' => 'Not Configured',         'color' => '#9CA3AF'],
-    'invalid_key'      => ['label' => 'Invalid API Key',        'color' => '#FF4D6A'],
-    'model_not_found' => ['label' => 'Model Not Available',    'color' => '#F59E0B'],
-    'unreachable'     => ['label' => 'Unreachable',             'color' => '#FF4D6A'],
-    'error'           => ['label' => 'Error',                   'color' => '#FF4D6A'],
+    'active'          => ['label' => 'API Key Active',            'color' => '#00E87A'],
+    'busy'            => ['label' => 'High Demand (Retrying)',    'color' => '#F59E0B'],
+    'not_configured'  => ['label' => 'Not Configured',            'color' => '#9CA3AF'],
+    'invalid_key'      => ['label' => 'Invalid API Key',           'color' => '#FF4D6A'],
+    'model_not_found' => ['label' => 'Model Not Available',       'color' => '#F59E0B'],
+    'unreachable'     => ['label' => 'Unreachable',                'color' => '#FF4D6A'],
+    'error'           => ['label' => 'Error',                      'color' => '#FF4D6A'],
 ];
 $gemini_status = $key_status_map[$key_check['status']]['label'] ?? 'Unknown';
 $gemini_status_color = $key_status_map[$key_check['status']]['color'] ?? '#9CA3AF';

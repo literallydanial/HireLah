@@ -146,6 +146,9 @@ function check_api_key_status($api_key, $model = 'gemini-3.6-flash') {
         }
         return ['status' => 'invalid_key', 'message' => $err_msg];
     }
+    if ($http_code === 503 || stripos($err_msg, 'high demand') !== false || stripos($err_msg, 'spikes in demand') !== false) {
+        return ['status' => 'busy', 'message' => "Google Gemini is experiencing high global traffic (HTTP 503). Retrying automatically & local fallbacks active."];
+    }
     if ($http_code === 404) {
         return ['status' => 'model_not_found', 'message' => "Model '{$model}' not available: " . $err_msg];
     }
