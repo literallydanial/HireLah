@@ -441,7 +441,7 @@ $gemini_key_configured = !empty($env_api_key) || true; // Built-in Gemini engine
 // Gemini API Key Health Check (tests the configured key/model against live Gemini API)
 $configured_api_key = get_api_key();
 $gemini_start_time = microtime(true);
-$key_check = check_api_key_status($configured_api_key, $_SESSION['ai_model'] ?? 'gemini-3.7-flash');
+$key_check = check_api_key_status($configured_api_key, $_SESSION['ai_model'] ?? 'gemini-3.6-flash');
 $gemini_latency_ms = round((microtime(true) - $gemini_start_time) * 1000, 2);
 
 $key_status_map = [
@@ -923,7 +923,7 @@ $jobs_list = $pdo->query("
                         <span style="font-size:22px;">🤖</span>
                         <div>
                             <div style="font-size:16px; font-weight:800; color:var(--txt);">Google Gemini AI Engine</div>
-                            <div style="font-size:11px; color:var(--mut);">Model: <?= htmlspecialchars($_SESSION['ai_model'] ?? 'gemini-3.7-flash') ?></div>
+                            <div style="font-size:11px; color:var(--mut);">Model: <?= htmlspecialchars($_SESSION['ai_model'] ?? 'gemini-3.6-flash') ?></div>
                         </div>
                     </div>
                     <span class="badge-pill" style="background:linear-gradient(135deg, <?= $gemini_status_color ?>, <?= $gemini_status_color ?>CC); color:#fff; border:none; box-shadow:0 4px 12px <?= $gemini_status_color ?>40;">

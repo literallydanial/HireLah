@@ -45,12 +45,17 @@ function load_app_config() {
         if ($raw) {
             $json_arr = @json_decode($raw, true);
             if (is_array($json_arr)) {
-                $config = array_merge($json_arr, $config);
+                $filtered_json = array_filter($json_arr, function($v) { return $v !== null && $v !== ''; });
+                $config = array_merge($config, $filtered_json);
                 save_app_config($config);
             }
         }
         // Immediately delete config.json to eliminate web vulnerability
         @unlink($json_file);
+    }
+
+    if (empty($config['ai_model'])) {
+        $config['ai_model'] = 'gemini-3.6-flash';
     }
 
     return $config;

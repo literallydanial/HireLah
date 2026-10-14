@@ -6,7 +6,7 @@ function get_api_key() {
     $config = load_app_config();
     if (!empty($config['api_key'])) {
         $_SESSION['api_key'] = $config['api_key'];
-        $_SESSION['ai_model'] = $config['ai_model'] ?? ($_SESSION['ai_model'] ?? 'gemini-3.7-flash');
+        $_SESSION['ai_model'] = $config['ai_model'] ?? ($_SESSION['ai_model'] ?? 'gemini-3.6-flash');
         return $config['api_key'];
     }
     return $_SESSION['api_key'] ?? null;
@@ -28,9 +28,9 @@ function call_gemini_api($api_key, $prompt) {
     $models_to_try = array_unique([
         $selected_model,
         'gemini-3.6-flash',
-        'gemini-3.5-flash',
-        'gemini-flash-latest',
-        'gemini-3.7-flash'
+        'gemini-3.8-flash',
+        'gemini-3.7-flash',
+        'gemini-flash-latest'
     ]);
 
     $last_error = null;
@@ -101,7 +101,7 @@ function call_gemini_api($api_key, $prompt) {
  * Actually tests the configured Gemini API key/model against the live API
  * @return array ['status' => 'active'|'not_configured'|'invalid_key'|'model_not_found'|'unreachable'|'error', 'message' => string]
  */
-function check_api_key_status($api_key, $model = 'gemini-3.7-flash') {
+function check_api_key_status($api_key, $model = 'gemini-3.6-flash') {
     if (empty($api_key)) {
         return ['status' => 'not_configured', 'message' => 'No Gemini API key has been configured yet.'];
     }

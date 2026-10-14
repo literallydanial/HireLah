@@ -47,10 +47,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div style="margin-bottom:20px;">
                 <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Select Gemini Model</label>
                 <select name="ai_model">
-                    <option value="gemini-3.7-flash" <?= ($_SESSION['ai_model'] ?? 'gemini-3.7-flash') === 'gemini-3.7-flash' ? 'selected' : '' ?>>Gemini 3.7 Flash (Recommended)</option>
-                    <option value="gemini-3.6-flash" <?= ($_SESSION['ai_model'] ?? '') === 'gemini-3.6-flash' ? 'selected' : '' ?>>Gemini 3.6 Flash (Fast & Reliable)</option>
+                    <option value="gemini-3.6-flash" <?= ($_SESSION['ai_model'] ?? 'gemini-3.6-flash') === 'gemini-3.6-flash' ? 'selected' : '' ?>>Gemini 3.6 Flash (Recommended)</option>
+                    <option value="gemini-3.8-flash" <?= ($_SESSION['ai_model'] ?? '') === 'gemini-3.8-flash' ? 'selected' : '' ?>>Gemini 3.8 Flash (Next Gen)</option>
+                    <option value="gemini-3.7-flash" <?= ($_SESSION['ai_model'] ?? '') === 'gemini-3.7-flash' ? 'selected' : '' ?>>Gemini 3.7 Flash</option>
                     <option value="gemini-flash-latest" <?= ($_SESSION['ai_model'] ?? '') === 'gemini-flash-latest' ? 'selected' : '' ?>>Gemini Flash Latest</option>
-                    <option value="gemini-3.1-pro-preview" <?= ($_SESSION['ai_model'] ?? '') === 'gemini-3.1-pro-preview' ? 'selected' : '' ?>>Gemini 3.1 Pro Preview (Most Capable)</option>
                 </select>
             </div>
 
