@@ -28,6 +28,8 @@ function call_gemini_api($api_key, $prompt) {
     $models_to_try = array_unique([
         $selected_model,
         'gemini-3.6-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-flash-lite-latest',
         'gemini-3.8-flash',
         'gemini-3.7-flash',
         'gemini-flash-latest'
@@ -147,7 +149,14 @@ function check_api_key_status($api_key, $model = 'gemini-3.6-flash') {
         return ['status' => 'invalid_key', 'message' => $err_msg];
     }
     if ($http_code === 503 || stripos($err_msg, 'high demand') !== false || stripos($err_msg, 'spikes in demand') !== false) {
-        return ['status' => 'busy', 'message' => "Google Gemini is experiencing high global traffic (HTTP 503). Retrying automatically & local fallbacks active."];
+        // Test fast fallback model to see if API key is working on another model
+        if ($model !== 'gemini-3.5-flash-lite') {
+            $fallback_check = check_api_key_status($api_key, 'gemini-3.5-flash-lite');
+            if ($fallback_check['status'] === 'active') {
+                return ['status' => 'active', 'message' => "Key is active. '{$model}' is busy, auto-switched to high-availability fallback (gemini-3.5-flash-lite)."];
+            }
+        }
+        return ['status' => 'busy', 'message' => "Google Gemini ({$model}) is experiencing high global traffic (HTTP 503). Retrying automatically & local fallbacks active."];
     }
     if ($http_code === 404) {
         return ['status' => 'model_not_found', 'message' => "Model '{$model}' not available: " . $err_msg];
