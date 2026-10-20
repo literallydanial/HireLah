@@ -14,6 +14,46 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'admin') 
 $admin_id = $_SESSION['user_id'];
 $admin_name = $_SESSION['user_name'] ?? 'Admin';
 
+// Action: Delete one or more resume records. Scoped to AI Resume Checker and
+// AI Resume Builder entries only -- Job Applications and Saved Profile
+// Resume are tied to live application/profile data and aren't deletable
+// from here. This removes the database record only, not the underlying
+// file on disk (consistent with how Delete Account already behaves).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_resumes') {
+    $items = $_POST['items'] ?? [];
+    $deleted = 0;
+    foreach ($items as $item) {
+        $parts = explode(':', (string)$item, 2);
+        if (count($parts) !== 2) continue;
+        [$src, $rid] = $parts;
+        $rid = (int)$rid;
+        if ($rid <= 0) continue;
+
+        if ($src === 'resume_checker') {
+            try {
+                $stmt = $pdo->prepare("DELETE FROM resume_reviews WHERE id = ?");
+                $stmt->execute([$rid]);
+                if ($stmt->rowCount() > 0) {
+                    $deleted++;
+                    log_admin_action($pdo, $admin_id, $admin_name, 'delete_resume', 'resume_checker', $rid, "Deleted AI Resume Checker entry #$rid");
+                }
+            } catch (\Throwable $e) {}
+        } elseif ($src === 'resume_builder') {
+            try {
+                $stmt = $pdo->prepare("DELETE FROM resume_builds WHERE id = ?");
+                $stmt->execute([$rid]);
+                if ($stmt->rowCount() > 0) {
+                    $deleted++;
+                    log_admin_action($pdo, $admin_id, $admin_name, 'delete_resume', 'resume_builder', $rid, "Deleted AI Resume Builder entry #$rid");
+                }
+            } catch (\Throwable $e) {}
+        }
+    }
+    $_SESSION['toast'] = $deleted > 0 ? "$deleted resume" . ($deleted === 1 ? '' : 's') . " deleted." : "No resumes were deleted.";
+    header("Location: admin_resumes.php");
+    exit;
+}
+
 // Ensure table exists for resume_builds if not already created
 try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS `resume_builds` (
@@ -89,7 +129,7 @@ unset($br);
 $checker_resumes = $pdo->query("
     SELECT r.id, COALESCE(u.name, 'Guest / Candidate') as candidate_name,
            COALESCE(u.email, 'Direct Upload') as candidate_email, '' as phone,
-           r.filename, r.full_text, r.summary, r.created_at, r.overall_score,
+           r.filename, r.file_path, r.full_text, r.summary, r.created_at, r.overall_score,
            COALESCE(r.rating_label, 'Evaluated') as status,
            'ATS Audited' as recommendation, NULL as job_id,
            'Resume Review Feedback' as job_title,
@@ -100,12 +140,15 @@ $checker_resumes = $pdo->query("
     LEFT JOIN users u ON r.user_id = u.id
     ORDER BY r.created_at DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
-// The original PDF is saved as uploads/<uniqid>_<original filename> and is
-// never deleted (see resume_check.php) — locate it on disk the same way
-// export_resumes.php does, so admins can open the actual file.
+// Rows saved since file_path existed know exactly where their file is.
+// Older rows (saved before that column existed) fall back to the old
+// best-effort filename search -- which can attach the wrong file when two
+// uploads share a filename, but is the best we have for historical data.
 foreach ($checker_resumes as &$cr) {
     $cr['resume_path'] = null;
-    if (!empty($cr['filename'])) {
+    if (!empty($cr['file_path']) && is_file(__DIR__ . '/' . $cr['file_path'])) {
+        $cr['resume_path'] = $cr['file_path'];
+    } elseif (!empty($cr['filename'])) {
         $matches = glob(__DIR__ . '/uploads/*' . basename($cr['filename']));
         if (!empty($matches) && is_file($matches[0])) {
             // Store the web-relative path (e.g. "uploads/6a7..._resume.pdf") so
@@ -232,13 +275,34 @@ $count_total = count($all_resumes);
         }
         .admin-tr {
             display: grid;
-            grid-template-columns: 140px 1.4fr 1.4fr 1.3fr 110px 80px 130px;
+            grid-template-columns: 28px 140px 1.4fr 1.4fr 1.3fr 110px 80px 130px;
             gap: 10px;
             padding: 12px 16px;
             align-items: center;
             border-bottom: 1px solid var(--bdr);
             font-size: 12px;
             border-left: 3px solid transparent;
+        }
+        .resume-selection-bar {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            background: var(--surf);
+            border: 1px solid var(--acc);
+            border-radius: 12px;
+            padding: 10px 16px;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 18px rgba(107, 138, 0, 0.12);
+        }
+        .admin-tr.resume-row-item.is-selected {
+            background: rgba(107, 138, 0, 0.08) !important;
+            box-shadow: inset 0 0 0 1px rgba(107, 138, 0, 0.35);
+        }
+        [data-theme="dark"] .admin-tr.resume-row-item.is-selected {
+            background: rgba(217, 255, 79, 0.08) !important;
+            box-shadow: inset 0 0 0 1px rgba(217, 255, 79, 0.3);
         }
         .admin-th {
             background: var(--surf);
@@ -315,7 +379,7 @@ $count_total = count($all_resumes);
             main { padding: 16px 16px 32px !important; margin-top: 170px !important; }
             .stats-summary-grid { grid-template-columns: repeat(2, 1fr); }
             .admin-table { width: max-content; min-width: 100%; }
-            .admin-tr { grid-template-columns: 140px 190px 170px 160px 100px 70px 170px; min-width: 900px; }
+            .admin-tr { grid-template-columns: 28px 140px 190px 170px 160px 100px 70px 170px; min-width: 928px; }
         }
     </style>
 </head>
@@ -412,10 +476,30 @@ $count_total = count($all_resumes);
                 <input type="text" id="resumeSearchInput" onkeyup="filterResumeTable()" placeholder="🔍 Search name, email, job, filename..." style="max-width:320px; padding:9px 14px; font-size:13px; margin:0;">
             </div>
 
+            <!-- Resume Selection Action Bar (only Resume Checker / Resume Builder rows are selectable --
+                 Job Applications and Saved Profile Resume aren't deletable from here) -->
+            <div id="resumeSelectionToolbar" class="resume-selection-bar">
+                <span id="bulkResumeSelectedCount" style="font-size:12px; font-weight:800; background:var(--dim); border:1px solid var(--bdr); border-radius:20px; padding:4px 12px; color:var(--txt);">0 selected</span>
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <button type="button" onclick="confirmDeleteSelectedResumes()" style="background:rgba(255, 77, 106, 0.12); border:1px solid rgba(255, 77, 106, 0.35); border-radius:8px; color:var(--red); padding:7px 15px; font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:6px;">
+                        🗑️ Delete Selected
+                    </button>
+                    <button type="button" onclick="clearResumeSelection()" class="btn-secondary" style="padding:7px 12px; font-size:12px; border-radius:8px;" title="Clear Selection">
+                        ✕ Deselect
+                    </button>
+                </div>
+            </div>
+
+            <!-- Hidden form for bulk or single delete submission -->
+            <form method="POST" id="resumeDeleteForm" style="display:none;">
+                <input type="hidden" name="action" value="delete_resumes">
+            </form>
+
             <!-- Resumes Table -->
             <div class="admin-table-scroll">
             <div class="admin-table">
                 <div class="admin-tr admin-th">
+                    <div><input type="checkbox" id="selectAllResumes" onclick="toggleSelectAllResumes(this)" title="Select All (Resume Checker / Resume Builder only)" style="width:15px; height:15px; cursor:pointer;"></div>
                     <div>Source</div>
                     <div>Candidate / User</div>
                     <div>Target / Job Title</div>
@@ -437,12 +521,24 @@ $count_total = count($all_resumes);
                                 'default_resume' => ['badge-source-default', '📌', '#EC4899'],
                             ];
                             [$source_badge_class, $source_icon, $accent_border] = $source_style_map[$r['source_type']] ?? $source_style_map['resume_checker'];
+                            // Only Resume Checker / Resume Builder entries can be deleted from here --
+                            // Job Applications and Saved Profile Resume are tied to live application/
+                            // profile data and are left out on purpose.
+                            $is_deletable = in_array($r['source_type'], ['resume_checker', 'resume_builder'], true);
                         ?>
-                        <div class="admin-tr resume-row-item" 
+                        <div class="admin-tr resume-row-item"
                              style="border-left-color: <?= $accent_border ?>;"
-                             data-source="<?= htmlspecialchars($r['source_type']) ?>" 
+                             data-source="<?= htmlspecialchars($r['source_type']) ?>"
                              data-search="<?= strtolower(htmlspecialchars($r['candidate_name'] . ' ' . $r['candidate_email'] . ' ' . $r['job_title'] . ' ' . $r['filename'] . ' ' . $r['source_label'])) ?>">
-                            
+
+                            <!-- Select checkbox (deletable sources only) -->
+                            <div onclick="event.stopPropagation()">
+                                <?php if ($is_deletable): ?>
+                                    <input type="checkbox" class="resume-select-checkbox" value="<?= htmlspecialchars($r['source_type']) ?>:<?= (int)$r['id'] ?>"
+                                           onclick="updateResumeBulkSelection();" style="width:15px; height:15px; cursor:pointer;">
+                                <?php endif; ?>
+                            </div>
+
                             <!-- Source Badge -->
                             <div>
                                 <span class="badge-source <?= $source_badge_class ?>">
@@ -493,7 +589,7 @@ $count_total = count($all_resumes);
                             </div>
 
                             <!-- Action -->
-                            <div style="text-align:center;">
+                            <div style="text-align:center; display:flex; gap:6px; justify-content:center; flex-wrap:wrap;" onclick="event.stopPropagation()">
                                 <?php if($r['source_type'] === 'job_apply' && !empty($r['resume_path']) && file_exists($r['resume_path'])): ?>
                                     <button type="button" onclick="openPdfModal('<?= htmlspecialchars(addslashes($r['resume_path'])) ?>', '<?= htmlspecialchars(addslashes($r['job_title'])) ?>', '<?= htmlspecialchars(addslashes($r['candidate_name'])) ?> &bull; <?= htmlspecialchars(addslashes($r['candidate_email'])) ?>', '<?= htmlspecialchars(addslashes($r['filename'])) ?>', '<?= htmlspecialchars(addslashes($r['resume_path'])) ?>')" class="btn-secondary" style="padding:4px 9px; font-size:11px;" title="View PDF">
                                         👁️ View PDF
@@ -526,6 +622,14 @@ $count_total = count($all_resumes);
                                     <?php endif; ?>
                                 <?php else: ?>
                                     <span style="font-size:11px; color:var(--mut);">Audited</span>
+                                <?php endif; ?>
+
+                                <?php if ($is_deletable): ?>
+                                    <form method="POST" style="display:inline;" onsubmit="return confirm('Permanently delete this resume record? This removes it from the dashboard and the live counter, but not the uploaded file itself.');">
+                                        <input type="hidden" name="action" value="delete_resumes">
+                                        <input type="hidden" name="items[]" value="<?= htmlspecialchars($r['source_type']) ?>:<?= (int)$r['id'] ?>">
+                                        <button type="submit" style="background:rgba(255, 77, 106, 0.12); border:1px solid rgba(255, 77, 106, 0.35); border-radius:6px; color:var(--red); padding:4px 8px; font-size:10px; font-weight:700; cursor:pointer;" title="Delete Resume Record">🗑️</button>
+                                    </form>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -697,8 +801,74 @@ $count_total = count($all_resumes);
                     rows[i].style.display = 'grid';
                 } else {
                     rows[i].style.display = 'none';
+                    // Deselect any hidden row so it doesn't get included in a bulk delete unseen
+                    var cb = rows[i].querySelector('.resume-select-checkbox');
+                    if (cb) cb.checked = false;
                 }
             }
+            updateResumeBulkSelection();
+        }
+
+        function toggleSelectAllResumes(sourceCheckbox) {
+            var rows = document.getElementsByClassName('resume-row-item');
+            for (var i = 0; i < rows.length; i++) {
+                if (rows[i].style.display === 'none') continue; // respect active search/filter
+                var cb = rows[i].querySelector('.resume-select-checkbox');
+                if (cb) cb.checked = sourceCheckbox.checked;
+            }
+            updateResumeBulkSelection();
+        }
+
+        function updateResumeBulkSelection() {
+            var checked = document.querySelectorAll('.resume-select-checkbox:checked');
+            var toolbar = document.getElementById('resumeSelectionToolbar');
+            var countEl = document.getElementById('bulkResumeSelectedCount');
+
+            document.querySelectorAll('.resume-row-item').forEach(function(row) {
+                var cb = row.querySelector('.resume-select-checkbox');
+                row.classList.toggle('is-selected', !!(cb && cb.checked));
+            });
+
+            var allBoxes = document.querySelectorAll('.resume-select-checkbox');
+            var selectAll = document.getElementById('selectAllResumes');
+            if (selectAll) {
+                selectAll.checked = allBoxes.length > 0 && checked.length === allBoxes.length;
+            }
+
+            if (checked.length === 0) {
+                if (toolbar) toolbar.style.display = 'none';
+                return;
+            }
+            if (toolbar) toolbar.style.display = 'flex';
+            if (countEl) countEl.textContent = checked.length + ' selected';
+        }
+
+        function confirmDeleteSelectedResumes() {
+            var checked = document.querySelectorAll('.resume-select-checkbox:checked');
+            if (checked.length === 0) return;
+
+            var msg = checked.length === 1
+                ? 'Permanently delete this resume record? This removes it from the dashboard and the live counter, but not the uploaded file itself.'
+                : 'Permanently delete ' + checked.length + ' selected resume records? This removes them from the dashboard and the live counter, but not the uploaded files themselves.';
+            if (!confirm(msg)) return;
+
+            var form = document.getElementById('resumeDeleteForm');
+            form.innerHTML = '<input type="hidden" name="action" value="delete_resumes">';
+            checked.forEach(function(cb) {
+                var hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'items[]';
+                hidden.value = cb.value;
+                form.appendChild(hidden);
+            });
+            form.submit();
+        }
+
+        function clearResumeSelection() {
+            document.querySelectorAll('.resume-select-checkbox').forEach(function(cb) { cb.checked = false; });
+            var selectAll = document.getElementById('selectAllResumes');
+            if (selectAll) selectAll.checked = false;
+            updateResumeBulkSelection();
         }
 
         function setExportDateMode(mode) {

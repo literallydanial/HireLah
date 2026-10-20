@@ -314,7 +314,7 @@ if ($source_filter === 'all' || $source_filter === 'resume_builder') {
 // C. Resume Checker (resume_reviews table)
 if ($source_filter === 'all' || $source_filter === 'resume_checker') {
     try {
-        $sql = "SELECT r.id, r.user_id, r.filename, r.full_text, r.stripped_text, r.overall_score, 
+        $sql = "SELECT r.id, r.user_id, r.filename, r.file_path, r.full_text, r.stripped_text, r.overall_score,
                        r.rating_label, r.summary, r.strengths, r.improvements, r.formatting_notes, r.ats_tips, r.created_at,
                        u.name as user_name, u.email as user_email
                 FROM resume_reviews r
@@ -569,11 +569,16 @@ foreach ($checker_records as $r) {
     $clean_name = sanitize_zip_name($r['user_name'] ?: 'Candidate');
     $orig_filename = sanitize_zip_name($r['filename'] ?: 'resume.pdf');
 
-    // Check if original file is on disk in uploads/
+    // Rows saved since file_path existed know exactly where their file is;
+    // older rows fall back to the best-effort filename search.
     $checker_file_path = null;
-    $possible_matches = glob(__DIR__ . '/uploads/*' . basename($r['filename']));
-    if (!empty($possible_matches) && is_file($possible_matches[0])) {
-        $checker_file_path = $possible_matches[0];
+    if (!empty($r['file_path']) && is_file(__DIR__ . '/' . $r['file_path'])) {
+        $checker_file_path = __DIR__ . '/' . $r['file_path'];
+    } else {
+        $possible_matches = glob(__DIR__ . '/uploads/*' . basename($r['filename']));
+        if (!empty($possible_matches) && is_file($possible_matches[0])) {
+            $checker_file_path = $possible_matches[0];
+        }
     }
 
     if ($checker_file_path) {

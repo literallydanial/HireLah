@@ -55,33 +55,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $result = generate_resume_review($api_key, $stripped);
 
-                    if ($is_candidate) {
-                        $stmt = $pdo->prepare("INSERT INTO resume_reviews (
-                            user_id, filename, full_text, stripped_text, overall_score, rating_label,
-                            summary, strengths, improvements, formatting_notes, ats_tips
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    // Every upload gets a record, whether or not the
+                    // person is logged in -- user_id is simply NULL for a
+                    // guest, instead of no row existing at all. file_path
+                    // stores exactly where this file was saved, so admin
+                    // pages don't have to re-find it later by filename.
+                    $stmt = $pdo->prepare("INSERT INTO resume_reviews (
+                        user_id, filename, file_path, full_text, stripped_text, overall_score, rating_label,
+                        summary, strengths, improvements, formatting_notes, ats_tips
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
-                        $stmt->execute([
-                            $_SESSION['user_id'],
-                            $uploaded_filename,
-                            $text,
-                            $stripped,
-                            $result['overall_score'] ?? 0,
-                            $result['rating_label'] ?? null,
-                            $result['summary'] ?? null,
-                            json_encode($result['strengths'] ?? []),
-                            json_encode($result['improvements'] ?? []),
-                            $result['formatting_notes'] ?? null,
-                            json_encode($result['ats_tips'] ?? [])
-                        ]);
-                    } else {
-                        // Not logged in as a candidate — hold result in session
-                        $_SESSION['pending_resume_review'] = [
-                            'filename' => $uploaded_filename,
-                            'full_text' => $text,
-                            'stripped_text' => $stripped,
-                            'result' => $result,
-                        ];
+                    $stmt->execute([
+                        $_SESSION['user_id'] ?? null,
+                        $uploaded_filename,
+                        $path,
+                        $text,
+                        $stripped,
+                        $result['overall_score'] ?? 0,
+                        $result['rating_label'] ?? null,
+                        $result['summary'] ?? null,
+                        json_encode($result['strengths'] ?? []),
+                        json_encode($result['improvements'] ?? []),
+                        $result['formatting_notes'] ?? null,
+                        json_encode($result['ats_tips'] ?? [])
+                    ]);
+
+                    if (!$is_candidate) {
+                        // Remember which review this was so that if they
+                        // register or log in right after, it gets claimed
+                        // as theirs instead of staying ownerless forever.
+                        $_SESSION['pending_resume_review_id'] = (int)$pdo->lastInsertId();
                         $_SESSION['redirect_after_login'] = "resume_check.php";
                     }
                 } catch (\Throwable $e) {
@@ -111,35 +114,32 @@ if (!empty($_SESSION['resume_check_flash'])) {
     $uploaded_filename = $flash['filename'] ?? null;
 }
 
-// Pick up result analyzed before logging in
-if ($is_candidate && !empty($_SESSION['pending_resume_review'])) {
-    $pending = $_SESSION['pending_resume_review'];
-    unset($_SESSION['pending_resume_review']);
-
-    $result = $pending['result'];
-    $uploaded_filename = $pending['filename'];
+// Claim a review uploaded as a guest, now that they've logged in/registered
+if ($is_candidate && !empty($_SESSION['pending_resume_review_id'])) {
+    $pending_id = (int)$_SESSION['pending_resume_review_id'];
+    unset($_SESSION['pending_resume_review_id']);
 
     try {
-        $stmt = $pdo->prepare("INSERT INTO resume_reviews (
-            user_id, filename, full_text, stripped_text, overall_score, rating_label,
-            summary, strengths, improvements, formatting_notes, ats_tips
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $claim_stmt = $pdo->prepare("UPDATE resume_reviews SET user_id = ? WHERE id = ? AND user_id IS NULL");
+        $claim_stmt->execute([$_SESSION['user_id'], $pending_id]);
 
-        $stmt->execute([
-            $_SESSION['user_id'],
-            $pending['filename'],
-            $pending['full_text'],
-            $pending['stripped_text'],
-            $result['overall_score'] ?? 0,
-            $result['rating_label'] ?? null,
-            $result['summary'] ?? null,
-            json_encode($result['strengths'] ?? []),
-            json_encode($result['improvements'] ?? []),
-            $result['formatting_notes'] ?? null,
-            json_encode($result['ats_tips'] ?? [])
-        ]);
+        $r_stmt = $pdo->prepare("SELECT * FROM resume_reviews WHERE id = ? AND user_id = ?");
+        $r_stmt->execute([$pending_id, $_SESSION['user_id']]);
+        $rev = $r_stmt->fetch();
+        if ($rev) {
+            $uploaded_filename = $rev['filename'];
+            $result = [
+                'overall_score' => $rev['overall_score'],
+                'rating_label' => $rev['rating_label'],
+                'summary' => $rev['summary'],
+                'strengths' => json_decode($rev['strengths'] ?? '[]', true) ?: [],
+                'improvements' => json_decode($rev['improvements'] ?? '[]', true) ?: [],
+                'formatting_notes' => $rev['formatting_notes'],
+                'ats_tips' => json_decode($rev['ats_tips'] ?? '[]', true) ?: [],
+            ];
+        }
     } catch (\Throwable $e) {
-        error_log("Resume Check Error (pending save): " . $e->getMessage());
+        error_log("Resume Check Error (claim pending review): " . $e->getMessage());
     }
 }
 
