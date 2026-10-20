@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'change_role') {
         $target_id = (int)($_POST['user_id'] ?? 0);
         $new_role = $_POST['new_role'] ?? 'candidate';
-        if ($target_id > 0 && in_array($new_role, ['candidate', 'employer', 'admin', 'university'])) {
+        if ($target_id > 0 && in_array($new_role, ['candidate', 'employer', 'admin', 'university', 'management'])) {
             $stmt = $pdo->prepare("UPDATE users SET role = ? WHERE id = ?");
             $stmt->execute([$new_role, $target_id]);
 
@@ -167,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $params = [$name, $email, $is_verified];
                     $edit_valid = true;
 
-                    if (in_array($role, ['candidate', 'employer', 'admin', 'university'], true)) {
+                    if (in_array($role, ['candidate', 'employer', 'admin', 'university', 'management'], true)) {
                         $updates[] = "role = ?";
                         $params[] = $role;
                     }
@@ -810,6 +810,9 @@ $jobs_list = $pdo->query("
 
             <nav style="display:flex; gap:4px; margin-left:24px">
                 <a href="admin_dashboard.php" class="active">🛡️ Admin Control Panel</a>
+                <a href="management_dashboard.php" target="_blank" style="color:#2D6A4F; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
+                    📊 Management Dashboard
+                </a>
                 <a href="admin_live_counter.php" target="_blank" style="color:#10B981; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
                     <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#10B981;"></span>📺 TV Live Counter
                 </a>
@@ -1101,6 +1104,7 @@ $jobs_list = $pdo->query("
                             <option value="candidate">Candidates</option>
                             <option value="employer">Employers</option>
                             <option value="university">Universities</option>
+                            <option value="management">Management</option>
                             <option value="admin">Admins</option>
                         </select>
                     </div>
@@ -1156,8 +1160,8 @@ $jobs_list = $pdo->query("
 
                     <?php foreach($users_list as $u): ?>
                         <?php
-                            $u_accent = $u['role'] === 'admin' ? 'accent-red' : ($u['role'] === 'employer' ? 'accent-amber' : 'accent-green');
-                            $u_grad = $u['role'] === 'admin' ? 'var(--grad-red)' : ($u['role'] === 'employer' ? 'var(--grad-amber)' : 'var(--grad-green)');
+                            $u_accent = $u['role'] === 'admin' ? 'accent-red' : ($u['role'] === 'employer' ? 'accent-amber' : ($u['role'] === 'management' ? 'accent-teal' : 'accent-green'));
+                            $u_grad = $u['role'] === 'admin' ? 'var(--grad-red)' : ($u['role'] === 'employer' ? 'var(--grad-amber)' : ($u['role'] === 'management' ? 'linear-gradient(135deg, #1C2F20, #2E5033)' : 'var(--grad-green)'));
                             $u_is_new = strtotime($u['created_at']) >= strtotime('-48 hours');
                             $u_is_self = (int)$u['id'] === (int)$_SESSION['user_id'];
                         ?>
@@ -1220,9 +1224,15 @@ $jobs_list = $pdo->query("
                             </div>
                             <div style="color:var(--mut); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><?= htmlspecialchars($u['email']) ?></div>
                             <div>
-                                <span class="chip <?= $u['role'] === 'admin' ? 'chip-rejected' : ($u['role'] === 'employer' ? 'chip-review' : ($u['role'] === 'university' ? 'chip-review' : 'chip-shortlisted')) ?>" style="font-size:10px;">
-                                    <?= ucfirst(htmlspecialchars($u['role'])) ?>
-                                </span>
+                                <?php if($u['role'] === 'management'): ?>
+                                    <span class="chip" style="font-size:10px; background:rgba(33, 51, 36, 0.12); color:#1C2F20; border:1px solid rgba(33, 51, 36, 0.3); font-weight:700;">
+                                        👔 Management
+                                    </span>
+                                <?php else: ?>
+                                    <span class="chip <?= $u['role'] === 'admin' ? 'chip-rejected' : ($u['role'] === 'employer' ? 'chip-review' : ($u['role'] === 'university' ? 'chip-review' : 'chip-shortlisted')) ?>" style="font-size:10px;">
+                                        <?= ucfirst(htmlspecialchars($u['role'])) ?>
+                                    </span>
+                                <?php endif; ?>
                             </div>
                             <div>
                                 <?php if($u['is_verified']): ?>
@@ -1675,6 +1685,7 @@ $jobs_list = $pdo->query("
                         <option value="candidate">Candidate</option>
                         <option value="employer">Employer</option>
                         <option value="university">University</option>
+                        <option value="management">Management</option>
                         <option value="admin">System Admin</option>
                     </select>
                 </div>
@@ -1768,6 +1779,7 @@ $jobs_list = $pdo->query("
                         <option value="candidate">Candidate</option>
                         <option value="employer">Employer</option>
                         <option value="university">University</option>
+                        <option value="management">Management</option>
                         <option value="admin">System Admin</option>
                     </select>
                 </div>
@@ -2384,7 +2396,18 @@ $jobs_list = $pdo->query("
                     if (emailEl) emailEl.textContent = '(' + email + ')';
                     if (roleEl) {
                         roleEl.textContent = role.charAt(0).toUpperCase() + role.slice(1);
-                        roleEl.className = 'chip ' + (role === 'admin' ? 'chip-rejected' : (role === 'employer' ? 'chip-review' : 'chip-shortlisted'));
+                        if (role === 'management') {
+                            roleEl.className = 'chip';
+                            roleEl.style.background = 'rgba(33, 51, 36, 0.15)';
+                            roleEl.style.color = '#1C2F20';
+                            roleEl.style.border = '1px solid rgba(33, 51, 36, 0.3)';
+                            roleEl.textContent = '👔 Management';
+                        } else {
+                            roleEl.className = 'chip ' + (role === 'admin' ? 'chip-rejected' : (role === 'employer' ? 'chip-review' : 'chip-shortlisted'));
+                            roleEl.style.background = '';
+                            roleEl.style.color = '';
+                            roleEl.style.border = '';
+                        }
                     }
                 }
 

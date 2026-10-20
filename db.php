@@ -114,6 +114,23 @@ try {
         }
     }
 
+    // Auto-verify management role schema & seed account (self-healing migration on deploy)
+    try {
+        $roleCol = $pdo->query("SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role'")->fetch();
+        if ($roleCol && strtolower($roleCol['DATA_TYPE']) === 'enum') {
+            $pdo->exec("ALTER TABLE users MODIFY COLUMN role VARCHAR(50) NOT NULL DEFAULT 'candidate'");
+        }
+        $chkMgmt = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+        $chkMgmt->execute(['management@thekeria.com']);
+        if (!$chkMgmt->fetchColumn()) {
+            $hash = password_hash('password123', PASSWORD_DEFAULT);
+            $insMgmt = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, is_verified, created_at) VALUES (?, ?, ?, 'management', 1, NOW())");
+            $insMgmt->execute(['Management Team', 'management@thekeria.com', $hash]);
+        }
+    } catch (\Throwable $mgmtErr) {
+        error_log("Management role auto-migration notice: " . $mgmtErr->getMessage());
+    }
+
 } catch (\PDOException $e) {
     error_log("Keria DB Connection Error: " . $e->getMessage());
     die("<div style='font-family:sans-serif; max-width:600px; margin:50px auto; padding:24px; border:1px solid #F87171; background:#FEF2F2; color:#991B1B; border-radius:12px; text-align:center;'>" .

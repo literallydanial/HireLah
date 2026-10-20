@@ -23,4 +23,13 @@ function require_role($role) {
         exit;
     }
 }
+
+function require_roles(array $roles) {
+    require_login();
+    if (!in_array($_SESSION['user_role'] ?? '', $roles, true)) {
+        $_SESSION['error'] = "Access denied. You do not have the required role.";
+        header("Location: index.php");
+        exit;
+    }
+}
 ?>

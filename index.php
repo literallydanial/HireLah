@@ -1870,8 +1870,12 @@ if (file_exists('db.php')) {
                     <span class="keria-nav-greeting" style="font-weight:700; font-size:14px; margin-right:4px;">Hi, <?= htmlspecialchars($_SESSION['user_name']) ?></span>
                     <?php if($_SESSION['user_role'] === 'employer'): ?>
                         <a href="employer_dashboard.php" class="btn-nav-signup">Dashboard</a>
+                    <?php elseif($_SESSION['user_role'] === 'management'): ?>
+                        <a href="management_dashboard.php" class="btn-nav-signup">Management</a>
                     <?php elseif($_SESSION['user_role'] === 'admin'): ?>
                         <a href="admin_dashboard.php" class="btn-nav-signup">Admin</a>
+                    <?php elseif($_SESSION['user_role'] === 'university'): ?>
+                        <a href="university_dashboard.php" class="btn-nav-signup">University</a>
                     <?php else: ?>
                         <a href="candidate_dashboard.php" class="btn-nav-signup">Dashboard</a>
                     <?php endif; ?>

@@ -1148,6 +1148,12 @@ if ($user['role'] === 'candidate') {
                     <a href="job_dashboard.php">💼 My Jobs</a>
                     <a href="questionnaire.php">📋 Questionnaires</a>
                     <a href="profile.php" class="active">⚙️ Settings</a>
+                <?php elseif($user['role'] === 'management'): ?>
+                    <a href="management_dashboard.php">📊 Management Dashboard</a>
+                    <a href="profile.php" class="active">⚙️ Settings</a>
+                <?php elseif($user['role'] === 'university'): ?>
+                    <a href="university_dashboard.php">🎓 University Dashboard</a>
+                    <a href="profile.php" class="active">⚙️ Settings</a>
                 <?php else: ?>
                     <a href="admin_dashboard.php">⚙️ Dashboard</a>
                     <a href="profile.php" class="active">⚙️ Profile Settings</a>
