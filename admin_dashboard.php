@@ -438,11 +438,12 @@ $total_questionnaires = (int)$pdo->query("SELECT COUNT(*) FROM questionnaires")-
 $env_api_key = getenv('GEMINI_API_KEY') ?: (getenv('GOOGLE_API_KEY') ?: '');
 $gemini_key_configured = !empty($env_api_key) || true; // Built-in Gemini engine enabled
 
-// Gemini API Key Health Check (tests the configured key/model against live Gemini API)
-$configured_api_key = get_api_key();
-$gemini_start_time = microtime(true);
-$key_check = check_api_key_status($configured_api_key, $_SESSION['ai_model'] ?? 'gemini-3.6-flash');
-$gemini_latency_ms = round((microtime(true) - $gemini_start_time) * 1000, 2);
+// Gemini API Key Health Check -- this used to make a real, live call to the
+// Gemini API on every single admin dashboard page load (up to 2 calls if the
+// first came back busy), silently burning quota just from the page being
+// viewed. It now shows the last known result from the log instead (free,
+// instant) and only makes a real call when an admin clicks "Check Now".
+$last_check = get_last_health_check($pdo);
 
 $key_status_map = [
     'active'          => ['label' => 'API Key Active',            'color' => '#00E87A'],
@@ -452,10 +453,14 @@ $key_status_map = [
     'model_not_found' => ['label' => 'Model Not Available',       'color' => '#F59E0B'],
     'unreachable'     => ['label' => 'Unreachable',                'color' => '#FF4D6A'],
     'error'           => ['label' => 'Error',                      'color' => '#FF4D6A'],
+    'not_checked'     => ['label' => 'Not Checked Yet',            'color' => '#9CA3AF'],
 ];
-$gemini_status = $key_status_map[$key_check['status']]['label'] ?? 'Unknown';
-$gemini_status_color = $key_status_map[$key_check['status']]['color'] ?? '#9CA3AF';
-$gemini_status_detail = $key_check['message'] ?? '';
+$gemini_status_key = !empty($last_check['status_label']) ? $last_check['status_label'] : 'not_checked';
+$gemini_status = $key_status_map[$gemini_status_key]['label'] ?? 'Unknown';
+$gemini_status_color = $key_status_map[$gemini_status_key]['color'] ?? '#9CA3AF';
+$gemini_status_detail = !empty($last_check['message']) ? $last_check['message'] : 'Click "Check Now" to test the Gemini API key live.';
+$gemini_latency_ms = $last_check['latency_ms'] ?? null;
+$gemini_checked_at = $last_check['created_at'] ?? null;
 
 // Candidate Match Analytics (AI Screening Stats)
 $avg_match_score = (int)$pdo->query("SELECT COALESCE(AVG(overall_score), 0) FROM candidates")->fetchColumn();
@@ -931,17 +936,25 @@ $jobs_list = $pdo->query("
                             <div style="font-size:11px; color:var(--mut);">Model: <?= htmlspecialchars($_SESSION['ai_model'] ?? 'gemini-3.6-flash') ?></div>
                         </div>
                     </div>
-                    <span class="badge-pill" style="background:linear-gradient(135deg, <?= $gemini_status_color ?>, <?= $gemini_status_color ?>CC); color:#fff; border:none; box-shadow:0 4px 12px <?= $gemini_status_color ?>40;">
-                        ● <?= $gemini_status ?>
+                    <span id="geminiStatusBadge" class="badge-pill" style="background:linear-gradient(135deg, <?= $gemini_status_color ?>, <?= $gemini_status_color ?>CC); color:#fff; border:none; box-shadow:0 4px 12px <?= $gemini_status_color ?>40;">
+                        ● <span id="geminiStatusLabel"><?= htmlspecialchars($gemini_status) ?></span>
                     </span>
                 </div>
 
-                <div style="font-size:11px; color:<?= $gemini_status_color ?>; background:<?= $gemini_status_color ?>1A; border:1px solid <?= $gemini_status_color ?>; border-radius:8px; padding:8px 12px; margin-bottom:14px;">
+                <div id="geminiStatusDetail" style="font-size:11px; color:<?= $gemini_status_color ?>; background:<?= $gemini_status_color ?>1A; border:1px solid <?= $gemini_status_color ?>; border-radius:8px; padding:8px 12px; margin-bottom:10px;">
                     <?= htmlspecialchars($gemini_status_detail) ?>
                 </div>
 
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                    <div style="font-size:10.5px; color:var(--mut);">
+                        Last checked: <span id="geminiCheckedAt"><?= $gemini_checked_at ? htmlspecialchars(date('j M, g:i a', strtotime($gemini_checked_at))) : 'never' ?></span>
+                        — this no longer checks automatically on page load, only when you click below.
+                    </div>
+                    <button type="button" id="geminiCheckNowBtn" onclick="checkGeminiHealthNow()" style="padding:6px 14px; border-radius:8px; border:1px solid var(--bdr); background:var(--surf); cursor:pointer; font-size:11.5px; font-weight:700; color:var(--txt); white-space:nowrap;">🔄 Check Now</button>
+                </div>
+
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:var(--dim); padding:16px; border-radius:12px; font-size:12px; margin-bottom:16px;">
-                    <div><span style="color:var(--mut);">Live Key Check:</span> <strong style="background:var(--grad-violet); -webkit-background-clip:text; background-clip:text; color:transparent;"><?= $gemini_latency_ms ?> ms</strong></div>
+                    <div><span style="color:var(--mut);">Last Live Check:</span> <strong id="geminiLatency" style="background:var(--grad-violet); -webkit-background-clip:text; background-clip:text; color:transparent;"><?= $gemini_latency_ms !== null ? $gemini_latency_ms.' ms' : '—' ?></strong></div>
                     <div><span style="color:var(--mut);">Average Match Score:</span> <strong style="color:var(--acc);"><?= $avg_match_score ?>%</strong></div>
                     <div><span style="color:var(--mut);">Strong Hires (&ge;80%):</span> <strong style="color:var(--grn);"><?= $strong_hires ?></strong></div>
                     <div><span style="color:var(--mut);">Scanned Resumes:</span> <strong><?= $total_candidates_eval ?></strong></div>
@@ -1937,6 +1950,55 @@ $jobs_list = $pdo->query("
 
     <script src="qrcode.js?v=<?php echo @filemtime(__DIR__.'/qrcode.js'); ?>"></script>
     <script>
+        var GEMINI_STATUS_COLORS = {
+            active: '#00E87A', busy: '#F59E0B', not_configured: '#9CA3AF',
+            invalid_key: '#FF4D6A', model_not_found: '#F59E0B',
+            unreachable: '#FF4D6A', error: '#FF4D6A'
+        };
+        var GEMINI_STATUS_LABELS = {
+            active: 'API Key Active', busy: 'High Demand (Retrying)',
+            not_configured: 'Not Configured', invalid_key: 'Invalid API Key',
+            model_not_found: 'Model Not Available', unreachable: 'Unreachable', error: 'Error'
+        };
+
+        // Runs a real, live Gemini check ONLY when this button is clicked --
+        // the dashboard itself no longer makes this call automatically.
+        function checkGeminiHealthNow() {
+            var btn = document.getElementById('geminiCheckNowBtn');
+            var badge = document.getElementById('geminiStatusBadge');
+            var label = document.getElementById('geminiStatusLabel');
+            var detail = document.getElementById('geminiStatusDetail');
+            var latencyEl = document.getElementById('geminiLatency');
+            var checkedAtEl = document.getElementById('geminiCheckedAt');
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Checking...';
+            label.textContent = 'Checking...';
+
+            fetch('check_gemini_health.php')
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    var color = GEMINI_STATUS_COLORS[data.status] || '#9CA3AF';
+                    var text = GEMINI_STATUS_LABELS[data.status] || 'Unknown';
+                    badge.style.background = 'linear-gradient(135deg, ' + color + ', ' + color + 'CC)';
+                    badge.style.boxShadow = '0 4px 12px ' + color + '40';
+                    label.textContent = text;
+                    detail.textContent = data.message || '';
+                    detail.style.color = color;
+                    detail.style.background = color + '1A';
+                    detail.style.borderColor = color;
+                    latencyEl.textContent = data.latency_ms + ' ms';
+                    checkedAtEl.textContent = 'just now';
+                })
+                .catch(function() {
+                    detail.textContent = 'Could not reach the health-check endpoint. Please try again.';
+                })
+                .finally(function() {
+                    btn.disabled = false;
+                    btn.textContent = '🔄 Check Now';
+                });
+        }
+
         var UQR_BASE_LINK = <?= json_encode($university_signup_link) ?>;
         var UNI_MAP = <?= json_encode(array_column($universities_list, 'id', 'name')) ?>;
 

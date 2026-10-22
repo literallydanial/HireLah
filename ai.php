@@ -146,39 +146,48 @@ function check_api_key_status($api_key, $model = 'gemini-3.6-flash') {
     $latency_ms = (int) round((microtime(true) - $started_at) * 1000);
 
     if ($http_code === 0) {
-        log_gemini_api_call($pdo, 'health_check', $model, 1, null, false, $latency_ms, $curl_err ?: 'Unreachable');
-        return ['status' => 'unreachable', 'message' => $curl_err ?: 'Could not reach the Google Gemini API.'];
+        $result = ['status' => 'unreachable', 'message' => $curl_err ?: 'Could not reach the Google Gemini API.'];
+        log_gemini_api_call($pdo, 'health_check', $model, 1, null, false, $latency_ms, $curl_err ?: 'Unreachable', $result['status'], $result['message']);
+        return $result;
     }
     if ($http_code === 200) {
-        log_gemini_api_call($pdo, 'health_check', $model, 1, $http_code, true, $latency_ms);
-        return ['status' => 'active', 'message' => 'Gemini API key and model are active & working.'];
+        $result = ['status' => 'active', 'message' => 'Gemini API key and model are active & working.'];
+        log_gemini_api_call($pdo, 'health_check', $model, 1, $http_code, true, $latency_ms, null, $result['status'], $result['message']);
+        return $result;
     }
 
     $data = json_decode($response, true);
     $err_msg = $data['error']['message'] ?? "Unexpected HTTP $http_code response.";
-    log_gemini_api_call($pdo, 'health_check', $model, 1, $http_code, false, $latency_ms, substr($err_msg, 0, 500));
 
     if ($http_code === 400 || $http_code === 403 || $http_code === 401) {
-        if (stripos($err_msg, 'API_KEY_INVALID') !== false || stripos($err_msg, 'API key not valid') !== false || $http_code === 401) {
-            return ['status' => 'invalid_key', 'message' => 'Invalid Gemini API key provided.'];
-        }
-        return ['status' => 'invalid_key', 'message' => $err_msg];
+        $is_invalid = stripos($err_msg, 'API_KEY_INVALID') !== false || stripos($err_msg, 'API key not valid') !== false || $http_code === 401;
+        $result = ['status' => 'invalid_key', 'message' => $is_invalid ? 'Invalid Gemini API key provided.' : $err_msg];
+        log_gemini_api_call($pdo, 'health_check', $model, 1, $http_code, false, $latency_ms, substr($err_msg, 0, 500), $result['status'], $result['message']);
+        return $result;
     }
     if ($http_code === 503 || stripos($err_msg, 'high demand') !== false || stripos($err_msg, 'spikes in demand') !== false) {
         // Test fast fallback model to see if API key is working on another model
         if ($model !== 'gemini-3.5-flash-lite') {
             $fallback_check = check_api_key_status($api_key, 'gemini-3.5-flash-lite');
             if ($fallback_check['status'] === 'active') {
-                return ['status' => 'active', 'message' => "Key is active. '{$model}' is busy, auto-switched to high-availability fallback (gemini-3.5-flash-lite)."];
+                $result = ['status' => 'active', 'message' => "Key is active. '{$model}' is busy, auto-switched to high-availability fallback (gemini-3.5-flash-lite)."];
+                log_gemini_api_call($pdo, 'health_check', $model, 1, $http_code, false, $latency_ms, substr($err_msg, 0, 500), $result['status'], $result['message']);
+                return $result;
             }
         }
-        return ['status' => 'busy', 'message' => "Google Gemini ({$model}) is experiencing high global traffic (HTTP 503). Retrying automatically & local fallbacks active."];
+        $result = ['status' => 'busy', 'message' => "Google Gemini ({$model}) is experiencing high global traffic (HTTP 503). Retrying automatically & local fallbacks active."];
+        log_gemini_api_call($pdo, 'health_check', $model, 1, $http_code, false, $latency_ms, substr($err_msg, 0, 500), $result['status'], $result['message']);
+        return $result;
     }
     if ($http_code === 404) {
-        return ['status' => 'model_not_found', 'message' => "Model '{$model}' not available: " . $err_msg];
+        $result = ['status' => 'model_not_found', 'message' => "Model '{$model}' not available: " . $err_msg];
+        log_gemini_api_call($pdo, 'health_check', $model, 1, $http_code, false, $latency_ms, substr($err_msg, 0, 500), $result['status'], $result['message']);
+        return $result;
     }
 
-    return ['status' => 'error', 'message' => $err_msg];
+    $result = ['status' => 'error', 'message' => $err_msg];
+    log_gemini_api_call($pdo, 'health_check', $model, 1, $http_code, false, $latency_ms, substr($err_msg, 0, 500), $result['status'], $result['message']);
+    return $result;
 }
 
 function generate_fallback_snapshot($stripped_text, $role_description) {
