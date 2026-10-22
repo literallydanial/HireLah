@@ -18,15 +18,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $location = trim($_POST['location'] ?? '');
     $salary_min = (!empty($_POST['salary_min']) && is_numeric($_POST['salary_min'])) ? (int)$_POST['salary_min'] : null;
     $salary_max = (!empty($_POST['salary_max']) && is_numeric($_POST['salary_max'])) ? (int)$_POST['salary_max'] : null;
+    $salary_rate_type = in_array($_POST['salary_rate_type'] ?? '', ['daily', 'weekly', 'monthly'], true) ? $_POST['salary_rate_type'] : 'monthly';
     $salary_text = !empty($_POST['salary_text']) ? trim($_POST['salary_text']) : null;
     $perks = !empty($_POST['perks']) ? trim($_POST['perks']) : null;
     $require_video = isset($_POST['require_video']) ? 1 : 0;
     $desc = trim($_POST['description'] ?? '');
     $employer_id = $_SESSION['user_id'];
 
-    if (!empty($title) && !empty($desc)) {
-        $stmt = $pdo->prepare("INSERT INTO jobs (employer_id, company_id, job_title, department, employment_type, work_mode, location, salary_min, salary_max, salary_text, perks, require_video, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
-        if ($stmt->execute([$employer_id, $active_company_id, $title, $dept, $type, $mode, $location, $salary_min, $salary_max, $salary_text, $perks, $require_video, $desc])) {
+    if (!empty($title) && !empty($desc) && $salary_min !== null && $salary_max !== null) {
+        $stmt = $pdo->prepare("INSERT INTO jobs (employer_id, company_id, job_title, department, employment_type, work_mode, location, salary_min, salary_max, salary_rate_type, salary_text, perks, require_video, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
+        if ($stmt->execute([$employer_id, $active_company_id, $title, $dept, $type, $mode, $location, $salary_min, $salary_max, $salary_rate_type, $salary_text, $perks, $require_video, $desc])) {
             $_SESSION['toast'] = "Job position published successfully!";
             header("Location: job_dashboard.php");
             exit;
@@ -438,7 +439,7 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
             </div>
             <p style="font-size:13px; color:var(--mut); margin-bottom:24px;">Create a new role for candidates to apply to and enable automated Gemini AI resume screening.</p>
 
-            <form method="POST">
+            <form method="POST" id="postJobForm" onsubmit="return jdValidateBeforeSubmit('modal_jd_sections','modal_description_hidden')">
                 <input type="hidden" name="action" value="post_job">
 
                 <div style="margin-bottom:16px;">
@@ -493,14 +494,23 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                     </select>
                 </div>
 
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Rate Type</label>
+                    <select name="salary_rate_type" id="modal_salary_rate_type" onchange="updateSalaryRateLabels('modal_salary_rate_type', 'modal_min_salary_label', 'modal_max_salary_label')" style="padding:9px 12px; font-size:13px;">
+                        <option value="monthly">Monthly</option>
+                        <option value="daily">Daily (part-time)</option>
+                        <option value="weekly">Weekly (part-time)</option>
+                    </select>
+                </div>
+
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px;">
                     <div>
-                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Min Salary (RM/mo) <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
-                        <input type="number" name="salary_min" placeholder="e.g. 4000" style="padding:9px 12px; font-size:13px;">
+                        <label id="modal_min_salary_label" style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Min Salary (RM/mo)</label>
+                        <input type="number" name="salary_min" placeholder="e.g. 4000" required style="padding:9px 12px; font-size:13px;">
                     </div>
                     <div>
-                        <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Max Salary (RM/mo) <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
-                        <input type="number" name="salary_max" placeholder="e.g. 7500" style="padding:9px 12px; font-size:13px;">
+                        <label id="modal_max_salary_label" style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Max Salary (RM/mo)</label>
+                        <input type="number" name="salary_max" placeholder="e.g. 7500" required style="padding:9px 12px; font-size:13px;">
                     </div>
                 </div>
 
@@ -511,16 +521,21 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                     </label>
                 </div>
 
-                <div style="margin-bottom:16px;">
-                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company Perks & Benefits <span style="font-size:11px; font-weight:normal; opacity:0.7;">(Optional)</span></label>
-                    <textarea name="perks" rows="3" placeholder="e.g. Health insurance, 20 days annual leave, remote work allowance, performance bonus..." style="resize:vertical; padding:10px 12px; font-size:13px;"></textarea>
+                <div style="margin-bottom:24px;">
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Job Details</label>
+                    <div id="modal_jd_sections"></div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:4px;">
+                        <button type="button" onclick="jdAddSection('modal_jd_sections','modal_description_hidden')" style="padding:7px 14px; border-radius:8px; border:1.5px dashed var(--bdr); background:var(--surf); cursor:pointer; font-size:12.5px; font-weight:700; color:var(--txt);">+ Add Section</button>
+                        <span style="font-size:11px; color:var(--mut);">Quick add:</span>
+                        <button type="button" class="jd-suggest-chip" onclick="jdAddSection('modal_jd_sections','modal_description_hidden','Key Responsibilities')">💼 Responsibilities</button>
+                        <button type="button" class="jd-suggest-chip" onclick="jdAddSection('modal_jd_sections','modal_description_hidden','Requirements & Qualifications')">🎓 Qualifications</button>
+                        <button type="button" class="jd-suggest-chip" onclick="jdAddSection('modal_jd_sections','modal_description_hidden','Benefits')">🎁 Benefits</button>
+                        <button type="button" class="jd-suggest-chip" onclick="jdAddSection('modal_jd_sections','modal_description_hidden','Required Skills')">🛠️ Skills</button>
+                        <button type="button" class="jd-suggest-chip" onclick="jdAddSection('modal_jd_sections','modal_description_hidden','Nice to Have')">⭐ Nice to Have</button>
+                    </div>
+                    <textarea id="modal_description_hidden" name="description" style="display:none;"></textarea>
                 </div>
 
-                <div style="margin-bottom:24px;">
-                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Job Description & Candidate Requirements</label>
-                    <textarea name="description" rows="7" placeholder="Paste full job description, qualifications, and core requirements here..." required style="resize:vertical; padding:12px; font-size:13px;"></textarea>
-                </div>
-                
                 <div style="display:flex; justify-content:flex-end; gap:12px;">
                     <button type="button" onclick="closePostJobModal()" class="btn-secondary" style="padding:10px 20px;">Cancel</button>
                     <button type="submit" class="btn-primary" style="padding:10px 24px; width:auto; border-radius:10px;">Publish Job Position &rarr;</button>
@@ -534,6 +549,67 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
         from { opacity: 0; transform: scale(0.95); }
         to { opacity: 1; transform: scale(1); }
     }
+    .jd-suggest-chip {
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--bdr);
+        background: var(--dim);
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--txt);
+    }
+    .jd-suggest-chip:hover {
+        border-color: var(--keria-lime-hover, #C2F025);
+        background: var(--surf);
+    }
+    .jd-section-card {
+        border: 1px solid var(--bdr);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 10px;
+        background: var(--surf);
+    }
+    .jd-section-title {
+        flex: 1;
+        padding: 8px 10px;
+        font-size: 13px;
+        font-weight: 700;
+        border-radius: 8px;
+        border: 1.5px solid var(--bdr);
+        background: var(--card-solid, #fff);
+        color: var(--txt);
+    }
+    .jd-section-remove-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        border: 1px solid var(--bdr);
+        background: var(--dim);
+        cursor: pointer;
+        color: var(--red, #FF4D6A);
+        flex-shrink: 0;
+    }
+    .jd-section-toolbar-btn {
+        border-radius: 6px;
+        border: 1px solid var(--bdr);
+        background: var(--dim);
+        cursor: pointer;
+        font-size: 11px;
+        height: 28px;
+    }
+    .jd-section-content {
+        width: 100%;
+        box-sizing: border-box;
+        resize: vertical;
+        padding: 10px;
+        font-size: 13px;
+        border-radius: 8px;
+        border: 1.5px solid var(--bdr);
+        background: var(--card-solid, #fff);
+        color: var(--txt);
+        font-family: inherit;
+    }
     </style>
 
     <script>
@@ -543,7 +619,170 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
     function closePostJobModal() {
         document.getElementById('postJobModal').style.display = 'none';
     }
-    
+
+    // Updates the "Min/Max Salary" field labels to match the chosen rate type.
+    function updateSalaryRateLabels(selectId, minLabelId, maxLabelId) {
+        var rate = document.getElementById(selectId).value;
+        var unit = rate === 'daily' ? 'RM/day' : rate === 'weekly' ? 'RM/week' : 'RM/mo';
+        document.getElementById(minLabelId).textContent = 'Min Salary (' + unit + ')';
+        document.getElementById(maxLabelId).textContent = 'Max Salary (' + unit + ')';
+    }
+
+    // Wraps the selected text in a textarea with before/after markers (e.g. ** **).
+    function jdWrapSelection(textareaId, before, after) {
+        var ta = document.getElementById(textareaId);
+        var start = ta.selectionStart, end = ta.selectionEnd;
+        var selected = ta.value.substring(start, end) || 'text';
+        ta.value = ta.value.substring(0, start) + before + selected + after + ta.value.substring(end);
+        ta.focus();
+        ta.selectionStart = start + before.length;
+        ta.selectionEnd = start + before.length + selected.length;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    // Prefixes every line touched by the current selection with the given
+    // marker ("- " or "• " for a bullet). If a line already starts with a
+    // DIFFERENT bullet marker, that one is replaced rather than stacking a
+    // second marker in front of it (which used to produce "• - text").
+    var JD_BULLET_MARKER_RE = /^[-*•]\s+/;
+    function jdPrefixLines(textareaId, prefix) {
+        var ta = document.getElementById(textareaId);
+        var start = ta.selectionStart, end = ta.selectionEnd;
+        var value = ta.value;
+        var lineStart = value.lastIndexOf('\n', start - 1) + 1;
+        var lineEnd = value.indexOf('\n', end);
+        if (lineEnd === -1) lineEnd = value.length;
+        var block = value.substring(lineStart, lineEnd);
+        var lines = block.split('\n').map(function(l) {
+            if (l.trim() === '') return l;
+            if (JD_BULLET_MARKER_RE.test(l)) return l.replace(JD_BULLET_MARKER_RE, prefix);
+            return prefix + l;
+        });
+        var newBlock = lines.join('\n');
+        ta.value = value.substring(0, lineStart) + newBlock + value.substring(lineEnd);
+        ta.focus();
+        ta.selectionStart = lineStart;
+        ta.selectionEnd = lineStart + newBlock.length;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    // Job description "section cards" — lets an employer build the description
+    // out of titled blocks (Responsibilities, Benefits, etc.) instead of one
+    // big text box. Behind the scenes these get stitched into the same
+    // "## Title" + content text the formatter already understands, and that
+    // combined text is what actually gets submitted as `description` — so no
+    // backend or display code needed to change for this.
+    var jdSectionCounter = 0;
+
+    function jdAddSection(containerId, hiddenFieldId, presetTitle, presetContent) {
+        jdSectionCounter++;
+        var cardId = 'jdSection_' + jdSectionCounter;
+        var taId = cardId + '_ta';
+        var container = document.getElementById(containerId);
+        var card = document.createElement('div');
+        card.className = 'jd-section-card';
+        card.id = cardId;
+
+        var titleInput = document.createElement('input');
+        titleInput.type = 'text';
+        titleInput.className = 'jd-section-title';
+        titleInput.placeholder = 'Section title, e.g. Responsibilities';
+        titleInput.value = presetTitle || '';
+        titleInput.addEventListener('input', function () { jdSyncDescription(containerId, hiddenFieldId); });
+
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'jd-section-remove-btn';
+        removeBtn.title = 'Remove section';
+        removeBtn.textContent = '✕';
+        removeBtn.addEventListener('click', function () { jdRemoveSection(cardId, containerId, hiddenFieldId); });
+
+        var headerRow = document.createElement('div');
+        headerRow.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:8px;';
+        headerRow.appendChild(titleInput);
+        headerRow.appendChild(removeBtn);
+
+        var boldBtn = document.createElement('button');
+        boldBtn.type = 'button';
+        boldBtn.className = 'jd-section-toolbar-btn';
+        boldBtn.style.cssText = 'width:28px; font-weight:800;';
+        boldBtn.title = 'Bold';
+        boldBtn.textContent = 'B';
+        boldBtn.addEventListener('click', function () { jdWrapSelection(taId, '**', '**'); });
+
+        var dashListBtn = document.createElement('button');
+        dashListBtn.type = 'button';
+        dashListBtn.className = 'jd-section-toolbar-btn';
+        dashListBtn.style.cssText = 'padding:0 8px;';
+        dashListBtn.title = 'Bullet list (dash)';
+        dashListBtn.innerHTML = '&ndash; List';
+        dashListBtn.addEventListener('click', function () { jdPrefixLines(taId, '- '); });
+
+        var dotListBtn = document.createElement('button');
+        dotListBtn.type = 'button';
+        dotListBtn.className = 'jd-section-toolbar-btn';
+        dotListBtn.style.cssText = 'padding:0 8px;';
+        dotListBtn.title = 'Bullet list (round)';
+        dotListBtn.innerHTML = '&bull; List';
+        dotListBtn.addEventListener('click', function () { jdPrefixLines(taId, '• '); });
+
+        var toolbarRow = document.createElement('div');
+        toolbarRow.style.cssText = 'display:flex; gap:6px; margin-bottom:6px;';
+        toolbarRow.appendChild(boldBtn);
+        toolbarRow.appendChild(dashListBtn);
+        toolbarRow.appendChild(dotListBtn);
+
+        var contentArea = document.createElement('textarea');
+        contentArea.id = taId;
+        contentArea.className = 'jd-section-content';
+        contentArea.rows = 4;
+        contentArea.placeholder = "Write this section's content...";
+        contentArea.value = presetContent || '';
+        contentArea.addEventListener('input', function () { jdSyncDescription(containerId, hiddenFieldId); });
+
+        card.appendChild(headerRow);
+        card.appendChild(toolbarRow);
+        card.appendChild(contentArea);
+        container.appendChild(card);
+
+        jdSyncDescription(containerId, hiddenFieldId);
+        contentArea.focus();
+    }
+
+    function jdRemoveSection(cardId, containerId, hiddenFieldId) {
+        var card = document.getElementById(cardId);
+        if (card) card.remove();
+        jdSyncDescription(containerId, hiddenFieldId);
+    }
+
+    // Combines every section card into the same "## Title\ncontent" text the
+    // description formatter (job_description_helper.php) already parses.
+    function jdSyncDescription(containerId, hiddenFieldId) {
+        var container = document.getElementById(containerId);
+        var cards = container.querySelectorAll('.jd-section-card');
+        var combined = '';
+        cards.forEach(function (card) {
+            var title = card.querySelector('.jd-section-title').value.trim();
+            var content = card.querySelector('.jd-section-content').value.trim();
+            if (!title && !content) return;
+            if (title) combined += '## ' + title + '\n';
+            if (content) combined += content + '\n';
+            combined += '\n';
+        });
+        document.getElementById(hiddenFieldId).value = combined.trim();
+    }
+
+    // Keeps the combined text fresh right before submit (covers any edge case
+    // where an input event was missed) and blocks submit if nothing was written.
+    function jdValidateBeforeSubmit(containerId, hiddenFieldId) {
+        jdSyncDescription(containerId, hiddenFieldId);
+        if (!document.getElementById(hiddenFieldId).value.trim()) {
+            alert('Please fill in at least one job description section before publishing.');
+            return false;
+        }
+        return true;
+    }
+
     // Close on ESC key or clicking outside content box
     window.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') closePostJobModal();
@@ -556,6 +795,9 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
     if (window.location.search.indexOf('open_post=1') > -1) {
         openPostJobModal();
     }
+
+    // Seed the description builder with one starting section so it's never empty.
+    jdAddSection('modal_jd_sections', 'modal_description_hidden', 'Job Requirements');
 
     function filterJobsGrid() {
         var input = document.getElementById('jobSearchInput');

@@ -396,6 +396,7 @@ $count_total = count($all_resumes);
                 <a href="admin_dashboard.php">🛡️ Admin Control Panel</a>
                 <a href="admin_resumes.php" class="active">📄 Resumes & Export</a>
                 <a href="admin_logs.php">📜 Audit Logs</a>
+                <a href="admin_api_logs.php">🔑 API Usage Logs</a>
                 <a href="profile.php">⚙️ Settings</a>
             </nav>
 

@@ -1,6 +1,7 @@
 <?php
 // ai.php
 require_once __DIR__ . '/config_manager.php';
+require_once __DIR__ . '/gemini_logs_helper.php';
 
 function get_api_key() {
     $config = load_app_config();
@@ -23,7 +24,8 @@ function save_api_config($key, $model = 'gemini-3.6-flash') {
     save_app_config($curr_config);
 }
 
-function call_gemini_api($api_key, $prompt) {
+function call_gemini_api($api_key, $prompt, $source = 'unknown') {
+    global $pdo;
     $selected_model = $_SESSION['ai_model'] ?? 'gemini-3.6-flash';
     $models_to_try = array_unique([
         $selected_model,
@@ -36,9 +38,11 @@ function call_gemini_api($api_key, $prompt) {
     ]);
 
     $last_error = null;
+    $attempt_number = 0;
     foreach ($models_to_try as $model) {
+        $attempt_number++;
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/' . urlencode($model) . ':generateContent?key=' . trim($api_key);
-        
+
         $payload = [
             'contents' => [
                 [
@@ -54,6 +58,7 @@ function call_gemini_api($api_key, $prompt) {
             ]
         ];
 
+        $started_at = microtime(true);
         try {
             $ch = @curl_init($url);
             if ($ch === false) continue;
@@ -72,6 +77,7 @@ function call_gemini_api($api_key, $prompt) {
             $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $curl_err = curl_error($ch);
             curl_close($ch);
+            $latency_ms = (int) round((microtime(true) - $started_at) * 1000);
 
             if ($http_code === 200 && !empty($response)) {
                 $data = json_decode($response, true);
@@ -84,15 +90,19 @@ function call_gemini_api($api_key, $prompt) {
                     }
                 }
                 if (!empty($text_output)) {
+                    log_gemini_api_call($pdo, $source, $model, $attempt_number, $http_code, true, $latency_ms);
                     return $text_output;
                 }
+                log_gemini_api_call($pdo, $source, $model, $attempt_number, $http_code, false, $latency_ms, 'Empty response text');
             } else {
                 $msg = !empty($curl_err) ? $curl_err : "HTTP $http_code Response";
                 $last_error = "Gemini API Call Failed ($model): " . $msg;
                 error_log($last_error);
+                log_gemini_api_call($pdo, $source, $model, $attempt_number, $http_code ?: null, false, $latency_ms, substr($msg, 0, 500));
             }
         } catch (Throwable $t) {
             error_log("Gemini cURL Throwable: " . $t->getMessage());
+            log_gemini_api_call($pdo, $source, $model, $attempt_number, null, false, null, substr($t->getMessage(), 0, 500));
         }
     }
 
@@ -104,6 +114,7 @@ function call_gemini_api($api_key, $prompt) {
  * @return array ['status' => 'active'|'not_configured'|'invalid_key'|'model_not_found'|'unreachable'|'error', 'message' => string]
  */
 function check_api_key_status($api_key, $model = 'gemini-3.6-flash') {
+    global $pdo;
     if (empty($api_key)) {
         return ['status' => 'not_configured', 'message' => 'No Gemini API key has been configured yet.'];
     }
@@ -127,20 +138,25 @@ function check_api_key_status($api_key, $model = 'gemini-3.6-flash') {
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
     curl_setopt($ch, CURLOPT_TIMEOUT, 8);
 
+    $started_at = microtime(true);
     $response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curl_err = curl_error($ch);
     curl_close($ch);
+    $latency_ms = (int) round((microtime(true) - $started_at) * 1000);
 
     if ($http_code === 0) {
+        log_gemini_api_call($pdo, 'health_check', $model, 1, null, false, $latency_ms, $curl_err ?: 'Unreachable');
         return ['status' => 'unreachable', 'message' => $curl_err ?: 'Could not reach the Google Gemini API.'];
     }
     if ($http_code === 200) {
+        log_gemini_api_call($pdo, 'health_check', $model, 1, $http_code, true, $latency_ms);
         return ['status' => 'active', 'message' => 'Gemini API key and model are active & working.'];
     }
 
     $data = json_decode($response, true);
     $err_msg = $data['error']['message'] ?? "Unexpected HTTP $http_code response.";
+    log_gemini_api_call($pdo, 'health_check', $model, 1, $http_code, false, $latency_ms, substr($err_msg, 0, 500));
 
     if ($http_code === 400 || $http_code === 403 || $http_code === 401) {
         if (stripos($err_msg, 'API_KEY_INVALID') !== false || stripos($err_msg, 'API key not valid') !== false || $http_code === 401) {
@@ -290,7 +306,7 @@ function generate_fallback_snapshot($stripped_text, $role_description) {
     ];
 }
 
-function generate_snapshot($api_key, $stripped_text, $role_description) {
+function generate_snapshot($api_key, $stripped_text, $role_description, $source = 'unknown') {
     if (!empty($api_key)) {
         try {
             $prompt = <<<PROMPT
@@ -356,8 +372,8 @@ Tone and Constraints:
 - Mark scores critically low (0) if non-resume file is uploaded.
 PROMPT;
 
-            $response = call_gemini_api($api_key, $prompt);
-            
+            $response = call_gemini_api($api_key, $prompt, $source);
+
             // Extract JSON object using regex substring match
             $data = null;
             if (preg_match('/\{[\s\S]*\}/', $response, $matches)) {
@@ -445,7 +461,7 @@ function generate_fallback_resume_review($stripped_text) {
     ];
 }
 
-function generate_resume_review($api_key, $stripped_text) {
+function generate_resume_review($api_key, $stripped_text, $source = 'resume_checker') {
     if (!empty($api_key)) {
         try {
             $prompt = <<<PROMPT
@@ -484,7 +500,7 @@ Output strictly a JSON object, no text outside the JSON:
 Tone: Encouraging but honest, like a career coach giving real feedback — not generic praise. Be specific to what's actually in the resume.
 PROMPT;
 
-            $response = call_gemini_api($api_key, $prompt);
+            $response = call_gemini_api($api_key, $prompt, $source);
 
             $data = null;
             if (preg_match('/\{[\s\S]*\}/', $response, $matches)) {
@@ -615,12 +631,12 @@ Keep the same number of experience/education entries as given in the input, in t
 PROMPT;
 }
 
-function generate_resume_document($api_key, $input) {
+function generate_resume_document($api_key, $input, $source = 'resume_builder') {
     if (!empty($api_key)) {
         try {
             $prompt = build_resume_prompt($input);
 
-            $response = call_gemini_api($api_key, $prompt);
+            $response = call_gemini_api($api_key, $prompt, $source);
 
             $data = null;
             if (preg_match('/\{[\s\S]*\}/', $response, $matches)) {
@@ -641,7 +657,7 @@ function generate_resume_document($api_key, $input) {
     return generate_fallback_resume_document($input);
 }
 
-function ai_resume_assist_bullets($api_key, $role, $company, $rough_notes) {
+function ai_resume_assist_bullets($api_key, $role, $company, $rough_notes, $source = 'resume_assist') {
     // Lightweight "help me word this" assist used by the AI chat-assist button
     // on an individual experience block. Returns a short list of suggested
     // bullet points the candidate can insert into their notes.
@@ -654,7 +670,7 @@ A candidate is writing their resume and typed these rough notes about their role
 
 Rewrite and ELABORATE this into 3 full, professional resume bullet points — even if the notes are just a few words, expand them using standard, typical responsibilities and skills for a "{$role}" role (active verbs, complete professional phrasing, not just a tidied-up version of the exact words given). Do not invent specific numbers/metrics, employer names, or facts beyond what's stated — elaborate on scope and context, not on hard facts. Output strictly a JSON array of strings, nothing else, e.g. ["...", "...", "..."]
 PROMPT;
-            $response = call_gemini_api($api_key, $prompt);
+            $response = call_gemini_api($api_key, $prompt, $source);
             $data = null;
             if (preg_match('/\[[\s\S]*\]/', $response, $matches)) {
                 $data = json_decode($matches[0], true);

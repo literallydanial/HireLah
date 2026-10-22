@@ -139,6 +139,7 @@ $actions_list = $pdo->query("SELECT DISTINCT action FROM admin_logs ORDER BY act
                 <a href="admin_dashboard.php">🛡️ Admin Dashboard</a>
                 <a href="admin_resumes.php">📄 Resumes & Export</a>
                 <a href="admin_logs.php" class="active">📜 Audit Logs</a>
+                <a href="admin_api_logs.php">🔑 API Usage Logs</a>
             </nav>
 
             <div class="header-right-actions">

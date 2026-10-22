@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ai_data = null;
                     if ($api_key) {
                         try {
-                            $ai_data = generate_snapshot($api_key, $stripped, $job_desc);
+                            $ai_data = generate_snapshot($api_key, $stripped, $job_desc, 'bulk_upload');
                         } catch (Exception $e) {
                             $_SESSION['error'] = "AI Screening Notice: " . $e->getMessage();
                             error_log("AI Error: " . $e->getMessage());

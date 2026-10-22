@@ -2,6 +2,7 @@
 session_start();
 require_once 'db.php';
 require_once 'notifications_helper.php';
+require_once 'job_description_helper.php';
 
 $userNotifs = (isset($_SESSION['user_id']) && isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'candidate') ? getCandidateNotifications($pdo, $_SESSION['user_id']) : ['items' => [], 'unread_count' => 0];
 $notifItems = $userNotifs['items'];
@@ -72,6 +73,14 @@ if ($sort_by === 'salary_high') {
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $jobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Pre-render each description to safe HTML (bold/bullets/headings) here,
+// server-side, once -- the client-side click-to-view panel then just
+// injects this directly instead of re-implementing the formatter in JS.
+foreach ($jobs as &$job) {
+    $job['description_html'] = format_job_description($job['description'] ?? '');
+}
+unset($job);
 
 // Fetch each employer's company gallery media (images/videos)
 $mediaByEmployer = [];
@@ -2042,11 +2051,14 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                             if (!empty($selected_job['salary_text'])) {
                                 $sj_salary = htmlspecialchars($selected_job['salary_text']);
                             } elseif (!empty($selected_job['salary_min']) && !empty($selected_job['salary_max'])) {
-                                $sj_salary = 'RM ' . number_format($selected_job['salary_min']) . ' &ndash; RM ' . number_format($selected_job['salary_max']) . ' / month';
+                                $sj_unit = job_salary_unit_label($selected_job['salary_rate_type'] ?? null);
+                                $sj_salary = 'RM ' . number_format($selected_job['salary_min']) . ' &ndash; RM ' . number_format($selected_job['salary_max']) . ' ' . $sj_unit;
                             } elseif (!empty($selected_job['salary_min'])) {
-                                $sj_salary = 'From RM ' . number_format($selected_job['salary_min']) . ' / month';
+                                $sj_unit = job_salary_unit_label($selected_job['salary_rate_type'] ?? null);
+                                $sj_salary = 'From RM ' . number_format($selected_job['salary_min']) . ' ' . $sj_unit;
                             } elseif (!empty($selected_job['salary_max'])) {
-                                $sj_salary = 'Up to RM ' . number_format($selected_job['salary_max']) . ' / month';
+                                $sj_unit = job_salary_unit_label($selected_job['salary_rate_type'] ?? null);
+                                $sj_salary = 'Up to RM ' . number_format($selected_job['salary_max']) . ' ' . $sj_unit;
                             }
                         ?>
                         <!-- Server-rendered so search engines and social-share previews see the
@@ -2070,7 +2082,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                             <div class="job-desc-header-row">
                                 <div class="job-desc-main-title"><span>📄</span><span>Job Description</span></div>
                             </div>
-                            <p class="job-desc-paragraph"><?= nl2br(htmlspecialchars($selected_job['description'] ?? '')) ?></p>
+                            <?= format_job_description($selected_job['description'] ?? '') ?>
                         </div>
                         <?php else: ?>
                         <!-- Loaded dynamically via JS -->
@@ -2202,14 +2214,17 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             if (job.salary_text && job.salary_text.trim()) {
                 return escapeHtml(job.salary_text.trim());
             }
+            const unit = job.salary_rate_type === 'daily' ? '/ day'
+                       : job.salary_rate_type === 'weekly' ? '/ week'
+                       : '/ month';
             const min = job.salary_min ? parseInt(job.salary_min) : null;
             const max = job.salary_max ? parseInt(job.salary_max) : null;
             if (min && max) {
-                return `RM ${min.toLocaleString()} – RM ${max.toLocaleString()} / month`;
+                return `RM ${min.toLocaleString()} – RM ${max.toLocaleString()} ${unit}`;
             } else if (min) {
-                return `From RM ${min.toLocaleString()} / month`;
+                return `From RM ${min.toLocaleString()} ${unit}`;
             } else if (max) {
-                return `Up to RM ${max.toLocaleString()} / month`;
+                return `Up to RM ${max.toLocaleString()} ${unit}`;
             }
             return 'Salary Undisclosed';
         }
@@ -2493,7 +2508,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                         <span class="job-desc-subtext">Key details, responsibilities and requirements for this role.</span>
                     </div>
 
-                    ${job.description ? `<p class="job-desc-paragraph">${escapeHtml(job.description)}</p>` : ''}
+                    ${job.description_html || ''}
                     ${respHtml}
                     ${reqHtml}
                 </div>

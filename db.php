@@ -114,6 +114,19 @@ try {
         }
     }
 
+    // Auto-verify jobs.salary_rate_type availability (self-healing migration on deploy) --
+    // lets a posting's salary be tagged as a daily, weekly, or monthly rate instead of
+    // always being assumed monthly, so part-time/gig postings can show the right unit.
+    try {
+        $pdo->query("SELECT salary_rate_type FROM jobs LIMIT 1");
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec("ALTER TABLE jobs ADD COLUMN salary_rate_type VARCHAR(20) NOT NULL DEFAULT 'monthly' AFTER salary_max");
+        } catch (\Throwable $migErr) {
+            error_log("Jobs salary_rate_type migration notice: " . $migErr->getMessage());
+        }
+    }
+
     // Auto-verify management role schema & seed account (self-healing migration on deploy)
     try {
         $roleCol = $pdo->query("SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role'")->fetch();

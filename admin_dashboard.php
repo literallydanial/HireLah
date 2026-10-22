@@ -818,6 +818,7 @@ $jobs_list = $pdo->query("
                 </a>
                 <a href="admin_resumes.php">📄 Resumes & Export</a>
                 <a href="admin_logs.php">📜 Audit Logs</a>
+                <a href="admin_api_logs.php">🔑 API Usage Logs</a>
                 <a href="university_dashboard.php">🎓 University Dashboard</a>
                 <a href="profile.php">⚙️ Settings</a>
             </nav>

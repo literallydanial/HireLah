@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($c_data && !empty($c_data['stripped_text'])) {
             try {
-                $ai_data = generate_snapshot($api_key, $c_data['stripped_text'], $c_data['job_desc'] ?? '');
+                $ai_data = generate_snapshot($api_key, $c_data['stripped_text'], $c_data['job_desc'] ?? '', 'manual_rescreen');
                 
                 $up_stmt = $pdo->prepare("UPDATE candidates SET 
                     recommendation = ?, overall_score = ?, skills_match = ?, exp_match = ?, edu_match = ?,
@@ -232,7 +232,7 @@ if (empty($c['screened']) && !empty($c['stripped_text'])) {
     $auto_api_key = get_api_key();
     if ($auto_api_key) {
         try {
-            $ai_data = generate_snapshot($auto_api_key, $c['stripped_text'], $c['job_desc'] ?? '');
+            $ai_data = generate_snapshot($auto_api_key, $c['stripped_text'], $c['job_desc'] ?? '', 'auto_screen');
             
             $up_stmt = $pdo->prepare("UPDATE candidates SET 
                 recommendation = ?, overall_score = ?, skills_match = ?, exp_match = ?, edu_match = ?,
