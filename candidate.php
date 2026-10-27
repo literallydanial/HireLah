@@ -1,27 +1,121 @@
 <?php
 session_start();
+require_once 'auth.php';
 require 'db.php';
 require_once 'questionnaire_helpers.php';
 require_once 'employer_helpers.php';
 require_once 'company_helpers.php';
-$active_company_id = (($_SESSION['user_role'] ?? '') === 'employer') ? get_active_company_id($pdo) : null;
 
 $id = $_GET['id'] ?? null;
 if (!$id) {
-    $redirect = ($_SESSION['user_role'] ?? '') === 'employer' ? "employer_dashboard.php" : "index.php";
+    $redirect = ($_SESSION['user_role'] ?? '') === 'employer' ? "employer_dashboard.php" : (($_SESSION['user_role'] ?? '') === 'candidate' ? "candidate_dashboard.php" : "index.php");
+    header("Location: $redirect");
+    exit;
+}
+
+// 1. Mandatory authentication check — candidate records are private and require login
+if (!is_logged_in()) {
+    $_SESSION['error'] = "You must be logged in to view this application.";
+    $_SESSION['redirect_after_login'] = "candidate.php?id=" . urlencode($id);
+    header("Location: login.php");
+    exit;
+}
+
+$user_role = $_SESSION['user_role'] ?? '';
+$user_id = (int)$_SESSION['user_id'];
+$active_company_id = ($user_role === 'employer') ? get_active_company_id($pdo) : null;
+
+// 2. Fetch candidate and job relationship details for authorization check
+$stmt = $pdo->prepare("SELECT c.*, j.employer_id, j.company_id, j.job_title, j.description as job_desc, j.status as job_status, j.deleted_at as job_deleted_at, u.profile_picture 
+FROM candidates c 
+LEFT JOIN jobs j ON c.job_id = j.id 
+LEFT JOIN users u ON (c.user_id = u.id OR (c.user_id IS NULL AND c.email = u.email AND c.email IS NOT NULL AND c.email != '')) 
+WHERE c.id = ?");
+$stmt->execute([$id]);
+$c = $stmt->fetch();
+
+if (!$c) {
+    $_SESSION['toast'] = "Candidate not found or deleted.";
+    $redirect = ($user_role === 'employer') ? "employer_dashboard.php" : (($user_role === 'candidate') ? "candidate_dashboard.php" : "index.php");
+    header("Location: $redirect");
+    exit;
+}
+
+// 3. Authorization check — only respective employer, admin, or the applicant themselves
+$has_access = false;
+
+if ($user_role === 'admin') {
+    $has_access = true;
+} elseif ($user_role === 'employer') {
+    if (!empty($c['employer_id']) && (int)$c['employer_id'] === $user_id) {
+        $has_access = true;
+    } elseif (!empty($c['company_id'])) {
+        if ($active_company_id && (int)$active_company_id === (int)$c['company_id']) {
+            $has_access = true;
+        } else {
+            $cm_stmt = $pdo->prepare("SELECT 1 FROM company_members WHERE company_id = ? AND user_id = ? LIMIT 1");
+            $cm_stmt->execute([(int)$c['company_id'], $user_id]);
+            if ($cm_stmt->fetchColumn()) {
+                $has_access = true;
+            }
+        }
+    }
+} elseif ($user_role === 'candidate') {
+    if (!empty($c['user_id']) && (int)$c['user_id'] === $user_id) {
+        $has_access = true;
+    } else {
+        $u_email_stmt = $pdo->prepare("SELECT email FROM users WHERE id = ?");
+        $u_email_stmt->execute([$user_id]);
+        $u_email = trim($u_email_stmt->fetchColumn() ?: '');
+        if ($u_email !== '' && !empty($c['email']) && strcasecmp($u_email, trim($c['email'])) === 0) {
+            $has_access = true;
+            if (empty($c['user_id'])) {
+                $pdo->prepare("UPDATE candidates SET user_id = ? WHERE id = ?")->execute([$user_id, $id]);
+                $c['user_id'] = $user_id;
+            }
+        }
+    }
+}
+
+if (!$has_access) {
+    $_SESSION['toast'] = "Access denied. You do not have permission to view this candidate.";
+    $redirect = ($user_role === 'employer') ? "employer_dashboard.php" : (($user_role === 'candidate') ? "candidate_dashboard.php" : "index.php");
     header("Location: $redirect");
     exit;
 }
 
 require_once 'ai.php';
 
+if (!function_exists('format_discussion_message')) {
+    function format_discussion_message($text, $is_me = false) {
+        $escaped = htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+        $pattern = '~(https?://[^\s<]+)~i';
+        $linkColor = $is_me ? '#D9FF4F' : 'var(--acc, #6B8A00)';
+        $escaped = preg_replace_callback($pattern, function($m) use ($linkColor) {
+            $url = $m[1];
+            $trailing = '';
+            if (preg_match('/[.,;!?)]+$/', $url, $punct)) {
+                $trailing = $punct[0];
+                $url = substr($url, 0, -strlen($trailing));
+            }
+            return '<a href="' . $url . '" target="_blank" rel="noopener noreferrer" style="color:' . $linkColor . '; text-decoration:underline; word-break:break-all; overflow-wrap:anywhere;">' . $url . '</a>' . $trailing;
+        }, $escaped);
+        return nl2br($escaped);
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action']) && $_POST['action'] === 'delete') {
-        $stmt = $pdo->prepare("DELETE FROM candidates WHERE id = ?");
-        $stmt->execute([$id]);
+        if (!in_array($user_role, ['employer', 'admin'], true)) {
+            $_SESSION['toast'] = "Permission denied. Only employers and admins can delete candidate applications.";
+            header("Location: candidate.php?id=$id");
+            exit;
+        }
+        $del_stmt = $pdo->prepare("DELETE FROM candidates WHERE id = ?");
+        $del_stmt->execute([$id]);
         $_SESSION['toast'] = "Candidate application deleted.";
         
-        $redirect = ($_SESSION['user_role'] ?? '') === 'employer' ? "employer_dashboard.php" : (($_SESSION['user_role'] ?? '') === 'candidate' ? "candidate_dashboard.php" : "admin_dashboard.php");
+        $redirect = ($user_role === 'employer') ? "employer_dashboard.php" : "admin_dashboard.php";
         header("Location: $redirect");
         exit;
     }
@@ -182,19 +276,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['toast'] = "Interview proposed, but email delivery failed: " . htmlspecialchars($mail_res['error']);
             }
         }
-        header("Location: candidate.php?id=$id");
+        header("Location: candidate.php?id=$id&tab=discussion");
         exit;
     }
 
     if (isset($_POST['action']) && $_POST['action'] === 'send_message') {
         $body = trim($_POST['message_body'] ?? '');
+        $is_ajax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || (!empty($_POST['ajax_fetch']));
         if (!empty($body)) {
             $sender_role = ($_SESSION['user_role'] ?? '') === 'candidate' ? 'candidate' : 'employer';
             $ins = $pdo->prepare("INSERT INTO messages (candidate_id, sender_role, sender_id, body) VALUES (?, ?, ?, ?)");
             $ins->execute([$id, $sender_role, $_SESSION['user_id'], $body]);
+            $msg_id = $pdo->lastInsertId();
+
+            if ($is_ajax) {
+                header('Content-Type: application/json');
+                $sender_name = $_SESSION['user_name'] ?? ($_SESSION['company_name'] ?? ucfirst($sender_role));
+                if (!empty($_SESSION['user_id'])) {
+                    $u_stmt = $pdo->prepare("SELECT name FROM users WHERE id = ?");
+                    $u_stmt->execute([$_SESSION['user_id']]);
+                    $u_name = $u_stmt->fetchColumn();
+                    if ($u_name) $sender_name = $u_name;
+                }
+                
+                $cnt_stmt = $pdo->prepare("SELECT COUNT(*) FROM messages WHERE candidate_id = ?");
+                $cnt_stmt->execute([$id]);
+                $total_count = (int)$cnt_stmt->fetchColumn();
+
+                $msg_html = format_discussion_message($body, true);
+                $time_str = date('M j, g:i a');
+
+                echo json_encode([
+                    'success' => true,
+                    'total_count' => $total_count,
+                    'message' => [
+                        'id' => $msg_id,
+                        'sender_name' => $sender_name,
+                        'sender_role' => ucfirst($sender_role),
+                        'time' => $time_str,
+                        'body_html' => $msg_html
+                    ]
+                ]);
+                exit;
+            }
+
             $_SESSION['toast'] = "Message sent!";
+        } else {
+            if ($is_ajax) {
+                header('Content-Type: application/json');
+                echo json_encode(['success' => false, 'error' => 'Message cannot be empty.']);
+                exit;
+            }
         }
-        header("Location: candidate.php?id=$id");
+        header("Location: candidate.php?id=" . urlencode($id) . "&tab=discussion");
         exit;
     }
 
@@ -210,21 +344,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: candidate.php?id=$id");
         exit;
     }
-}
-
-$stmt = $pdo->prepare("SELECT c.*, j.job_title, j.description as job_desc, u.profile_picture 
-FROM candidates c 
-LEFT JOIN jobs j ON c.job_id = j.id 
-LEFT JOIN users u ON (c.user_id = u.id OR (c.user_id IS NULL AND c.email = u.email AND c.email IS NOT NULL AND c.email != '')) 
-WHERE c.id = ?");
-$stmt->execute([$id]);
-$c = $stmt->fetch();
-
-if (!$c) {
-    $_SESSION['toast'] = "Candidate not found or deleted.";
-    $redirect = ($_SESSION['user_role'] ?? '') === 'employer' ? "employer_dashboard.php" : "index.php";
-    header("Location: $redirect");
-    exit;
 }
 
 // Automatic AI Screening on Page Load if candidate is unscreened
@@ -339,6 +458,26 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
         .bar-bg { flex:1; height:6px; background:var(--dim); border-radius:3px; overflow:hidden; }
         .bar-fill { height:100%; border-radius:3px; }
         pre { white-space: pre-wrap; word-wrap: break-word; font-size: 12px; line-height: 1.5; font-family: inherit;}
+        #chatMessagesContainer {
+            overflow-y: auto;
+            overflow-x: hidden;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+        .chat-bubble {
+            max-width: 80%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.45;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            box-sizing: border-box;
+        }
+        .chat-bubble a {
+            word-break: break-all;
+            overflow-wrap: anywhere;
+        }
     </style>
 </head>
 <body>
@@ -380,7 +519,16 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
                     <?php endif; ?>
                     <div>
                         <div style="font-size:21px; font-weight:800; color:var(--txt);"><?= htmlspecialchars($c['name']) ?></div>
-                        <div style="font-size:12px; color:var(--acc); font-weight:700; margin-top:2px;">Applied for: <?= htmlspecialchars($c['job_title']) ?></div>
+                        <?php 
+                            $is_job_closed = strtolower($c['job_status'] ?? '') === 'deleted' || strtolower($c['job_status'] ?? '') === 'closed' || !empty($c['job_deleted_at']) || empty($c['job_title']);
+                            $job_display_name = !empty($c['job_title']) ? $c['job_title'] : 'Archived Position';
+                        ?>
+                        <div style="font-size:12px; color:var(--acc); font-weight:700; margin-top:2px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span>Applied for: <?= htmlspecialchars($job_display_name) ?></span>
+                            <?php if ($is_job_closed): ?>
+                                <span style="background:rgba(107, 114, 128, 0.15); color:#6B7280; border:1px solid rgba(107, 114, 128, 0.3); font-size:11px; padding:2px 8px; border-radius:6px; font-weight:700;">📁 Position Closed</span>
+                            <?php endif; ?>
+                        </div>
                         <div style="font-size:12px; color:var(--mut); margin-top:3px; display:flex; gap:12px; flex-wrap:wrap;">
                             <?php if($c['email']): ?><span>📧 <?= htmlspecialchars($c['email']) ?></span><?php endif; ?>
                             <?php if($c['phone']): ?><span>📱 <?= htmlspecialchars($c['phone']) ?></span><?php endif; ?>
@@ -396,6 +544,16 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
                     <?php endif; ?>
                 </div>
             </div>
+
+            <?php if ($is_job_closed): ?>
+                <div style="background:rgba(107, 114, 128, 0.08); border:1px solid rgba(107, 114, 128, 0.25); border-radius:10px; padding:10px 16px; margin-bottom:18px; display:flex; align-items:center; gap:10px; font-size:13px; color:var(--txt);">
+                    <span style="font-size:16px;">📁</span>
+                    <div>
+                        <strong>Notice:</strong> This job posting has been closed/archived by the employer.
+                        <span style="color:var(--mut); margin-left:4px;">Application records, evaluation notes, and discussion history are preserved.</span>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <!-- Action Bar (Status, Questionnaire & Delete) above Video -->
             <div style="display:flex; gap:10px; flex-wrap:wrap; background:var(--surf); border:1px solid var(--bdr); padding:12px 16px; border-radius:12px; margin-bottom:20px; align-items:center;">
@@ -471,19 +629,21 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
                 <div style="display:grid; grid-template-columns:auto 1fr; gap:20px; background:var(--surf); border:1px solid var(--bdr); border-radius:14px; padding:20px; margin-bottom:18px;">
                     <div class="score-circle"><span><?= $score ?></span></div>
                     <div>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
-                            <span class="chip" style="color:var(--org); border-color:var(--org); background:transparent; font-weight:700;">
-                                🏆 Rank #<?= $candidate_rank ?>
-                            </span>
-                            <?php
-                            $is_pass = ($c['recommendation'] == 'Strong Hire' || $c['recommendation'] == 'Hire');
-                            $pass_color = $is_pass ? 'var(--grn)' : 'var(--red)';
-                            ?>
-                            <span class="chip" style="color:<?= $pass_color ?>; border-color:<?= $pass_color ?>; background:transparent; font-weight:700;">
-                                <?= $is_pass ? '✅ Pass' : '❌ Fail' ?>
-                            </span>
-                            <span class="chip chip-<?= strtolower($c['status']) ?>"><?= htmlspecialchars($c['status']) ?></span>
-                        </div>
+                        <?php if(in_array($_SESSION['user_role'] ?? '', ['employer', 'admin'])): ?>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+                                <span class="chip" style="color:var(--org); border-color:var(--org); background:transparent; font-weight:700;">
+                                    🏆 Rank #<?= $candidate_rank ?>
+                                </span>
+                                <?php
+                                $is_pass = ($c['recommendation'] == 'Strong Hire' || $c['recommendation'] == 'Hire');
+                                $pass_color = $is_pass ? 'var(--grn)' : 'var(--red)';
+                                ?>
+                                <span class="chip" style="color:<?= $pass_color ?>; border-color:<?= $pass_color ?>; background:transparent; font-weight:700;">
+                                    <?= $is_pass ? '✅ Pass' : '❌ Fail' ?>
+                                </span>
+                                <span class="chip chip-<?= strtolower($c['status']) ?>"><?= htmlspecialchars($c['status']) ?></span>
+                            </div>
+                        <?php endif; ?>
                         
                         <div style="font-size:11px; color:var(--acc); font-weight:700; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:4px;">Candidate Summary</div>
                         <div style="font-size:13px; color:var(--txt); line-height:1.6;"><?= htmlspecialchars($c['summary']) ?></div>
@@ -643,12 +803,12 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
                     <div style="font-size:14px; font-weight:800; color:var(--txt); margin-bottom:14px; display:flex; align-items:center; justify-content:space-between;">
                         <div style="display:flex; align-items:center; gap:8px;">
                             <span>💬 Application Discussion Thread</span>
-                            <span class="chip" style="font-size:10px; background:rgba(217, 255, 79, 0.15); color:var(--acc); border-color:transparent;"><?= count($application_messages) ?> Messages</span>
+                            <span id="discussionMsgCountChip" class="chip" style="font-size:10px; background:rgba(217, 255, 79, 0.15); color:var(--acc); border-color:transparent;"><?= count($application_messages) ?> Messages</span>
                         </div>
                     </div>
 
                     <!-- Chat Messages Scroll Container -->
-                    <div style="max-height:380px; overflow-y:auto; padding:14px; background:var(--card); border:1px solid var(--bdr); border-radius:10px; margin-bottom:14px;">
+                    <div id="chatMessagesContainer" style="max-height:380px; overflow-y:auto; overflow-x:hidden; padding:14px; background:var(--card); border:1px solid var(--bdr); border-radius:10px; margin-bottom:14px;">
                         <?php if(empty($application_messages)): ?>
                             <div style="text-align:center; padding:30px; color:var(--mut); font-size:13px;">
                                 💬 No messages sent yet. Send a message below to start the conversation!
@@ -657,12 +817,12 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
                             <?php foreach($application_messages as $m): 
                                 $is_me = (($_SESSION['user_role'] ?? '') === 'employer' && $m['sender_role'] === 'employer') || (($_SESSION['user_role'] ?? '') === 'candidate' && $m['sender_role'] === 'candidate');
                             ?>
-                                <div style="margin-bottom:12px; display:flex; flex-direction:column; align-items:<?= $is_me ? 'flex-end' : 'flex-start' ?>;">
-                                    <div style="font-size:10px; color:var(--mut); margin-bottom:3px;">
+                                <div style="margin-bottom:12px; display:flex; flex-direction:column; align-items:<?= $is_me ? 'flex-end' : 'flex-start' ?>; width:100%; box-sizing:border-box;">
+                                    <div style="font-size:10px; color:var(--mut); margin-bottom:3px; max-width:80%; word-break:break-word;">
                                         <strong><?= htmlspecialchars($m['sender_name'] ?: ucfirst($m['sender_role'])) ?></strong> (<?= ucfirst($m['sender_role']) ?>) &bull; <?= date('M j, g:i a', strtotime($m['created_at'])) ?>
                                     </div>
-                                    <div style="max-width:80%; padding:10px 14px; border-radius:12px; font-size:13px; line-height:1.45; <?= $is_me ? 'background:var(--grad-purple); color:#FFFFFF; border-bottom-right-radius:2px;' : 'background:var(--dim); color:var(--txt); border-bottom-left-radius:2px;' ?>">
-                                        <?= nl2br(htmlspecialchars($m['body'])) ?>
+                                    <div class="chat-bubble" style="<?= $is_me ? 'background:var(--grad-purple); color:#FFFFFF; border-bottom-right-radius:2px;' : 'background:var(--dim); color:var(--txt); border-bottom-left-radius:2px;' ?>">
+                                        <?= format_discussion_message($m['body'], $is_me) ?>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
@@ -670,10 +830,10 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
                     </div>
 
                     <!-- Send Message Input Form -->
-                    <form method="POST" style="display:flex; gap:10px; margin:0;">
+                    <form id="discussionMessageForm" method="POST" action="candidate.php?id=<?= urlencode($id) ?>&tab=discussion" style="display:flex; gap:10px; margin:0;">
                         <input type="hidden" name="action" value="send_message">
-                        <input type="text" name="message_body" placeholder="Type your message..." required style="margin:0; flex:1; font-size:13px; border-radius:10px; padding:10px 14px;">
-                        <button type="submit" class="btn-primary" style="width:auto; padding:10px 20px; font-size:13px; border-radius:10px;">Send &rarr;</button>
+                        <input type="text" id="discussionInput" name="message_body" placeholder="Type your message..." required autocomplete="off" style="margin:0; flex:1; font-size:13px; border-radius:10px; padding:10px 14px;">
+                        <button type="submit" id="discussionSendBtn" class="btn-primary" style="width:auto; padding:10px 20px; font-size:13px; border-radius:10px;">Send &rarr;</button>
                     </form>
                 </div>
             </div>
@@ -985,6 +1145,11 @@ function escapeHtml(str) {
     </div>
 
 <script>
+function scrollChatToBottom() {
+    const el = document.getElementById('chatMessagesContainer');
+    if (el) el.scrollTop = el.scrollHeight;
+}
+
 function switchMainTab(tabName) {
     document.querySelectorAll('.main-tab-content').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.main-tab-btn').forEach(el => {
@@ -1000,6 +1165,9 @@ function switchMainTab(tabName) {
         activeBtn.classList.add('active');
         activeBtn.style.background = 'linear-gradient(135deg, #B9D600, #0A0A0A)';
         activeBtn.style.color = '#FFFFFF';
+        if (tabName === 'discussion') {
+            setTimeout(scrollChatToBottom, 50);
+        }
     }
 }
 
@@ -1008,6 +1176,81 @@ document.addEventListener('DOMContentLoaded', function() {
     const tabParam = urlParams.get('tab') || window.location.hash.replace('#', '');
     if (['ai', 'discussion', 'questionnaires', 'resume'].includes(tabParam)) {
         switchMainTab(tabParam);
+    }
+    scrollChatToBottom();
+
+    // AJAX Discussion Thread Form Submission — sends message without leaving discussion tab
+    const msgForm = document.getElementById('discussionMessageForm');
+    if (msgForm) {
+        msgForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const input = document.getElementById('discussionInput');
+            const btn = document.getElementById('discussionSendBtn');
+            const bodyText = (input.value || '').trim();
+            if (!bodyText) return;
+
+            btn.disabled = true;
+            const originalBtnHtml = btn.innerHTML;
+            btn.textContent = 'Sending...';
+
+            const formData = new FormData(msgForm);
+            formData.append('ajax_fetch', '1');
+
+            const targetUrl = 'candidate.php?id=' + encodeURIComponent(<?= json_encode($id) ?>) + '&tab=discussion';
+
+            fetch(targetUrl, {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('HTTP status ' + res.status);
+                return res.json();
+            })
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnHtml;
+                if (data && data.success && data.message) {
+                    input.value = '';
+                    input.focus();
+
+                    // Append new message bubble smoothly without reloading
+                    const container = document.getElementById('chatMessagesContainer');
+                    if (container) {
+                        // Remove "No messages sent yet" placeholder if present
+                        const emptyPlaceholder = container.querySelector('div[style*="text-align:center"]');
+                        if (emptyPlaceholder) emptyPlaceholder.remove();
+
+                        const row = document.createElement('div');
+                        row.style.cssText = 'margin-bottom:12px; display:flex; flex-direction:column; align-items:flex-end; width:100%; box-sizing:border-box;';
+                        row.innerHTML = `
+                            <div style="font-size:10px; color:var(--mut); margin-bottom:3px; max-width:80%; word-break:break-word;">
+                                <strong>${escapeHtml(data.message.sender_name)}</strong> (${escapeHtml(data.message.sender_role)}) &bull; ${escapeHtml(data.message.time)}
+                            </div>
+                            <div class="chat-bubble" style="background:var(--grad-purple); color:#FFFFFF; border-bottom-right-radius:2px;">
+                                ${data.message.body_html}
+                            </div>
+                        `;
+                        container.appendChild(row);
+                        scrollChatToBottom();
+                    }
+
+                    // Update count in tab header and chip
+                    if (data.total_count) {
+                        const chip = document.getElementById('discussionMsgCountChip');
+                        if (chip) chip.textContent = data.total_count + ' Messages';
+                        const tabBtn = document.getElementById('tab_btn_discussion');
+                        if (tabBtn) tabBtn.innerHTML = `💬 Messages & Interview (${data.total_count})`;
+                    }
+                } else {
+                    window.location.href = targetUrl;
+                }
+            })
+            .catch(err => {
+                console.error('AJAX message error:', err);
+                window.location.href = targetUrl;
+            });
+        });
     }
 });
 

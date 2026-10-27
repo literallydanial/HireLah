@@ -9,6 +9,19 @@ $notifItems = $empNotifs['items'];
 $unreadCount = $empNotifs['unread_count'];
 $active_company_id = get_active_company_id($pdo);
 
+// Retrieve current company SSM registration number
+$curr_company_ssm = '';
+if ($active_company_id) {
+    $c_stmt = $pdo->prepare("SELECT ssm_number FROM companies WHERE id = ?");
+    $c_stmt->execute([$active_company_id]);
+    $curr_company_ssm = trim($c_stmt->fetchColumn() ?: '');
+}
+if (empty($curr_company_ssm)) {
+    $u_stmt = $pdo->prepare("SELECT ssm_number FROM users WHERE id = ?");
+    $u_stmt->execute([$_SESSION['user_id']]);
+    $curr_company_ssm = trim($u_stmt->fetchColumn() ?: '');
+}
+
 // Handle creation of a new job posting via popup modal
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'post_job') {
     $title = trim($_POST['job_title'] ?? '');
@@ -24,30 +37,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $require_video = isset($_POST['require_video']) ? 1 : 0;
     $desc = trim($_POST['description'] ?? '');
     $employer_id = $_SESSION['user_id'];
+    $ssm_number = trim($_POST['ssm_number'] ?? '');
+
+    if (empty($ssm_number)) {
+        $ssm_number = $curr_company_ssm;
+    }
+
+    if (empty($ssm_number)) {
+        $_SESSION['error'] = "SSM Registration Number is compulsory before a job can be posted. Please provide your official company SSM registration number.";
+        header("Location: job_dashboard.php?open_post=1");
+        exit;
+    }
 
     if (!empty($title) && !empty($desc) && $salary_min !== null && $salary_max !== null) {
+        // Persist SSM registration number to company and employer account
+        if ($active_company_id) {
+            $pdo->prepare("UPDATE companies SET ssm_number = ? WHERE id = ?")->execute([$ssm_number, $active_company_id]);
+        }
+        $pdo->prepare("UPDATE users SET ssm_number = ? WHERE id = ?")->execute([$ssm_number, $employer_id]);
+
         $stmt = $pdo->prepare("INSERT INTO jobs (employer_id, company_id, job_title, department, employment_type, work_mode, location, salary_min, salary_max, salary_rate_type, salary_text, perks, require_video, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
         if ($stmt->execute([$employer_id, $active_company_id, $title, $dept, $type, $mode, $location, $salary_min, $salary_max, $salary_rate_type, $salary_text, $perks, $require_video, $desc])) {
-            $_SESSION['toast'] = "Job position published successfully!";
+            $_SESSION['toast'] = "Job position published successfully with verified SSM registration number!";
             header("Location: job_dashboard.php");
             exit;
         }
     }
 }
 
-// Handle deletion of a job posting — any HR teammate on the same company can
-// manage a job now, not just whoever originally posted it.
+// Handle soft deletion (archive) of a job posting — retains all candidate application
+// history, metrics, and discussion records while removing it from the public job board.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_job') {
     $delete_id = $_POST['job_id'] ?? null;
     if ($delete_id) {
         if ($active_company_id) {
-            $del_stmt = $pdo->prepare("DELETE FROM jobs WHERE id = ? AND (company_id = ? OR (company_id IS NULL AND employer_id = ?))");
+            $del_stmt = $pdo->prepare("UPDATE jobs SET status = 'Deleted', deleted_at = NOW() WHERE id = ? AND (company_id = ? OR (company_id IS NULL AND employer_id = ?))");
             $del_stmt->execute([$delete_id, $active_company_id, $_SESSION['user_id']]);
         } else {
-            $del_stmt = $pdo->prepare("DELETE FROM jobs WHERE id = ? AND (employer_id = ? OR employer_id IS NULL)");
+            $del_stmt = $pdo->prepare("UPDATE jobs SET status = 'Deleted', deleted_at = NOW() WHERE id = ? AND (employer_id = ? OR employer_id IS NULL)");
             $del_stmt->execute([$delete_id, $_SESSION['user_id']]);
         }
-        $_SESSION['toast'] = "Job posting deleted successfully.";
+        $_SESSION['toast'] = "Job posting closed and archived. Candidate application history has been safely preserved.";
+        header("Location: job_dashboard.php");
+        exit;
+    }
+}
+
+// Handle restoration of an archived/deleted job posting back to Active
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'restore_job') {
+    $restore_id = $_POST['job_id'] ?? null;
+    if ($restore_id) {
+        if ($active_company_id) {
+            $res_stmt = $pdo->prepare("UPDATE jobs SET status = 'Active', deleted_at = NULL WHERE id = ? AND (company_id = ? OR (company_id IS NULL AND employer_id = ?))");
+            $res_stmt->execute([$restore_id, $active_company_id, $_SESSION['user_id']]);
+        } else {
+            $res_stmt = $pdo->prepare("UPDATE jobs SET status = 'Active', deleted_at = NULL WHERE id = ? AND (employer_id = ? OR employer_id IS NULL)");
+            $res_stmt->execute([$restore_id, $_SESSION['user_id']]);
+        }
+        $_SESSION['toast'] = "Job posting restored to Active status! It is now published and accepting applications again.";
         header("Location: job_dashboard.php");
         exit;
     }
@@ -70,11 +117,17 @@ $my_jobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Calculate summary metrics
 $total_jobs = count($my_jobs);
 $active_jobs = 0;
+$archived_jobs = 0;
 $total_applicants = 0;
 $total_shortlisted = 0;
 
 foreach ($my_jobs as $j) {
-    if (strtolower($j['status'] ?? 'active') === 'active') $active_jobs++;
+    $is_active = (strtolower($j['status'] ?? 'active') === 'active' && empty($j['deleted_at']));
+    if ($is_active) {
+        $active_jobs++;
+    } else {
+        $archived_jobs++;
+    }
     $total_applicants += (int)$j['applicant_count'];
     $total_shortlisted += (int)$j['shortlisted_count'];
 }
@@ -201,10 +254,30 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
             color: var(--grn);
             border: 1px solid rgba(0, 232, 122, 0.3);
         }
-        .status-closed {
+        .status-closed, .status-deleted {
             background: rgba(255, 77, 106, 0.12);
             color: var(--red);
             border: 1px solid rgba(255, 77, 106, 0.3);
+        }
+        .tab-pill-btn {
+            background: var(--surf);
+            border: 1px solid var(--bdr);
+            color: var(--mut);
+            font-size: 12px;
+            font-weight: 700;
+            padding: 7px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .tab-pill-btn:hover {
+            color: var(--txt);
+            border-color: var(--acc);
+        }
+        .tab-pill-btn.active {
+            background: linear-gradient(135deg, #B9D600, #0A0A0A);
+            color: #FFFFFF;
+            border-color: transparent;
         }
         .job-action-bar {
             display: flex;
@@ -343,9 +416,11 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
 
         <!-- Filter & Real-Time Search Control Bar -->
         <?php if (!empty($my_jobs)): ?>
-            <div class="panel" style="margin-bottom:24px; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-                <div style="font-size:13px; font-weight:700; color:var(--txt);">
-                    Showing <span style="color:var(--acc);"><?= count($my_jobs) ?></span> Job Postings
+            <div class="panel" style="margin-bottom:24px; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px;">
+                <div class="job-filter-tabs" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <button type="button" class="tab-pill-btn active" onclick="setJobStatusFilter('all', this)">All Jobs (<?= $total_jobs ?>)</button>
+                    <button type="button" class="tab-pill-btn" onclick="setJobStatusFilter('active', this)">🟢 Active (<?= $active_jobs ?>)</button>
+                    <button type="button" class="tab-pill-btn" onclick="setJobStatusFilter('archived', this)">📁 Closed / Deleted (<?= $archived_jobs ?>)</button>
                 </div>
                 <div style="display:flex; gap:10px; align-items:center; flex:1; max-width:380px;">
                     <input type="text" id="jobSearchInput" onkeyup="filterJobsGrid()" placeholder="🔍 Search jobs by title, department, mode..." style="padding:9px 14px; font-size:13px; border-radius:8px; border:1px solid var(--bdr); background:var(--surf); color:var(--txt);">
@@ -366,15 +441,17 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                     <?php 
                         $avg_score = $j['avg_job_score'] !== null ? round($j['avg_job_score']) : null;
                         $score_color = $avg_score >= 80 ? 'var(--grn)' : ($avg_score >= 60 ? 'var(--acc)' : ($avg_score >= 40 ? 'var(--org)' : 'var(--red)'));
+                        $is_closed = (strtolower($j['status'] ?? 'active') === 'deleted' || strtolower($j['status'] ?? 'active') === 'closed' || !empty($j['deleted_at']));
+                        $card_status = $is_closed ? 'archived' : 'active';
                     ?>
-                    <div class="job-card job-card-item" data-search="<?= htmlspecialchars(strtolower($j['job_title'] . ' ' . $j['department'] . ' ' . $j['employment_type'] . ' ' . $j['work_mode'])) ?>">
+                    <div class="job-card job-card-item" data-status="<?= $card_status ?>" data-search="<?= htmlspecialchars(strtolower($j['job_title'] . ' ' . $j['department'] . ' ' . $j['employment_type'] . ' ' . $j['work_mode'])) ?>" style="<?= $is_closed ? 'opacity:0.9; border-color:rgba(255, 77, 106, 0.25);' : '' ?>">
                         <div>
                             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
                                 <span class="meta-chip" style="background:rgba(59, 130, 246, 0.1); color:var(--acc); border-color:rgba(59, 130, 246, 0.25);">
                                     🏢 <?= htmlspecialchars($j['department'] ?: 'General') ?>
                                 </span>
-                                <span class="badge-status <?= strtolower($j['status'] ?? 'active') === 'active' ? 'status-active' : 'status-closed' ?>">
-                                    <?= htmlspecialchars($j['status'] ?? 'Active') ?>
+                                <span class="badge-status <?= $is_closed ? 'status-closed' : 'status-active' ?>">
+                                    <?= $is_closed ? '📁 Closed / Deleted' : htmlspecialchars($j['status'] ?? 'Active') ?>
                                 </span>
                             </div>
 
@@ -416,11 +493,19 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                             <a href="questionnaire.php?job_id=<?= (int)$j['id'] ?>" class="btn-secondary" style="padding:8px 11px; font-size:12px; text-decoration:none;" title="Manage Job Questionnaire">📋</a>
                             <a href="edit_job.php?id=<?= (int)$j['id'] ?>" class="btn-secondary" style="padding:8px 11px; font-size:12px; text-decoration:none;" title="Edit Job Details">✏️</a>
                             
-                            <form method="POST" onsubmit="return confirm('Are you sure you want to delete this job posting? All candidate applications for this job will also be removed.');" style="margin:0;">
-                                <input type="hidden" name="action" value="delete_job">
-                                <input type="hidden" name="job_id" value="<?= (int)$j['id'] ?>">
-                                <button type="submit" class="btn-secondary" style="padding:8px 11px; font-size:12px; color:var(--red); border-color:rgba(255, 77, 106, 0.3);" title="Delete Job Posting">🗑️</button>
-                            </form>
+                            <?php if($is_closed): ?>
+                                <form method="POST" onsubmit="return confirm('Restore this job posting back to Active status? It will be published to the job board again.');" style="margin:0;">
+                                    <input type="hidden" name="action" value="restore_job">
+                                    <input type="hidden" name="job_id" value="<?= (int)$j['id'] ?>">
+                                    <button type="submit" class="btn-secondary" style="padding:8px 11px; font-size:12px; color:var(--grn); border-color:rgba(0, 232, 122, 0.35);" title="Restore Job to Active">🔄 Restore</button>
+                                </form>
+                            <?php else: ?>
+                                <form method="POST" onsubmit="return confirm('Are you sure you want to delete this job posting? It will be removed from the public job board, but candidate application history and data will be safely preserved.');" style="margin:0;">
+                                    <input type="hidden" name="action" value="delete_job">
+                                    <input type="hidden" name="job_id" value="<?= (int)$j['id'] ?>">
+                                    <button type="submit" class="btn-secondary" style="padding:8px 11px; font-size:12px; color:var(--red); border-color:rgba(255, 77, 106, 0.3);" title="Delete / Close Job Posting">🗑️</button>
+                                </form>
+                            <?php endif; ?>
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -443,8 +528,19 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                 <input type="hidden" name="action" value="post_job">
 
                 <div style="margin-bottom:16px;">
-                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Job Title</label>
+                    <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Job Title <span style="color:var(--red);">*</span></label>
                     <input type="text" name="job_title" placeholder="e.g. Senior Backend Developer" required style="padding:10px 14px; font-size:14px;">
+                </div>
+
+                <div style="margin-bottom:16px; background:rgba(245, 158, 11, 0.05); border:1px solid rgba(245, 158, 11, 0.25); border-radius:12px; padding:14px 16px;">
+                    <label style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--txt); margin-bottom:6px; font-weight:700;">
+                        <span>🏢 Company SSM Registration Number <span style="color:var(--red, #EF4444);">* (Compulsory)</span></span>
+                        <span style="font-size:11px; font-weight:700; color:#B45309;">Required before posting</span>
+                    </label>
+                    <input type="text" name="ssm_number" id="modal_ssm_number" value="<?= htmlspecialchars($curr_company_ssm) ?>" placeholder="e.g. 202301012345 (1234567-X)" required style="padding:10px 14px; font-size:13.5px; border-radius:8px; border:1.5px solid <?= empty($curr_company_ssm) ? '#EF4444' : 'var(--bdr)' ?>; background:var(--card-solid); width:100%; box-sizing:border-box;">
+                    <div style="font-size:11.5px; color:var(--mut); margin-top:5px; line-height:1.4;">
+                        Official SSM registration number is compulsory for all employers before publishing a vacancy. It is displayed to candidates to ensure employer legitimacy.
+                    </div>
                 </div>
 
                 <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:16px;">
@@ -775,6 +871,12 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
     // Keeps the combined text fresh right before submit (covers any edge case
     // where an input event was missed) and blocks submit if nothing was written.
     function jdValidateBeforeSubmit(containerId, hiddenFieldId) {
+        var ssmInput = document.getElementById('modal_ssm_number');
+        if (ssmInput && !ssmInput.value.trim()) {
+            alert('SSM Registration Number is compulsory before posting a job vacancy.');
+            ssmInput.focus();
+            return false;
+        }
         jdSyncDescription(containerId, hiddenFieldId);
         if (!document.getElementById(hiddenFieldId).value.trim()) {
             alert('Please fill in at least one job description section before publishing.');
@@ -799,17 +901,34 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
     // Seed the description builder with one starting section so it's never empty.
     jdAddSection('modal_jd_sections', 'modal_description_hidden', 'Job Requirements');
 
+    let currentStatusFilter = 'all';
+
+    function setJobStatusFilter(status, btn) {
+        currentStatusFilter = status;
+        document.querySelectorAll('.tab-pill-btn').forEach(function(b) {
+            b.classList.remove('active');
+        });
+        if (btn) btn.classList.add('active');
+        filterJobsGrid();
+    }
+
     function filterJobsGrid() {
         var input = document.getElementById('jobSearchInput');
-        var filter = input.value.toLowerCase().trim();
+        var filter = input ? input.value.toLowerCase().trim() : '';
         var cards = document.getElementsByClassName('job-card-item');
 
         for (var i = 0; i < cards.length; i++) {
-            var searchData = cards[i].getAttribute('data-search');
-            if (searchData && searchData.indexOf(filter) > -1) {
-                cards[i].style.display = 'flex';
+            var card = cards[i];
+            var searchData = card.getAttribute('data-search') || '';
+            var statusData = card.getAttribute('data-status') || 'active';
+
+            var matchesSearch = !filter || searchData.indexOf(filter) > -1;
+            var matchesStatus = (currentStatusFilter === 'all') || (statusData === currentStatusFilter);
+
+            if (matchesSearch && matchesStatus) {
+                card.style.display = 'flex';
             } else {
-                cards[i].style.display = 'none';
+                card.style.display = 'none';
             }
         }
     }

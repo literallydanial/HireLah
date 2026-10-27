@@ -384,11 +384,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $j_stmt->execute([$job_id]);
             $job_title = $j_stmt->fetchColumn() ?: 'Job';
 
-            $del = $pdo->prepare("DELETE FROM jobs WHERE id = ?");
+            $del = $pdo->prepare("UPDATE jobs SET status = 'Deleted', deleted_at = NOW() WHERE id = ?");
             $del->execute([$job_id]);
 
-            log_admin_action($pdo, $admin_id, $admin_name, 'delete_job', 'job', $job_id, "Deleted job posting '$job_title'");
-            $_SESSION['toast'] = "Job posting deleted successfully.";
+            log_admin_action($pdo, $admin_id, $admin_name, 'delete_job', 'job', $job_id, "Archived job posting '$job_title'");
+            $_SESSION['toast'] = "Job posting closed/archived. Candidate records and history are preserved.";
+        }
+        header("Location: admin_dashboard.php");
+        exit;
+    }
+
+    if ($action === 'restore_job') {
+        $job_id = (int)($_POST['job_id'] ?? 0);
+        if ($job_id > 0) {
+            $j_stmt = $pdo->prepare("SELECT job_title FROM jobs WHERE id = ?");
+            $j_stmt->execute([$job_id]);
+            $job_title = $j_stmt->fetchColumn() ?: 'Job';
+
+            $res = $pdo->prepare("UPDATE jobs SET status = 'Active', deleted_at = NULL WHERE id = ?");
+            $res->execute([$job_id]);
+
+            log_admin_action($pdo, $admin_id, $admin_name, 'restore_job', 'job', $job_id, "Restored job posting '$job_title'");
+            $_SESSION['toast'] = "Job posting '$job_title' has been restored to Active status.";
         }
         header("Location: admin_dashboard.php");
         exit;
@@ -1092,7 +1109,7 @@ $jobs_list = $pdo->query("
                                             "department" => $ajf["department"],
                                             "status" => $ajf["job_status"],
                                         ]) ?>)' class="btn-secondary" style="padding:4px 8px; font-size:11px; margin-right:6px;">✏️ Edit</button>
-                                        <form method="POST" style="display:inline;" onsubmit="return confirm('Permanently delete the job posting &quot;<?= htmlspecialchars(addslashes($ajf['job_title'])) ?>&quot; and all its candidate data?');">
+                                        <form method="POST" style="display:inline;" onsubmit="return confirm('Archive/close the job posting &quot;<?= htmlspecialchars(addslashes($ajf['job_title'])) ?>&quot;? Candidate application history will be safely preserved.');">
                                             <input type="hidden" name="action" value="delete_job">
                                             <input type="hidden" name="job_id" value="<?= $ajf['job_id'] ?>">
                                             <button type="submit" style="background:rgba(255, 77, 106, 0.12); border:1px solid rgba(255, 77, 106, 0.35); border-radius:6px; color:var(--red); padding:4px 10px; font-size:11px; font-weight:700; cursor:pointer;">🗑️ Delete</button>

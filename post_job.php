@@ -8,6 +8,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     exit;
 }
 
+$employer_id = $_SESSION['user_id'];
+$active_company_id = get_active_company_id($pdo);
+
+$curr_ssm = '';
+if ($active_company_id) {
+    $c_stmt = $pdo->prepare("SELECT ssm_number FROM companies WHERE id = ?");
+    $c_stmt->execute([$active_company_id]);
+    $curr_ssm = trim($c_stmt->fetchColumn() ?: '');
+}
+if (empty($curr_ssm)) {
+    $u_stmt = $pdo->prepare("SELECT ssm_number FROM users WHERE id = ?");
+    $u_stmt->execute([$employer_id]);
+    $curr_ssm = trim($u_stmt->fetchColumn() ?: '');
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim($_POST['job_title'] ?? '');
     $dept = trim($_POST['department'] ?? '');
@@ -19,16 +34,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $perks = !empty($_POST['perks']) ? trim($_POST['perks']) : null;
     $require_video = isset($_POST['require_video']) ? 1 : 0;
     $desc = trim($_POST['description'] ?? '');
-    $employer_id = $_SESSION['user_id'];
-    $active_company_id = get_active_company_id($pdo);
+    $ssm_number = trim($_POST['ssm_number'] ?? '');
 
-    $stmt = $pdo->prepare("INSERT INTO jobs (employer_id, company_id, job_title, department, employment_type, work_mode, salary_min, salary_max, salary_text, perks, require_video, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
-    if ($stmt->execute([$employer_id, $active_company_id, $title, $dept, $type, $mode, $salary_min, $salary_max, $salary_text, $perks, $require_video, $desc])) {
-        $_SESSION['toast'] = "Job posted successfully!";
-        header("Location: job_dashboard.php");
-        exit;
+    if (empty($ssm_number)) {
+        $ssm_number = $curr_ssm;
+    }
+
+    if (empty($ssm_number)) {
+        $error = "SSM Registration Number is compulsory before a job can be posted.";
+    } elseif (empty($title) || empty($desc)) {
+        $error = "Job title and description are required.";
     } else {
-        $error = "Failed to post job. Please try again.";
+        if ($active_company_id && !empty($ssm_number)) {
+            $pdo->prepare("UPDATE companies SET ssm_number = ? WHERE id = ?")->execute([$ssm_number, $active_company_id]);
+        }
+        $pdo->prepare("UPDATE users SET ssm_number = ? WHERE id = ?")->execute([$ssm_number, $employer_id]);
+
+        $stmt = $pdo->prepare("INSERT INTO jobs (employer_id, company_id, job_title, department, employment_type, work_mode, salary_min, salary_max, salary_text, perks, require_video, description, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')");
+        if ($stmt->execute([$employer_id, $active_company_id, $title, $dept, $type, $mode, $salary_min, $salary_max, $salary_text, $perks, $require_video, $desc])) {
+            $_SESSION['toast'] = "Job posted successfully with verified SSM registration number!";
+            header("Location: job_dashboard.php");
+            exit;
+        } else {
+            $error = "Failed to post job. Please try again.";
+        }
     }
 }
 ?>
@@ -55,8 +84,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="POST">
             <div style="margin-bottom:12px;">
-                <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Job Title</label>
+                <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Job Title <span style="color:var(--red);">*</span></label>
                 <input type="text" name="job_title" placeholder="e.g. Senior Backend Engineer" required>
+            </div>
+
+            <div style="margin-bottom:14px; background:rgba(245, 158, 11, 0.05); border:1px solid rgba(245, 158, 11, 0.25); border-radius:10px; padding:12px 14px;">
+                <label style="display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--txt); margin-bottom:6px; font-weight:700;">
+                    <span>🏢 SSM Registration Number <span style="color:var(--red);">* (Compulsory)</span></span>
+                    <span style="font-size:11px; font-weight:700; color:#B45309;">Required for verification</span>
+                </label>
+                <input type="text" name="ssm_number" value="<?= htmlspecialchars($curr_ssm) ?>" placeholder="e.g. 202301012345 (1234567-X)" required>
+                <div style="font-size:11px; color:var(--mut); margin-top:4px;">Official SSM registration number is compulsory before posting.</div>
             </div>
             
             <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:12px;">

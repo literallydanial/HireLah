@@ -128,7 +128,7 @@ if (file_exists('db.php')) {
     try {
         require_once 'db.php';
         // Get total count of active roles
-        $countStmt = $pdo->query("SELECT COUNT(*) FROM jobs WHERE status = 'Active' OR status IS NULL");
+        $countStmt = $pdo->query("SELECT COUNT(*) FROM jobs WHERE (status = 'Active' OR status IS NULL) AND deleted_at IS NULL");
         $total_live_roles = (int) $countStmt->fetchColumn();
 
         // Fetch latest active jobs for Section 3 with full employer info (exactly latest 5)
@@ -138,7 +138,7 @@ if (file_exists('db.php')) {
                    u.company_logo 
             FROM jobs j 
             LEFT JOIN users u ON j.employer_id = u.id 
-            WHERE j.status = 'Active' OR j.status IS NULL 
+            WHERE (j.status = 'Active' OR j.status IS NULL) AND j.deleted_at IS NULL 
             ORDER BY j.created_at DESC, j.id DESC 
             LIMIT 5
         ");
@@ -148,7 +148,7 @@ if (file_exists('db.php')) {
         // Stat bar numbers
         $resumes_screened = (int) $pdo->query("SELECT COUNT(*) FROM candidates")->fetchColumn();
         $strong_hires = (int) $pdo->query("SELECT COUNT(*) FROM candidates WHERE recommendation LIKE '%Hire%'")->fetchColumn();
-        $departments_hiring = (int) $pdo->query("SELECT COUNT(DISTINCT department) FROM jobs WHERE department IS NOT NULL AND department <> ''")->fetchColumn();
+        $departments_hiring = (int) $pdo->query("SELECT COUNT(DISTINCT department) FROM jobs WHERE department IS NOT NULL AND department <> '' AND (status = 'Active' OR status IS NULL) AND deleted_at IS NULL")->fetchColumn();
 
         // Dynamic Job Categories: Top 8 categories by most active jobs, tie-broken by latest job
         $deptCountsStmt = $pdo->query("
@@ -157,7 +157,7 @@ if (file_exists('db.php')) {
                    MAX(created_at) as latest_date,
                    MAX(id) as latest_id
             FROM jobs 
-            WHERE (status = 'Active' OR status IS NULL) AND department IS NOT NULL AND TRIM(department) <> ''
+            WHERE (status = 'Active' OR status IS NULL) AND deleted_at IS NULL AND department IS NOT NULL AND TRIM(department) <> ''
             GROUP BY TRIM(department) 
             ORDER BY cnt DESC, latest_date DESC, latest_id DESC
         ");
@@ -169,7 +169,7 @@ if (file_exists('db.php')) {
                    MAX(created_at) as latest_date,
                    MAX(id) as latest_id
             FROM jobs 
-            WHERE (status = 'Active' OR status IS NULL) AND LOWER(TRIM(employment_type)) = 'internship'
+            WHERE (status = 'Active' OR status IS NULL) AND deleted_at IS NULL AND LOWER(TRIM(employment_type)) = 'internship'
         ");
         $intern_row = $internStmt->fetch(PDO::FETCH_ASSOC);
         $intern_count = (int) ($intern_row['cnt'] ?? 0);

@@ -247,6 +247,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $company_address = trim($_POST['company_address'] ?? '');
         $ssm_number = trim($_POST['ssm_number'] ?? '');
         $contact_email = trim($_POST['contact_email'] ?? '');
+        $business_type = trim($_POST['business_type'] ?? 'Private Limited (Sdn. Bhd.)');
+        $industry = trim($_POST['industry'] ?? 'Information Technology');
+        $contact_number = trim($_POST['contact_number'] ?? '');
+        $company_size = trim($_POST['company_size'] ?? '11-50 employees');
 
         if ($contact_email !== '' && !filter_var($contact_email, FILTER_VALIDATE_EMAIL)) {
             $_SESSION['error'] = "'" . htmlspecialchars($contact_email) . "' is not a valid email address.";
@@ -254,14 +258,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $stmt = $pdo->prepare("UPDATE companies SET name = ?, website = ?, address = ?, contact_email = ?, ssm_number = ? WHERE id = ?");
-        if ($stmt->execute([$company_name, $company_website, $company_address, $contact_email, $ssm_number, $company_id])) {
+        $stmt = $pdo->prepare("UPDATE companies SET name = ?, website = ?, address = ?, contact_email = ?, ssm_number = ?, business_type = ?, industry = ?, contact_number = ?, company_size = ? WHERE id = ?");
+        if ($stmt->execute([$company_name, $company_website, $company_address, $contact_email, $ssm_number, $business_type, $industry, $contact_number, $company_size, $company_id])) {
             try {
-                $upd_user = $pdo->prepare("UPDATE users SET ssm_number = ?, company_name = ? WHERE id = ?");
-                $upd_user->execute([$ssm_number, $company_name, $user_id]);
+                $upd_user = $pdo->prepare("UPDATE users SET ssm_number = ?, company_name = ?, company_website = ?, company_address = ?, contact_email = ?, business_type = ?, industry = ?, contact_number = ?, company_size = ? WHERE id = ?");
+                $upd_user->execute([$ssm_number, $company_name, $company_website, $company_address, $contact_email, $business_type, $industry, $contact_number, $company_size, $user_id]);
             } catch (\Throwable $t) {}
 
-            $_SESSION['toast'] = "Company settings saved.";
+            $_SESSION['toast'] = "Company settings saved successfully.";
         } else {
             $_SESSION['error'] = "Failed to save company settings.";
         }
@@ -1383,36 +1387,82 @@ if ($user['role'] === 'candidate') {
 
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:18px;">
                             <div>
-                                <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Company Name</label>
-                                <input type="text" name="company_name" placeholder="Acme Corporation Sdn Bhd" value="<?= htmlspecialchars($active_company['name'] ?? '') ?>">
+                                <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">Company Name <span style="color:var(--red);">*</span></label>
+                                <input type="text" name="company_name" placeholder="Acme Corporation Sdn Bhd" value="<?= htmlspecialchars($active_company['name'] ?? '') ?>" required>
                             </div>
                             <div>
-                                <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">SSM Registration Number</label>
-                                <input type="text" name="ssm_number" placeholder="e.g. 201201012345 (1012345-X)" value="<?= htmlspecialchars($active_company['ssm_number'] ?? $user['ssm_number'] ?? '') ?>">
+                                <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">SSM Registration Number <span style="color:var(--red);">* (Compulsory for job postings)</span></label>
+                                <input type="text" name="ssm_number" placeholder="e.g. 202301012345 (1234567-X)" value="<?= htmlspecialchars($active_company['ssm_number'] ?? $user['ssm_number'] ?? '') ?>" required>
                             </div>
                         </div>
 
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:18px;">
                             <div>
-                                <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Official Website</label>
+                                <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">Business Type</label>
+                                <select name="business_type" style="padding:10px 12px; font-size:13px; border-radius:8px; border:1px solid var(--bdr); width:100%; background:var(--card-solid); color:var(--txt);">
+                                    <?php 
+                                        $curr_bt = $active_company['business_type'] ?? $user['business_type'] ?? 'Private Limited (Sdn. Bhd.)';
+                                        $bt_options = ['Private Limited (Sdn. Bhd.)', 'Sole Proprietorship', 'Partnership', 'Public Limited (Bhd.)', 'Limited Liability Partnership (PLT)', 'Government / Statutory Body', 'Non-Profit / NGO'];
+                                        foreach($bt_options as $opt):
+                                    ?>
+                                        <option value="<?= htmlspecialchars($opt) ?>" <?= $curr_bt === $opt ? 'selected' : '' ?>><?= htmlspecialchars($opt) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">Industry</label>
+                                <input type="text" name="industry" placeholder="e.g. Information Technology" value="<?= htmlspecialchars($active_company['industry'] ?? $user['industry'] ?? 'Information Technology') ?>">
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:18px;">
+                            <div>
+                                <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">Official Website</label>
                                 <input type="url" name="company_website" placeholder="https://acme.com" value="<?= htmlspecialchars($active_company['website'] ?? '') ?>">
                             </div>
                             <div>
-                                <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Candidate Contact Email (Optional)</label>
+                                <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">Official Candidate Contact Email</label>
                                 <input type="email" name="contact_email" placeholder="careers@acme.com &mdash; leave blank to use account email" value="<?= htmlspecialchars($active_company['contact_email'] ?? '') ?>">
                             </div>
                         </div>
 
-                        <div style="margin-bottom:24px;">
-                            <label style="display:block; font-size:12px; font-weight:600; color:var(--mut); margin-bottom:6px;">Company Address</label>
-                            <textarea name="company_address" rows="3" placeholder="Level 18, Menara Acme, Jalan Sultan Ismail, 50250 Kuala Lumpur"><?= htmlspecialchars($active_company['address'] ?? '') ?></textarea>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:18px;">
+                            <div>
+                                <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">Contact Number</label>
+                                <input type="text" name="contact_number" placeholder="e.g. +60 3-1234 5678" value="<?= htmlspecialchars($active_company['contact_number'] ?? $user['contact_number'] ?? '+60 3-1234 5678') ?>">
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">Company Size</label>
+                                <select name="company_size" style="padding:10px 12px; font-size:13px; border-radius:8px; border:1px solid var(--bdr); width:100%; background:var(--card-solid); color:var(--txt);">
+                                    <?php 
+                                        $curr_cs = $active_company['company_size'] ?? $user['company_size'] ?? '11-50 employees';
+                                        $cs_options = ['1-10 employees', '11-50 employees', '51-200 employees', '201-500 employees', '500+ employees'];
+                                        foreach($cs_options as $cs_opt):
+                                    ?>
+                                        <option value="<?= htmlspecialchars($cs_opt) ?>" <?= $curr_cs === $cs_opt ? 'selected' : '' ?>><?= htmlspecialchars($cs_opt) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
                         </div>
 
-                        <?php if($is_company_admin): ?>
-                        <div style="display:flex; justify-content:flex-end;">
-                            <button type="submit" class="btn-primary" style="width:auto; padding:11px 28px;">Save Company Info &rarr;</button>
+                        <div style="margin-bottom:24px;">
+                            <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">Office Address</label>
+                            <textarea name="company_address" rows="3" placeholder="Cyberjaya, Selangor, Malaysia"><?= htmlspecialchars($active_company['address'] ?? '') ?></textarea>
                         </div>
-                        <?php endif; ?>
+
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                            <?php if(!empty($active_company['id'])): ?>
+                                <a href="company_profile.php?id=<?= $active_company['id'] ?>" target="_blank" class="btn-secondary" style="padding:10px 18px; text-decoration:none; font-size:13px; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
+                                    <span>👁️</span> <span>Preview Public Company Profile &rarr;</span>
+                                </a>
+                            <?php else: ?>
+                                <div></div>
+                            <?php endif; ?>
+
+                            <?php if($is_company_admin): ?>
+                                <button type="submit" class="btn-primary" style="width:auto; padding:11px 28px;">Save Company Info &rarr;</button>
+                            <?php endif; ?>
+                        </div>
                         </fieldset>
                     </form>
 

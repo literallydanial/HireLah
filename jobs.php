@@ -17,14 +17,16 @@ $filter_max_salary = !empty($_GET['max_salary']) ? (int)$_GET['max_salary'] : nu
 $filter_saved = (($_GET['saved'] ?? '') === '1');
 $sort_by = trim($_GET['sort'] ?? 'newest');
 
-$sql = "SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name, u.company_logo 
+$sql = "SELECT j.*, COALESCE(NULLIF(c.name, ''), NULLIF(u.company_name, ''), u.name) as employer_name, COALESCE(NULLIF(c.logo, ''), u.company_logo) as company_logo 
         FROM jobs j 
         LEFT JOIN users u ON j.employer_id = u.id 
-        WHERE (j.status = 'Active' OR j.status IS NULL)";
+        LEFT JOIN companies c ON j.company_id = c.id
+        WHERE (j.status = 'Active' OR j.status IS NULL) AND j.deleted_at IS NULL";
 $params = [];
 
 if ($search !== '') {
-    $sql .= " AND (j.job_title LIKE ? OR j.department LIKE ? OR j.location LIKE ? OR j.description LIKE ? OR u.company_name LIKE ? OR u.name LIKE ?)";
+    $sql .= " AND (j.job_title LIKE ? OR j.department LIKE ? OR j.location LIKE ? OR j.description LIKE ? OR c.name LIKE ? OR u.company_name LIKE ? OR u.name LIKE ?)";
+    $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
     $params[] = "%$search%";
@@ -140,8 +142,10 @@ if ($selected_job_id) {
         // Job might not be in the current filtered/search result set
         // (e.g. a shared link with search params still in the URL) —
         // look it up directly so the shared link still resolves.
-        $sel_stmt = $pdo->prepare("SELECT j.*, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name, u.company_logo
-                                    FROM jobs j LEFT JOIN users u ON j.employer_id = u.id
+        $sel_stmt = $pdo->prepare("SELECT j.*, COALESCE(NULLIF(c.name, ''), NULLIF(u.company_name, ''), u.name) as employer_name, COALESCE(NULLIF(c.logo, ''), u.company_logo) as company_logo
+                                    FROM jobs j 
+                                    LEFT JOIN users u ON j.employer_id = u.id
+                                    LEFT JOIN companies c ON j.company_id = c.id
                                     WHERE j.id = ? AND (j.status = 'Active' OR j.status IS NULL)");
         $sel_stmt->execute([$selected_job_id]);
         $selected_job = $sel_stmt->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -759,6 +763,12 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         .card-company-meta strong {
             color: #4B5563;
             font-weight: 600;
+            cursor: pointer;
+        }
+
+        .card-company-meta strong:hover,
+        .detail-company-subline a:hover strong {
+            text-decoration: underline;
         }
 
         .card-meta-dot {
@@ -796,6 +806,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
             flex-shrink: 0;
             overflow: hidden;
             padding: 4px;
+            cursor: pointer;
         }
 
         .card-logo-img {
@@ -1992,7 +2003,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                                         <span class="badge-posted-ago"><?= htmlspecialchars($j['posted_label']) ?></span>
                                     </div>
                                     <div class="card-company-meta">
-                                        <strong><?= htmlspecialchars($j['employer_name'] ?? 'Keria Employer') ?></strong>
+                                        <strong onclick="event.stopPropagation(); window.location.href='company_profile.php?job_id=<?= $j['id'] ?>';" title="View Company Profile"><?= htmlspecialchars($j['employer_name'] ?? 'Keria Employer') ?></strong>
                                         <span class="card-meta-dot">&bull;</span>
                                         <span>📍 <?= htmlspecialchars($j['location'] ?: ($j['department'] ?: 'Kuala Lumpur')) ?></span>
                                         <?php if(!empty($j['department'])): ?>
@@ -2002,7 +2013,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                                     </div>
                                 </div>
 
-                                <div class="card-logo-container">
+                                <div class="card-logo-container" onclick="event.stopPropagation(); window.location.href='company_profile.php?job_id=<?= $j['id'] ?>';" title="View Company Profile">
                                     <?php if($logo_src): ?>
                                         <img src="<?= $logo_src ?>" alt="" class="card-logo-img">
                                     <?php else: ?>
@@ -2069,7 +2080,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                             <h2 class="detail-job-title"><?= htmlspecialchars($selected_job['job_title']) ?></h2>
                         </div>
                         <div class="detail-company-subline">
-                            <strong><?= htmlspecialchars($selected_job['employer_name'] ?? 'Keria Employer') ?></strong>
+                            <a href="company_profile.php?job_id=<?= $selected_job['id'] ?>" style="color:inherit; text-decoration:none;" title="View Company Profile"><strong><?= htmlspecialchars($selected_job['employer_name'] ?? 'Keria Employer') ?></strong></a>
                             <span class="card-meta-dot">&bull;</span>
                             <span>📍 <?= htmlspecialchars($selected_job['location'] ?: ($selected_job['department'] ?: 'Kuala Lumpur')) ?></span>
                         </div>
@@ -2457,7 +2468,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
 
                 <!-- Company & Location Subline -->
                 <div class="detail-company-subline">
-                    <strong>${empName}</strong>
+                    <a href="company_profile.php?job_id=${job.id}" style="color:inherit; text-decoration:none;" title="View Company Profile"><strong>${empName}</strong></a>
                     <span class="card-meta-dot">&bull;</span>
                     <span>📍 ${locationText}</span>
                     <span class="card-meta-dot">&bull;</span>

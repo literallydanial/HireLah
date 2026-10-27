@@ -13,8 +13,8 @@ $stmt = $pdo->prepare("SELECT * FROM jobs WHERE id = ?");
 $stmt->execute([$job_id]);
 $job = $stmt->fetch();
 
-if (!$job) {
-    $_SESSION['error'] = "Job position not found.";
+if (!$job || !empty($job['deleted_at']) || in_array(strtolower($job['status'] ?? ''), ['deleted', 'closed'])) {
+    $_SESSION['error'] = "This job posting has been closed by the employer and is no longer accepting new applications.";
     header("Location: jobs.php");
     exit;
 }

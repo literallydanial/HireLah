@@ -75,7 +75,7 @@ $userNotifs = getCandidateNotifications($pdo, $_SESSION['user_id']);
 $notifItems = $userNotifs['items'];
 $unreadCount = $userNotifs['unread_count'];
 
-$stmt = $pdo->prepare("SELECT c.*, j.job_title, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name FROM candidates c JOIN jobs j ON c.job_id = j.id LEFT JOIN users u ON j.employer_id = u.id WHERE c.user_id = ? ORDER BY c.created_at DESC");
+$stmt = $pdo->prepare("SELECT c.*, j.job_title, j.status as job_status, j.deleted_at as job_deleted_at, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name FROM candidates c LEFT JOIN jobs j ON c.job_id = j.id LEFT JOIN users u ON j.employer_id = u.id WHERE c.user_id = ? ORDER BY c.created_at DESC");
 $stmt->execute([$_SESSION['user_id']]);
 $applications = $stmt->fetchAll();
 
@@ -888,17 +888,20 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
                     $app_resume = !empty($app['resume_path']) ? $app['resume_path'] : (!empty($app['filename']) ? ('uploads/resumes/' . $app['filename']) : '');
                     $un_cnt = $unread_msgs_counts[$app['id']] ?? 0;
                 ?>
-                    <div class="app-card-box" data-title="<?= htmlspecialchars(strtolower($app['job_title'])) ?>" data-employer="<?= htmlspecialchars(strtolower($app['employer_name'] ?? 'keria')) ?>">
+                    <div class="app-card-box" data-title="<?= htmlspecialchars(strtolower($app['job_title'] ?? 'archived position')) ?>" data-employer="<?= htmlspecialchars(strtolower($app['employer_name'] ?? 'keria')) ?>">
                         
                         <div class="app-card-main-row">
                             <!-- Left Column: Title & Meta -->
                             <div class="app-card-left-col">
                                 <div class="app-title-group">
-                                    <span class="app-job-title"><?= htmlspecialchars($app['job_title']) ?></span>
+                                    <span class="app-job-title"><?= htmlspecialchars($app['job_title'] ?? 'Archived Position') ?></span>
                                     <span class="badge-status-pill <?= $status_badge_class ?>"><?= $status_label ?></span>
+                                    <?php if (strtolower($app['job_status'] ?? '') === 'deleted' || strtolower($app['job_status'] ?? '') === 'closed' || !empty($app['job_deleted_at']) || empty($app['job_title'])): ?>
+                                        <span class="badge-status-pill" style="background: rgba(107, 114, 128, 0.12); color: #4B5563; border: 1px solid rgba(107, 114, 128, 0.25); font-weight: 600;">📁 Position Closed</span>
+                                    <?php endif; ?>
                                 </div>
                                 <div class="app-meta-subline">
-                                    <span>🏢 <strong><?= htmlspecialchars($app['employer_name'] ?? 'test company sdn bhd') ?></strong></span>
+                                    <span>🏢 <strong><?= htmlspecialchars($app['employer_name'] ?? 'Keria Employer') ?></strong></span>
                                     <span>&bull;</span>
                                     <span>📅 Applied <?= date('M d, Y', strtotime($app['created_at'])) ?></span>
                                 </div>

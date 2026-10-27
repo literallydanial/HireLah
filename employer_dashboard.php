@@ -528,9 +528,12 @@ foreach ($jobs as $j) {
             <form method="GET" action="employer_dashboard.php" class="filter-controls-form" style="display:flex; gap:10px; flex:1; max-width:500px;">
                 <select name="job_id" onchange="this.form.submit()" style="flex:1;">
                     <option value="">All My Job Postings</option>
-                    <?php foreach($jobs as $j): ?>
+                    <?php foreach($jobs as $j): 
+                        $is_closed = (strtolower($j['status'] ?? '') === 'deleted' || strtolower($j['status'] ?? '') === 'closed' || !empty($j['deleted_at']));
+                        $status_suffix = $is_closed ? " [Closed / Archived]" : "";
+                    ?>
                         <option value="<?= $j['id'] ?>" <?= $job_id == $j['id'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($j['job_title'] . ($j['department'] ? " - {$j['department']}" : "") . " ({$j['employment_type']}, {$j['work_mode']})") ?>
+                            <?= htmlspecialchars($j['job_title'] . ($j['department'] ? " - {$j['department']}" : "") . " ({$j['employment_type']}, {$j['work_mode']})" . $status_suffix) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>

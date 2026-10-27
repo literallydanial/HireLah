@@ -14,7 +14,7 @@
 function get_user_companies($pdo, $user_id) {
     try {
         $stmt = $pdo->prepare("
-            SELECT c.id, c.name, c.logo, c.website, c.contact_email, c.address, c.ssm_number, cm.role, cm.joined_at
+            SELECT c.id, c.name, c.logo, c.website, c.contact_email, c.address, c.ssm_number, c.business_type, c.industry, c.contact_number, c.company_size, cm.role, cm.joined_at
             FROM company_members cm
             JOIN companies c ON c.id = cm.company_id
             WHERE cm.user_id = ?
@@ -32,9 +32,66 @@ function get_user_companies($pdo, $user_id) {
         ");
         $stmt->execute([$user_id]);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($rows as &$r) { $r['ssm_number'] = null; }
+        foreach ($rows as &$r) {
+            $r['ssm_number'] = null;
+            $r['business_type'] = 'Private Limited (Sdn. Bhd.)';
+            $r['industry'] = 'Information Technology';
+            $r['contact_number'] = null;
+            $r['company_size'] = '11-50 employees';
+        }
         return $rows;
     }
+}
+
+// Resolves comprehensive company details from company_id, employer_id, or job_id
+function resolve_company_profile($pdo, $company_id = null, $employer_id = null, $job_id = null) {
+    if ($job_id && !$company_id && !$employer_id) {
+        $j_stmt = $pdo->prepare("SELECT company_id, employer_id FROM jobs WHERE id = ?");
+        $j_stmt->execute([(int)$job_id]);
+        $j_row = $j_stmt->fetch(PDO::FETCH_ASSOC);
+        if ($j_row) {
+            $company_id = $j_row['company_id'] ? (int)$j_row['company_id'] : null;
+            $employer_id = $j_row['employer_id'] ? (int)$j_row['employer_id'] : null;
+        }
+    }
+
+    $company = null;
+    if ($company_id) {
+        $c_stmt = $pdo->prepare("SELECT c.*, u.is_verified, u.id as owner_id FROM companies c LEFT JOIN users u ON c.created_by = u.id WHERE c.id = ?");
+        $c_stmt->execute([(int)$company_id]);
+        $company = $c_stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    if (!$company && $employer_id) {
+        $cm_stmt = $pdo->prepare("SELECT c.*, u.is_verified, u.id as owner_id FROM company_members cm JOIN companies c ON c.id = cm.company_id JOIN users u ON u.id = cm.user_id WHERE cm.user_id = ? ORDER BY cm.joined_at ASC LIMIT 1");
+        $cm_stmt->execute([(int)$employer_id]);
+        $company = $cm_stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        if (!$company) {
+            $u_stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+            $u_stmt->execute([(int)$employer_id]);
+            $u_row = $u_stmt->fetch(PDO::FETCH_ASSOC);
+            if ($u_row) {
+                $company = [
+                    'id' => null,
+                    'name' => $u_row['company_name'] ?: $u_row['name'],
+                    'website' => $u_row['company_website'] ?? '',
+                    'address' => $u_row['company_address'] ?? '',
+                    'ssm_number' => $u_row['ssm_number'] ?? '',
+                    'logo' => $u_row['company_logo'] ?? '',
+                    'contact_email' => $u_row['contact_email'] ?: $u_row['email'],
+                    'business_type' => $u_row['business_type'] ?? 'Private Limited (Sdn. Bhd.)',
+                    'industry' => $u_row['industry'] ?? 'Information Technology',
+                    'contact_number' => $u_row['contact_number'] ?? '',
+                    'company_size' => $u_row['company_size'] ?? '11-50 employees',
+                    'is_verified' => $u_row['is_verified'] ?? 1,
+                    'created_by' => $u_row['id']
+                ];
+            }
+        }
+    }
+
+    return $company;
 }
 
 // This user's role ('admin' | 'hr') in a specific company, or null if they
