@@ -145,6 +145,43 @@ try {
     }
 
 
+    // Auto-verify jobs.deleted_at availability (self-healing migration on deploy) --
+    // jobs.php, index.php and the dashboards filter on it for soft-deleted postings,
+    // and a database that never ran database/run_migration_job_soft_delete.php made
+    // every one of those pages fail with HTTP 500.
+    try {
+        $pdo->query("SELECT deleted_at FROM jobs LIMIT 1");
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec("ALTER TABLE jobs ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL");
+        } catch (\Throwable $migErr) {
+            error_log("jobs.deleted_at migration notice: " . $migErr->getMessage());
+        }
+    }
+
+    // Auto-verify company profile columns (self-healing migration on deploy) --
+    // profile.php's "Save Company Info" writes these to companies and users; a database
+    // that never ran database/run_migration_company_profile_fields.php made that save
+    // fail with HTTP 500. Columns only: no demo/seed values are written.
+    foreach (['companies', 'users'] as $cpTable) {
+        foreach ([
+            'business_type'  => "VARCHAR(100) NULL DEFAULT 'Private Limited (Sdn. Bhd.)'",
+            'industry'       => "VARCHAR(100) NULL DEFAULT 'Information Technology'",
+            'contact_number' => "VARCHAR(50) NULL DEFAULT '+60 3-1234 5678'",
+            'company_size'   => "VARCHAR(50) NULL DEFAULT '11-50 employees'",
+        ] as $cpCol => $cpDef) {
+            try {
+                $pdo->query("SELECT `$cpCol` FROM `$cpTable` LIMIT 1");
+            } catch (\Throwable $e) {
+                try {
+                    $pdo->exec("ALTER TABLE `$cpTable` ADD COLUMN `$cpCol` $cpDef");
+                } catch (\Throwable $migErr) {
+                    error_log("$cpTable.$cpCol migration notice: " . $migErr->getMessage());
+                }
+            }
+        }
+    }
+
     // Auto-verify employer verification columns (self-healing migration on deploy).
     // Existing companies default to 'approved' so no active employer is locked out;
     // new self-registered employers are inserted as 'pending' by verify_otp.php.
