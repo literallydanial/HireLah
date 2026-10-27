@@ -2,6 +2,7 @@
 require_once 'auth.php';
 require_role('employer');
 require_once 'company_helpers.php';
+require_once 'employer_verification.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     header("Location: job_dashboard.php?open_post=1");
@@ -35,6 +36,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $require_video = isset($_POST['require_video']) ? 1 : 0;
     $desc = trim($_POST['description'] ?? '');
     $ssm_number = trim($_POST['ssm_number'] ?? '');
+
+    $ev_block = ev_posting_block_message($pdo, $active_company_id);
+    if ($ev_block) {
+        $_SESSION['error'] = $ev_block;
+        header("Location: job_dashboard.php");
+        exit;
+    }
 
     if (empty($ssm_number)) {
         $ssm_number = $curr_ssm;

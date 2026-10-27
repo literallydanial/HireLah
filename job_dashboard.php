@@ -3,6 +3,7 @@ require_once 'auth.php';
 require_role('employer');
 require_once 'notifications_helper.php';
 require_once 'company_helpers.php';
+require_once 'employer_verification.php';
 
 $empNotifs = getEmployerNotifications($pdo, $_SESSION['user_id']);
 $notifItems = $empNotifs['items'];
@@ -38,6 +39,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $desc = trim($_POST['description'] ?? '');
     $employer_id = $_SESSION['user_id'];
     $ssm_number = trim($_POST['ssm_number'] ?? '');
+
+    // Pending / rejected companies can't publish until an admin approves them.
+    $ev_block = ev_posting_block_message($pdo, $active_company_id);
+    if ($ev_block) {
+        $_SESSION['error'] = $ev_block;
+        header("Location: job_dashboard.php");
+        exit;
+    }
 
     if (empty($ssm_number)) {
         $ssm_number = $curr_company_ssm;
@@ -380,6 +389,12 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
             <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:var(--grn); font-size:13px; font-weight:700;">
                 <?= htmlspecialchars($_SESSION['toast']) ?>
                 <?php unset($_SESSION['toast']); ?>
+            </div>
+        <?php endif; ?>
+        <?php $ev_block_msg = ev_posting_block_message($pdo, $active_company_id); if ($ev_block_msg): ?>
+            <div style="margin:0 0 18px; padding:14px 18px; border-radius:12px; background:#EBFFAA; border:1px solid #D2FF3A; color:#0A0A0A; font-size:13.5px; line-height:1.5;">
+                <strong><?= ev_company_status($pdo, $active_company_id) === 'rejected' ? 'Company not approved' : 'Company under review' ?>.</strong>
+                <?= htmlspecialchars($ev_block_msg) ?>
             </div>
         <?php endif; ?>
 

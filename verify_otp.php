@@ -3,6 +3,7 @@ session_start();
 require_once 'db.php';
 require_once 'mailer.php';
 require_once 'company_helpers.php';
+require_once 'employer_verification.php';
 
 $user_id = $_SESSION['pending_otp_user_id'] ?? ($_GET['user_id'] ?? null);
 
@@ -12,7 +13,7 @@ if (!$user_id) {
 }
 
 // Fetch pending user details
-$stmt = $pdo->prepare("SELECT id, name, email, role, is_verified, otp_code, otp_expires_at FROM users WHERE id = ?");
+$stmt = $pdo->prepare("SELECT id, name, email, role, is_verified, otp_code, otp_expires_at, otp_attempts, company_name, ssm_number FROM users WHERE id = ?");
 $stmt->execute([$user_id]);
 $user = $stmt->fetch();
 
@@ -37,13 +38,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (empty($entered_otp)) {
             $error = "Please enter the 6-digit verification code.";
-        } elseif ($entered_otp !== $user['otp_code']) {
+        } elseif ((int)($user['otp_attempts'] ?? 0) >= 5) {
+            $error = "Too many incorrect attempts. Please click 'Resend OTP' to get a new code.";
+        } elseif (!hash_equals((string)$user['otp_code'], $entered_otp)) {
+            $pdo->prepare("UPDATE users SET otp_attempts = otp_attempts + 1 WHERE id = ?")->execute([$user_id]);
             $error = "Incorrect verification code. Please try again.";
         } elseif (strtotime($user['otp_expires_at']) < time()) {
             $error = "Verification code has expired. Please click 'Resend OTP' to get a new code.";
         } else {
             // Activate User
-            $up = $pdo->prepare("UPDATE users SET is_verified = 1, otp_code = NULL, otp_expires_at = NULL WHERE id = ?");
+            $up = $pdo->prepare("UPDATE users SET is_verified = 1, otp_code = NULL, otp_expires_at = NULL, otp_attempts = 0 WHERE id = ?");
             $up->execute([$user_id]);
 
             unset($_SESSION['pending_otp_user_id']);
@@ -64,7 +68,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     join_company($pdo, $user['id'], $invite_company['id']);
                     $_SESSION['toast'] = "Account verified! You've joined " . $invite_company['name'] . " as an HR teammate.";
                 } else {
-                    create_company_for_new_employer($pdo, $user);
+                    // Self-registered company: starts 'pending' until an admin verifies the SSM number.
+                    $new_company_id = create_company_for_new_employer($pdo, $user);
+                    $flags = ev_compute_flags($user['email']);
+                    try {
+                        $pdo->prepare("UPDATE companies SET verification_status = 'pending', verification_flags = ?, submitted_at = NOW() WHERE id = ?")
+                            ->execute([$flags, $new_company_id]);
+                        ev_notify_admins_new_employer($pdo, $user['company_name'] ?: ($user['name'] . "'s Company"), $user['ssm_number'] ?? '', $flags);
+                    } catch (\Throwable $e) {
+                        error_log("Pending-status update failed: " . $e->getMessage());
+                    }
+                    $_SESSION['toast'] = "Email verified! Your company is now under review (usually within one working day). You can set up your company profile while you wait.";
                 }
                 unset($_SESSION['pending_invite_token']);
             }
@@ -95,17 +109,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
     } elseif ($action === 'resend_otp') {
-        $new_otp = sprintf("%06d", mt_rand(100000, 999999));
+        $new_otp = sprintf("%06d", random_int(100000, 999999));
         $new_expires = date('Y-m-d H:i:s', strtotime('+15 minutes'));
 
-        $up = $pdo->prepare("UPDATE users SET otp_code = ?, otp_expires_at = ? WHERE id = ?");
+        $up = $pdo->prepare("UPDATE users SET otp_code = ?, otp_expires_at = ?, otp_attempts = 0 WHERE id = ?");
         $up->execute([$new_otp, $new_expires, $user_id]);
 
         $res = send_otp_email($user['name'], $user['email'], $new_otp);
         if (!empty($res['success'])) {
             $_SESSION['toast'] = "A fresh 6-digit OTP code has been sent to " . htmlspecialchars($user['email']) . "!";
         } else {
-            $_SESSION['toast'] = "New OTP generated: $new_otp (Email delivery note: " . htmlspecialchars($res['error'] ?? 'Configure SMTP') . ")";
+            error_log("Resend OTP email failed for user $user_id: " . ($res['error'] ?? 'unknown'));
+            $_SESSION['toast'] = "We couldn't send the email just now. Please wait a minute and click 'Resend OTP' again.";
         }
         header("Location: verify_otp.php?user_id=" . urlencode($user_id));
         exit;

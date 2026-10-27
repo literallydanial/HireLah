@@ -3,6 +3,7 @@ session_start();
 require_once 'db.php';
 require_once 'mailer.php';
 require_once 'company_helpers.php';
+require_once 'employer_verification.php';
 
 // Universities for the candidate-signup "school" dropdown (self-selected, no verification).
 $universities_list = $pdo->query("SELECT id, name, type FROM universities ORDER BY FIELD(type,'public','private','other'), name")->fetchAll();
@@ -72,6 +73,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $role = 'candidate';
     }
 
+    // Anti-abuse: hidden honeypot field (bots fill it, people never see it),
+    // per-IP rate limit, and Cloudflare Turnstile when configured.
+    if (!isset($error)) {
+        if (!empty($_POST['website_url'])) {
+            $error = "Registration could not be completed. Please try again.";
+        } elseif (ev_signup_rate_limited($pdo)) {
+            $error = "Too many sign-up attempts from your network. Please wait a while and try again.";
+        } elseif (!ev_turnstile_verify()) {
+            $error = "Please complete the security check and try again.";
+        }
+    }
+
+    // A self-registered employer (not joining via invite) must identify its company.
+    $employer_company_name = '';
+    $employer_ssm = '';
+    if ($role === 'employer' && !$invite_company && !isset($error)) {
+        $employer_company_name = trim($_POST['company_name'] ?? '');
+        $employer_ssm = ev_normalize_ssm($_POST['ssm_number'] ?? '');
+        if ($employer_company_name === '' || mb_strlen($employer_company_name) < 2) {
+            $error = "Please enter your registered company name.";
+        } elseif (!ev_valid_ssm_format($employer_ssm)) {
+            $error = "Please enter a valid SSM registration number (e.g. 202301012345 or 1234567-X).";
+        } elseif (ev_is_disposable_email($email)) {
+            $error = "Temporary or disposable email addresses can't be used for employer accounts. Please use your company or personal email.";
+        } elseif (ev_ssm_in_use($pdo, $employer_ssm)) {
+            $error = "This SSM number is already registered on Keria. If your company already has an account, ask your company admin for a team invite link, or contact verification@thekeria.com.";
+        } else {
+            $institution_name = $employer_company_name; // stored in users.company_name
+        }
+    } elseif ($role === 'employer' && $invite_company && ev_is_disposable_email($email) && !isset($error)) {
+        $error = "Temporary or disposable email addresses can't be used. Please use your work email.";
+    }
+
     if ($role === 'university' && !isset($error)) {
         $uni_type = in_array($_POST['university_type'] ?? '', ['public', 'private'], true) ? $_POST['university_type'] : 'public';
         $institution_name = trim($_POST['institution_name'] ?? $admin_preset_uni_name);
@@ -118,12 +152,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = "Email is already registered.";
     } else {
         $hash = password_hash($password, PASSWORD_DEFAULT);
-        $otp = sprintf("%06d", mt_rand(100000, 999999));
+        $otp = sprintf("%06d", random_int(100000, 999999));
         $otp_expires = date('Y-m-d H:i:s', strtotime('+15 minutes'));
 
-        $stmt = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, company_name, university_id, matric_number, is_verified, otp_code, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)");
-        if ($stmt->execute([$name, $email, $hash, $role, $institution_name, $university_id, $matric_number, $otp, $otp_expires])) {
+        $stmt = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, company_name, ssm_number, university_id, matric_number, is_verified, otp_code, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)");
+        if ($stmt->execute([$name, $email, $hash, $role, $institution_name, ($employer_ssm !== '' ? $employer_ssm : null), $university_id, $matric_number, $otp, $otp_expires])) {
             $user_id = $pdo->lastInsertId();
+            ev_record_signup_attempt($pdo); // after lastInsertId(): this INSERT would reset it
             $_SESSION['pending_otp_user_id'] = $user_id;
 
             // Dispatch OTP email
@@ -131,7 +166,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!empty($mail_res['success'])) {
                 $_SESSION['toast'] = "Account created! Please enter the 6-digit OTP code sent to $email.";
             } else {
-                $_SESSION['toast'] = "Account created! OTP Code: $otp (Email note: " . htmlspecialchars($mail_res['error'] ?? 'Configure SMTP') . ")";
+                // Never show the OTP on screen: that would let anyone verify an email they don't own.
+                error_log("Registration OTP email failed for user $user_id: " . ($mail_res['error'] ?? 'unknown'));
+                $_SESSION['toast'] = "Account created, but we couldn't send the verification email. Please click 'Resend OTP' on the next page.";
             }
 
             header("Location: verify_otp.php?user_id=" . urlencode($user_id));
@@ -542,6 +579,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="password" name="confirm_password" id="registerConfirmPasswordField" placeholder="Confirm password" required style="padding-right:42px;">
                     <button type="button" class="auth-password-toggle" onclick="toggleRegisterConfirmPasswordVisibility()" title="Show/Hide Password">👁️</button>
                 </div>
+                <div aria-hidden="true" style="position:absolute; left:-5000px; height:0; overflow:hidden;">
+                    <label>Leave this field empty<input type="text" name="website_url" tabindex="-1" autocomplete="off"></label>
+                </div>
                 <?php if ($invite_company): ?>
                     <input type="hidden" name="role" value="employer">
                     <input type="hidden" name="invite_token" value="<?= htmlspecialchars($_SESSION['pending_invite_token']) ?>">
@@ -554,8 +594,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="auth-input-wrap">
                         <span class="auth-input-icon">👤</span>
                         <select name="role" id="registerRoleSelect" required onchange="toggleStudentFields()">
-                            <option value="candidate">I am a Candidate</option>
-                            <option value="employer">I am an Employer</option>
+                            <option value="candidate" <?= (($_POST['role'] ?? '') !== 'employer') ? 'selected' : '' ?>>I am a Candidate</option>
+                            <option value="employer" <?= (($_POST['role'] ?? '') === 'employer') ? 'selected' : '' ?>>I am an Employer</option>
                         </select>
                     </div>
                     <div id="studentFieldsBlock">
@@ -570,10 +610,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         <div style="font-size:11px; color:var(--mut); margin-top:-6px; margin-bottom:14px; text-align:left;">Only fill this in if you're a student — it lets your university see your career-readiness activity on their dashboard.</div>
                     </div>
+                    <div id="employerFieldsBlock" style="display:none;">
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon">🏢</span>
+                            <input type="text" name="company_name" id="registerCompanyName" placeholder="Registered company name" value="<?= htmlspecialchars($_POST['company_name'] ?? '') ?>">
+                        </div>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon">📄</span>
+                            <input type="text" name="ssm_number" id="registerSsmNumber" placeholder="SSM registration no. (e.g. 202301012345)" value="<?= htmlspecialchars($_POST['ssm_number'] ?? '') ?>">
+                        </div>
+                        <div style="font-size:11px; color:var(--mut); margin-top:-6px; margin-bottom:14px; text-align:left;">To keep job seekers safe, we check every new employer against SSM records. It usually takes less than one working day, and you can set up your company profile while you wait.</div>
+                    </div>
                     <script>
                         function toggleStudentFields() {
                             var role = document.getElementById('registerRoleSelect').value;
                             document.getElementById('studentFieldsBlock').style.display = (role === 'candidate') ? 'block' : 'none';
+                            var isEmp = (role === 'employer');
+                            document.getElementById('employerFieldsBlock').style.display = isEmp ? 'block' : 'none';
+                            document.getElementById('registerCompanyName').required = isEmp;
+                            document.getElementById('registerSsmNumber').required = isEmp;
                         }
                         document.addEventListener('DOMContentLoaded', toggleStudentFields);
                     </script>
@@ -586,6 +641,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </label>
                 </div>
 
+                <?= ev_turnstile_widget() ?>
                 <button type="submit" class="auth-submit-btn">Register &rarr;</button>
             </form>
 

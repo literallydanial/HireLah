@@ -130,13 +130,13 @@ function uni_time_ago($timestamp) {
 // resume's claimed work history.
 // ------------------------------------------------------------
 if ($university_filter_id !== null) {
-    $students_stmt = $pdo->prepare("SELECT id, name, email, default_resume, created_at FROM users WHERE role = 'candidate' AND university_id = ? ORDER BY name");
+    $students_stmt = $pdo->prepare("SELECT u.id, u.name, u.email, u.default_resume, u.created_at, un.name AS university_name FROM users u LEFT JOIN universities un ON un.id = u.university_id WHERE u.role = 'candidate' AND u.university_id = ? ORDER BY u.name");
     $students_stmt->execute([$university_filter_id]);
     $students_raw = $students_stmt->fetchAll();
 } elseif (!$is_university_account) {
     // Admin preview with no single institution selected -- show every
     // student who has self-linked any university, across all of them.
-    $students_raw = $pdo->query("SELECT id, name, email, default_resume, created_at FROM users WHERE role = 'candidate' AND university_id IS NOT NULL ORDER BY name")->fetchAll();
+    $students_raw = $pdo->query("SELECT u.id, u.name, u.email, u.default_resume, u.created_at, un.name AS university_name FROM users u LEFT JOIN universities un ON un.id = u.university_id WHERE u.role = 'candidate' AND u.university_id IS NOT NULL ORDER BY un.name, u.name")->fetchAll();
 } else {
     // A real university account with no matching students yet.
     $students_raw = [];
@@ -224,6 +224,7 @@ foreach ($students_raw as $u) {
         'id' => (int) $u['id'],
         'name' => $u['name'],
         'email' => $u['email'],
+        'university' => $u['university_name'] ?? '',
         'resume' => !empty($u['default_resume']),
         'applications' => $app_count,
         'score' => $readiness_by_user[$u['id']] ?? null,
@@ -300,10 +301,10 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="student_roster_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['Name', 'Email', 'Resume', 'Applications', 'Readiness Score', 'Last Active', 'Outcome', 'Company', 'Supervisor', 'Supervisor Contact', 'Start Date', 'End Date', 'Placement Type']);
+    fputcsv($out, ['Name', 'Email', 'University', 'Resume', 'Applications', 'Readiness Score', 'Last Active', 'Outcome', 'Company', 'Supervisor', 'Supervisor Contact', 'Start Date', 'End Date', 'Placement Type']);
     foreach ($students as $s) {
         fputcsv($out, [
-            $s['name'], $s['email'],
+            $s['name'], $s['email'], $s['university'],
             $s['resume'] ? 'Complete' : 'Missing', $s['applications'],
             $s['score'] !== null ? $s['score'] : '',
             uni_time_ago($s['last_active_ts']), $s['outcome'],
@@ -629,6 +630,7 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
                 <div class="risk-row">
                     <div>
                         <div style="font-weight:700; color:var(--txt); font-size:13px;"><?= htmlspecialchars($s['name']) ?></div>
+                        <?php if ($university_filter_id === null && $s['university'] !== ''): ?><div style="font-size:11px; color:var(--mut);">🎓 <?= htmlspecialchars($s['university']) ?></div><?php endif; ?>
                         <div style="font-size:11px; color:var(--mut);">Last active <?= htmlspecialchars(uni_time_ago($s['last_active_ts'])) ?></div>
                     </div>
                     <div style="display:flex; gap:6px;">
@@ -705,6 +707,7 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
                 <thead>
                     <tr style="background:var(--surf); text-align:left; border-bottom:1px solid var(--bdr);">
                         <th style="padding:10px 14px;">Student</th>
+                        <?php if ($university_filter_id === null): ?><th style="padding:10px 14px;">University</th><?php endif; ?>
                         <th style="padding:10px 14px; text-align:center;">Resume</th>
                         <th style="padding:10px 14px; text-align:center;">Applications</th>
                         <th style="padding:10px 14px; text-align:center;">Readiness Score</th>
@@ -714,11 +717,12 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
                 </thead>
                 <tbody>
                     <?php if (empty($students)): ?>
-                        <tr><td colspan="6" style="padding:20px; text-align:center; color:var(--mut);">No linked students yet.</td></tr>
+                        <tr><td colspan="<?= $university_filter_id === null ? 7 : 6 ?>" style="padding:20px; text-align:center; color:var(--mut);">No linked students yet.</td></tr>
                     <?php endif; ?>
                     <?php foreach ($students as $s): ?>
                         <tr class="roster-row" data-outcome="<?= htmlspecialchars($s['outcome']) ?>" style="border-bottom:1px solid var(--bdr);">
                             <td style="padding:10px 14px; font-weight:700; color:var(--txt);"><?= htmlspecialchars($s['name']) ?><div style="font-weight:400; font-size:10.5px; color:var(--mut);"><?= htmlspecialchars($s['email']) ?></div></td>
+                            <?php if ($university_filter_id === null): ?><td style="padding:10px 14px; color:var(--txt);"><?= $s['university'] !== '' ? htmlspecialchars($s['university']) : '<span style="color:var(--mut);">—</span>' ?></td><?php endif; ?>
                             <td style="padding:10px 14px; text-align:center;">
                                 <?php if ($s['resume']): ?><span class="chip chip-shortlisted">Complete</span>
                                 <?php else: ?><span class="chip chip-rejected">Missing</span><?php endif; ?>

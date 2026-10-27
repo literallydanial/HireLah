@@ -144,6 +144,42 @@ try {
         error_log("Management role auto-migration notice: " . $mgmtErr->getMessage());
     }
 
+
+    // Auto-verify employer verification columns (self-healing migration on deploy).
+    // Existing companies default to 'approved' so no active employer is locked out;
+    // new self-registered employers are inserted as 'pending' by verify_otp.php.
+    try {
+        $pdo->query("SELECT verification_status FROM companies LIMIT 1");
+    } catch (\Throwable $e) {
+        foreach ([
+            "ALTER TABLE companies ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'approved'",
+            "ALTER TABLE companies ADD COLUMN verification_flags VARCHAR(255) NULL",
+            "ALTER TABLE companies ADD COLUMN submitted_at DATETIME NULL",
+            "ALTER TABLE companies ADD COLUMN claimed_by INT NULL",
+            "ALTER TABLE companies ADD COLUMN claimed_at DATETIME NULL",
+            "ALTER TABLE companies ADD COLUMN reviewed_by INT NULL",
+            "ALTER TABLE companies ADD COLUMN reviewed_at DATETIME NULL",
+            "ALTER TABLE companies ADD COLUMN review_note TEXT NULL",
+        ] as $ddl) {
+            try { $pdo->exec($ddl); } catch (\Throwable $migErr) { error_log("Employer verification migration notice: " . $migErr->getMessage()); }
+        }
+    }
+    try {
+        $pdo->query("SELECT otp_attempts FROM users LIMIT 1");
+    } catch (\Throwable $e) {
+        try { $pdo->exec("ALTER TABLE users ADD COLUMN otp_attempts INT NOT NULL DEFAULT 0"); } catch (\Throwable $migErr) { error_log("otp_attempts migration notice: " . $migErr->getMessage()); }
+    }
+    try {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS signup_attempts (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ip_address VARCHAR(45) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            INDEX (ip_address, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    } catch (\Throwable $e) {
+        error_log("signup_attempts migration notice: " . $e->getMessage());
+    }
+
 } catch (\PDOException $e) {
     error_log("Keria DB Connection Error: " . $e->getMessage());
     die("<div style='font-family:sans-serif; max-width:600px; margin:50px auto; padding:24px; border:1px solid #F87171; background:#FEF2F2; color:#991B1B; border-radius:12px; text-align:center;'>" .

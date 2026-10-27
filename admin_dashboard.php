@@ -5,6 +5,7 @@ require_once 'notifications_helper.php';
 require_once 'admin_logs_helper.php';
 require_once 'ai.php';
 require_once 'company_helpers.php';
+require_once 'employer_verification.php';
 
 // Ensure user is logged in as admin
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] ?? '') !== 'admin') {
@@ -95,6 +96,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         header("Location: admin_dashboard.php");
+        exit;
+    }
+
+    // ---- Employer verification queue (Pending Employers tab) ----
+    if (in_array($action, ['ev_claim', 'ev_release', 'ev_approve', 'ev_reject', 'ev_reopen'], true)) {
+        $cid = (int)($_POST['company_id'] ?? 0);
+        $note = trim($_POST['review_note'] ?? '');
+        $back = "Location: admin_dashboard.php?tab=pending";
+
+        $cs = $pdo->prepare("SELECT c.*, u.name AS owner_name, u.email AS owner_email FROM companies c LEFT JOIN users u ON u.id = c.created_by WHERE c.id = ?");
+        $cs->execute([$cid]);
+        $co = $cs->fetch();
+        if (!$co) {
+            $_SESSION['error'] = "Company not found.";
+            header($back); exit;
+        }
+
+        // An admin may not decide on a company they created or belong to.
+        $is_own = ((int)$co['created_by'] === (int)$admin_id);
+        if (!$is_own) {
+            $mm = $pdo->prepare("SELECT 1 FROM company_members WHERE company_id = ? AND user_id = ? LIMIT 1");
+            $mm->execute([$cid, $admin_id]);
+            $is_own = (bool)$mm->fetchColumn();
+        }
+
+        if ($action === 'ev_claim') {
+            $u = $pdo->prepare("UPDATE companies SET claimed_by = ?, claimed_at = NOW()
+                                WHERE id = ? AND verification_status = 'pending'
+                                AND (claimed_by IS NULL OR claimed_by = ? OR claimed_at < (NOW() - INTERVAL 30 MINUTE))");
+            $u->execute([$admin_id, $cid, $admin_id]);
+            $_SESSION['toast'] = $u->rowCount() ? "You are now reviewing '{$co['name']}'." : "Another admin is already reviewing this company.";
+        } elseif ($action === 'ev_release') {
+            $pdo->prepare("UPDATE companies SET claimed_by = NULL, claimed_at = NULL WHERE id = ? AND claimed_by = ?")->execute([$cid, $admin_id]);
+            $_SESSION['toast'] = "Released. Another admin can pick it up.";
+        } elseif ($action === 'ev_reopen') {
+            $pdo->prepare("UPDATE companies SET verification_status = 'pending', claimed_by = NULL, claimed_at = NULL, submitted_at = NOW() WHERE id = ? AND verification_status = 'rejected'")->execute([$cid]);
+            log_admin_action($pdo, $admin_id, $admin_name, 'employer_reopen', 'company', $cid, "Reopened review for '{$co['name']}'");
+            $_SESSION['toast'] = "'{$co['name']}' moved back to the pending queue.";
+        } elseif ($is_own) {
+            $_SESSION['error'] = "You can't approve or reject a company you created or belong to. Ask another admin.";
+        } elseif ($action === 'ev_reject' && mb_strlen($note) < 5) {
+            $_SESSION['error'] = "Please give a short reason (at least 5 characters). It is emailed to the employer.";
+        } else {
+            $approve = ($action === 'ev_approve');
+            $new_status = $approve ? 'approved' : 'rejected';
+            $u = $pdo->prepare("UPDATE companies SET verification_status = ?, reviewed_by = ?, reviewed_at = NOW(), review_note = ?, claimed_by = NULL, claimed_at = NULL
+                                WHERE id = ? AND verification_status = 'pending'
+                                AND (claimed_by IS NULL OR claimed_by = ? OR claimed_at < (NOW() - INTERVAL 30 MINUTE))");
+            $u->execute([$new_status, $admin_id, ($note !== '' ? $note : null), $cid, $admin_id]);
+            if ($u->rowCount()) {
+                log_admin_action($pdo, $admin_id, $admin_name, $approve ? 'employer_approve' : 'employer_reject', 'company', $cid,
+                    ($approve ? "Approved" : "Rejected") . " employer '{$co['name']}' (SSM {$co['ssm_number']})" . ($note !== '' ? " - note: $note" : ''));
+                if (!empty($co['owner_email'])) {
+                    ev_send_decision_email($co['owner_email'], $co['owner_name'], $co['name'], $approve, $note);
+                }
+                $_SESSION['toast'] = "'{$co['name']}' " . ($approve ? "approved. The employer has been emailed." : "rejected. The employer has been emailed the reason.");
+            } else {
+                $_SESSION['error'] = "That company was already decided or is being reviewed by another admin.";
+            }
+        }
+        header($back);
         exit;
     }
 
@@ -415,6 +477,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ----------------------------------------------------
 // 2. DIAGNOSTICS & SYSTEM HEALTH COMPUTATION
 // ----------------------------------------------------
+
+// Employer verification queue data (pending list + recent decisions for the audit view)
+$pending_employers = [];
+$decided_employers = [];
+try {
+    $pending_employers = $pdo->query("
+        SELECT c.id, c.name, c.ssm_number, c.website, c.verification_flags, c.submitted_at, c.claimed_by, c.claimed_at,
+               u.name AS owner_name, u.email AS owner_email, cb.name AS claimed_by_name
+        FROM companies c
+        LEFT JOIN users u ON u.id = c.created_by
+        LEFT JOIN users cb ON cb.id = c.claimed_by
+        WHERE c.verification_status = 'pending'
+        ORDER BY c.submitted_at ASC, c.id ASC")->fetchAll();
+    $decided_employers = $pdo->query("
+        SELECT c.id, c.name, c.ssm_number, c.verification_status, c.reviewed_at, c.review_note, rb.name AS reviewed_by_name, u.email AS owner_email
+        FROM companies c
+        LEFT JOIN users u ON u.id = c.created_by
+        LEFT JOIN users rb ON rb.id = c.reviewed_by
+        WHERE c.verification_status IN ('approved','rejected') AND c.reviewed_at IS NOT NULL
+        ORDER BY c.reviewed_at DESC LIMIT 25")->fetchAll();
+} catch (\Throwable $e) {
+    error_log("Pending employers query failed: " . $e->getMessage());
+}
 
 // Database Ping & Latency Test
 $db_start_time = microtime(true);
@@ -1004,6 +1089,7 @@ $jobs_list = $pdo->query("
         <div class="tab-controls">
             <button type="button" class="tab-btn active" onclick="switchAdminTab('usersTab', this)">👥 Registered Accounts (<?= count($users_list) ?>)<?php if($new_signups_48h > 0): ?> <span style="background:#EC4899; color:#fff; border-radius:8px; padding:1px 7px; font-size:10px; font-weight:800; margin-left:4px;">🆕 <?= $new_signups_48h ?> new</span><?php endif; ?></button>
             <button type="button" class="tab-btn" onclick="switchAdminTab('universitiesTab', this)">🎓 Registered Universities (<?= count($university_users_list) ?>)<?php if($new_uni_signups_48h > 0): ?> <span style="background:#EC4899; color:#fff; border-radius:8px; padding:1px 7px; font-size:10px; font-weight:800; margin-left:4px;">🆕 <?= $new_uni_signups_48h ?> new</span><?php endif; ?></button>
+            <button type="button" class="tab-btn" id="pendingTabBtn" onclick="switchAdminTab('pendingTab', this)">🛡️ Pending Employers (<?= count($pending_employers) ?>)<?php if(count($pending_employers) > 0): ?> <span style="background:#EC4899; color:#fff; border-radius:8px; padding:1px 7px; font-size:10px; font-weight:800; margin-left:4px;">review</span><?php endif; ?></button>
             <button type="button" class="tab-btn" onclick="switchAdminTab('jobsTab', this)">💼 Job Postings Moderation (<?= count($jobs_list) ?>)</button>
             <button type="button" class="tab-btn" onclick="switchAdminTab('funnelTab', this)">🔻 Platform-Wide Hiring Funnel Analytics</button>
         </div>
@@ -1524,6 +1610,92 @@ $jobs_list = $pdo->query("
         </div>
 
         <!-- Tab 2: Job Postings Moderation -->
+        <!-- Tab: Pending Employers (verification queue) -->
+        <div id="pendingTab" class="admin-tab-pane" style="display:none;">
+            <div class="panel" style="padding:20px; margin-bottom:20px;">
+                <div style="font-size:15px; font-weight:800; margin-bottom:4px;">Employers awaiting verification</div>
+                <div style="font-size:12.5px; color:var(--mut); margin-bottom:14px; line-height:1.5;">
+                    Check each SSM number against SSM e-Info (<a href="https://www.ssm-einfo.my" target="_blank" rel="noopener" style="color:var(--acc);">ssm-einfo.my</a>): the company name must match. Click Review to claim an application so other admins don't duplicate the work. Claims expire after 30 minutes. You can't decide on a company you created or belong to.
+                </div>
+                <?php if (empty($pending_employers)): ?>
+                    <div style="padding:22px; text-align:center; color:var(--mut); font-size:13px;">No employers are waiting. 🎉</div>
+                <?php else: ?>
+                <div class="admin-table-scroll">
+                <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+                    <thead><tr style="text-align:left; color:var(--mut); font-size:11px; text-transform:uppercase;">
+                        <th style="padding:8px;">Company / SSM</th><th style="padding:8px;">Registrant</th><th style="padding:8px;">Submitted</th><th style="padding:8px;">Flags</th><th style="padding:8px;">Status</th><th style="padding:8px; min-width:280px;">Action</th>
+                    </tr></thead>
+                    <tbody>
+                    <?php foreach ($pending_employers as $pe):
+                        $claim_active = $pe['claimed_by'] && $pe['claimed_at'] && strtotime($pe['claimed_at']) > time() - 1800;
+                        $mine = $claim_active && (int)$pe['claimed_by'] === (int)$admin_id;
+                        $other = $claim_active && !$mine;
+                        $flag_list = array_filter(explode(',', (string)$pe['verification_flags']));
+                    ?>
+                        <tr style="border-top:1px solid var(--bdr); vertical-align:top;">
+                            <td style="padding:10px 8px;"><strong><?= htmlspecialchars($pe['name']) ?></strong><br><span style="font-family:monospace;"><?= htmlspecialchars($pe['ssm_number'] ?? '—') ?></span></td>
+                            <td style="padding:10px 8px;"><?= htmlspecialchars($pe['owner_name'] ?? '') ?><br><span style="color:var(--mut);"><?= htmlspecialchars($pe['owner_email'] ?? '') ?></span></td>
+                            <td style="padding:10px 8px; white-space:nowrap;"><?= $pe['submitted_at'] ? htmlspecialchars(date('d M Y H:i', strtotime($pe['submitted_at']))) : '—' ?></td>
+                            <td style="padding:10px 8px;">
+                                <?php foreach ($flag_list as $f): $warn = in_array($f, ['free-email','domain-differs-from-website'], true); ?>
+                                    <span style="display:inline-block; margin:0 4px 4px 0; padding:2px 8px; border-radius:8px; font-size:10.5px; font-weight:700; background:<?= $warn ? '#FEF3C7' : '#EBFFAA' ?>; color:#0A0A0A;"><?= htmlspecialchars($f) ?></span>
+                                <?php endforeach; ?>
+                            </td>
+                            <td style="padding:10px 8px;"><?= $mine ? '<strong>You are reviewing</strong>' : ($other ? 'Being reviewed by ' . htmlspecialchars($pe['claimed_by_name'] ?? 'another admin') : 'Unclaimed') ?></td>
+                            <td style="padding:10px 8px;">
+                                <?php if ($other): ?>
+                                    <span style="color:var(--mut);">Locked while another admin reviews.</span>
+                                <?php elseif (!$mine): ?>
+                                    <form method="POST" style="margin:0;"><input type="hidden" name="action" value="ev_claim"><input type="hidden" name="company_id" value="<?= (int)$pe['id'] ?>"><button type="submit" class="btn-primary" style="padding:6px 14px; font-size:12px; width:auto;">Review</button></form>
+                                <?php else: ?>
+                                    <form method="POST" style="margin:0;">
+                                        <input type="hidden" name="company_id" value="<?= (int)$pe['id'] ?>">
+                                        <textarea name="review_note" rows="2" placeholder="Note (required when rejecting; emailed to the employer)" style="width:100%; font-size:12px; padding:6px 8px; margin-bottom:6px;"></textarea>
+                                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                            <button type="submit" name="action" value="ev_approve" class="btn-primary" style="padding:6px 14px; font-size:12px; width:auto;" onclick="return confirm('Approve this employer? They will be able to publish jobs and will be emailed.');">✓ Approve</button>
+                                            <button type="submit" name="action" value="ev_reject" class="btn-secondary" style="padding:6px 14px; font-size:12px; width:auto; color:#B91C1C;" onclick="return confirm('Reject this employer? The note will be emailed to them.');">✕ Reject</button>
+                                            <button type="submit" name="action" value="ev_release" class="btn-secondary" style="padding:6px 14px; font-size:12px; width:auto;">Release</button>
+                                        </div>
+                                    </form>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <div class="panel" style="padding:20px;">
+                <div style="font-size:15px; font-weight:800; margin-bottom:10px;">Recent decisions</div>
+                <?php if (empty($decided_employers)): ?>
+                    <div style="font-size:13px; color:var(--mut);">No decisions yet.</div>
+                <?php else: ?>
+                <div class="admin-table-scroll">
+                <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+                    <thead><tr style="text-align:left; color:var(--mut); font-size:11px; text-transform:uppercase;"><th style="padding:8px;">Company</th><th style="padding:8px;">SSM</th><th style="padding:8px;">Decision</th><th style="padding:8px;">By</th><th style="padding:8px;">When</th><th style="padding:8px;">Note</th><th style="padding:8px;"></th></tr></thead>
+                    <tbody>
+                    <?php foreach ($decided_employers as $de): ?>
+                        <tr style="border-top:1px solid var(--bdr); vertical-align:top;">
+                            <td style="padding:8px;"><?= htmlspecialchars($de['name']) ?></td>
+                            <td style="padding:8px; font-family:monospace;"><?= htmlspecialchars($de['ssm_number'] ?? '—') ?></td>
+                            <td style="padding:8px; font-weight:700; color:<?= $de['verification_status'] === 'approved' ? '#15803D' : '#B91C1C' ?>;"><?= ucfirst($de['verification_status']) ?></td>
+                            <td style="padding:8px;"><?= htmlspecialchars($de['reviewed_by_name'] ?? '—') ?></td>
+                            <td style="padding:8px; white-space:nowrap;"><?= htmlspecialchars(date('d M Y H:i', strtotime($de['reviewed_at']))) ?></td>
+                            <td style="padding:8px; max-width:260px;"><?= htmlspecialchars($de['review_note'] ?? '') ?></td>
+                            <td style="padding:8px;"><?php if ($de['verification_status'] === 'rejected'): ?>
+                                <form method="POST" style="margin:0;"><input type="hidden" name="action" value="ev_reopen"><input type="hidden" name="company_id" value="<?= (int)$de['id'] ?>"><button type="submit" class="btn-secondary" style="padding:4px 10px; font-size:11px; width:auto;">Reopen</button></form>
+                            <?php endif; ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
         <div id="jobsTab" class="admin-tab-pane" style="display:none;">
             <div class="panel" style="padding:20px;">
                 <div class="admin-table-scroll">
@@ -2235,6 +2407,13 @@ $jobs_list = $pdo->query("
                 rangeBox.style.display = 'none';
             }
         }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            if (new URLSearchParams(window.location.search).get('tab') === 'pending') {
+                var b = document.getElementById('pendingTabBtn');
+                if (b) switchAdminTab('pendingTab', b);
+            }
+        });
 
         function switchAdminTab(tabId, btn) {
             document.querySelectorAll('.admin-tab-pane').forEach(el => el.style.display = 'none');
