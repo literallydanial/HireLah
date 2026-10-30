@@ -98,6 +98,45 @@ function extract_text_from_pdf($filepath) {
     return ($text !== null && trim($text) !== '') ? $text : "Candidate PDF Resume Uploaded.";
 }
 
+function extract_text_from_docx($filepath) {
+    if (!file_exists($filepath)) {
+        return "";
+    }
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($filepath) === true) {
+            $xml = $zip->getFromName('word/document.xml');
+            $zip->close();
+            if ($xml) {
+                $xml = preg_replace('/<\/w:p>/', "\n", $xml);
+                $xml = preg_replace('/<\/w:tr>/', "\n", $xml);
+                $text = trim(strip_tags($xml));
+                if (!empty($text)) {
+                    return $text;
+                }
+            }
+        }
+    }
+    return "";
+}
+
+function extract_text_from_resume_file($filepath) {
+    if (!file_exists($filepath)) return "";
+    $ext = strtolower(pathinfo($filepath, PATHINFO_EXTENSION));
+    if ($ext === 'pdf') {
+        return extract_text_from_pdf($filepath);
+    } elseif ($ext === 'docx') {
+        return extract_text_from_docx($filepath);
+    } elseif ($ext === 'txt') {
+        return @file_get_contents($filepath) ?: "";
+    }
+    $txt = extract_text_from_pdf($filepath);
+    if (!empty(trim($txt)) && $txt !== 'Candidate PDF Resume Uploaded.') {
+        return $txt;
+    }
+    return extract_text_from_docx($filepath);
+}
+
 function strip_pii($text) {
     // Basic PII stripping based on regex, replicating strip_pii.py logic
     

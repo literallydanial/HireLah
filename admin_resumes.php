@@ -394,9 +394,16 @@ $count_total = count($all_resumes);
 
             <nav style="display:flex; gap:4px; margin-left:24px">
                 <a href="admin_dashboard.php">🛡️ Admin Control Panel</a>
+                <a href="management_dashboard.php" target="_blank" style="color:#2D6A4F; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
+                    📊 Management Dashboard
+                </a>
+                <a href="admin_live_counter.php" target="_blank" style="color:#10B981; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
+                    <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#10B981;"></span>📺 TV Live Counter
+                </a>
                 <a href="admin_resumes.php" class="active">📄 Resumes & Export</a>
                 <a href="admin_logs.php">📜 Audit Logs</a>
                 <a href="admin_api_logs.php">🔑 API Usage Logs</a>
+                <a href="university_dashboard.php">🎓 University Dashboard</a>
                 <a href="profile.php">⚙️ Settings</a>
             </nav>
 

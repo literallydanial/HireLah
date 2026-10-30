@@ -140,21 +140,27 @@ $busiest_source = !empty($by_source) ? $by_source[0]['source'] : null;
 
     <header>
         <div class="header-inner">
-            <div class="logo-box">🔑</div>
-            <div>
-                <div style="font-size:15px; font-weight:800; line-height:1">Keria ATS</div>
-                <div style="font-size:9px; color:var(--mut); letter-spacing:0.8px">GEMINI API USAGE LOGS</div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
             </div>
 
             <nav style="display:flex; gap:4px; margin-left:24px">
-                <a href="admin_dashboard.php">🛡️ Admin Dashboard</a>
+                <a href="admin_dashboard.php">🛡️ Admin Control Panel</a>
+                <a href="management_dashboard.php" target="_blank" style="color:#2D6A4F; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
+                    📊 Management Dashboard
+                </a>
+                <a href="admin_live_counter.php" target="_blank" style="color:#10B981; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
+                    <span style="display:inline-block; width:7px; height:7px; border-radius:50%; background:#10B981;"></span>📺 TV Live Counter
+                </a>
                 <a href="admin_resumes.php">📄 Resumes & Export</a>
                 <a href="admin_logs.php">📜 Audit Logs</a>
                 <a href="admin_api_logs.php" class="active">🔑 API Usage Logs</a>
+                <a href="university_dashboard.php">🎓 University Dashboard</a>
+                <a href="profile.php">⚙️ Settings</a>
             </nav>
 
-            <div class="header-right-actions">
-                <span class="user-info-text" style="font-size:12px; color:var(--mut); margin-right:10px;">Logged in as <?= htmlspecialchars($_SESSION['user_name']) ?></span>
+            <div class="header-right-actions" style="margin-left:auto; display:flex; align-items:center; gap:10px;">
+                <span class="user-info-text" style="font-size:12px; color:var(--mut);">Logged in as <strong><?= htmlspecialchars($_SESSION['user_name']) ?></strong> (System Admin)</span>
                 <a href="logout.php" class="btn-secondary" style="padding:6px 14px; font-size:12px;">Logout</a>
             </div>
         </div>

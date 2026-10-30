@@ -146,23 +146,84 @@ $avg_resume_score = (float)$pdo->query("SELECT AVG(overall_score) FROM resume_re
 if ($avg_resume_score <= 0) $avg_resume_score = 69.3;
 
 // -------------------------------------------------------------------------
-// 2. 100% REAL USER REGISTRATION TIMELINE (NO FAKE SAMPLES)
+// 2. 100% REAL & DYNAMIC USER REGISTRATION TIMELINE (DATABASE-DRIVEN)
 // -------------------------------------------------------------------------
-// We build the actual daily registration counts for the current month (October 2026)
-$chart_start_date = '2026-10-01';
-$chart_end_date = '2026-10-31';
+$selected_period = strtolower(trim($_GET['period'] ?? '30d'));
+if (!in_array($selected_period, ['today', '7d', '30d', '3m', '1y'], true)) {
+    $selected_period = '30d';
+}
 
-// Base cumulative total prior to October 1st
+$today_date = date('Y-m-d');
+
+switch ($selected_period) {
+    case 'today':
+        $chart_start_date = $today_date;
+        $chart_end_date = $today_date;
+        $current_period_label = date('j M Y');
+        break;
+    case '7d':
+        $chart_start_date = date('Y-m-d', strtotime('-6 days'));
+        $chart_end_date = $today_date;
+        $current_period_label = date('j M Y', strtotime('-6 days')) . ' – ' . date('j M Y');
+        break;
+    case '3m':
+        $chart_start_date = date('Y-m-d', strtotime('-90 days'));
+        $chart_end_date = $today_date;
+        $current_period_label = date('j M Y', strtotime('-90 days')) . ' – ' . date('j M Y');
+        break;
+    case '1y':
+        $chart_start_date = date('Y-m-d', strtotime('-365 days'));
+        $chart_end_date = $today_date;
+        $current_period_label = date('j M Y', strtotime('-365 days')) . ' – ' . date('j M Y');
+        break;
+    case '30d':
+    default:
+        $chart_start_date = date('Y-m-01');
+        $chart_end_date = date('Y-m-t');
+        $current_period_label = date('j M Y', strtotime($chart_start_date)) . ' – ' . date('j M Y', strtotime($chart_end_date));
+        break;
+}
+
+// Dynamic count for selected period in KPI card
+$new_users_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?");
+$new_users_stmt->execute([$chart_start_date, $chart_end_date]);
+$new_users_period = (int)$new_users_stmt->fetchColumn();
+
+// Compare against prior period of equal duration
+$days_diff = max(1, (int)round((strtotime($chart_end_date) - strtotime($chart_start_date)) / 86400) + 1);
+$prior_start = date('Y-m-d', strtotime("-$days_diff days", strtotime($chart_start_date)));
+$prior_end = date('Y-m-d', strtotime("-1 day", strtotime($chart_start_date)));
+
+$prior_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?");
+$prior_stmt->execute([$prior_start, $prior_end]);
+$new_users_prior = (int)$prior_stmt->fetchColumn();
+
+if ($new_users_prior > 0) {
+    $period_growth_pct = round((($new_users_period - $new_users_prior) / $new_users_prior) * 100);
+    $period_growth_sign = $period_growth_pct >= 0 ? '↑ ' . $period_growth_pct . '%' : '↓ ' . abs($period_growth_pct) . '%';
+} else {
+    $period_growth_sign = $new_users_period > 0 ? '↑ 100%' : '0%';
+}
+
+$period_badge_label = match($selected_period) {
+    'today' => 'Today',
+    '7d' => 'Last 7 Days',
+    '3m' => 'Last 3 Months',
+    '1y' => 'Last 1 Year',
+    default => 'Last 30 Days'
+};
+
+// Base cumulative total prior to $chart_start_date
 $prior_cumulative_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE DATE(created_at) < ?");
 $prior_cumulative_stmt->execute([$chart_start_date]);
-$running_cumulative = (int)$prior_cumulative_stmt->fetchColumn(); // Exactly 21 users prior to October
+$running_cumulative = (int)$prior_cumulative_stmt->fetchColumn();
 
-// Fetch actual registrations on each day in October
+// Fetch actual registrations on each day in date range
 $daily_actual_stmt = $pdo->prepare("SELECT DATE(created_at) as reg_date, COUNT(*) as cnt FROM users WHERE DATE(created_at) >= ? AND DATE(created_at) <= ? GROUP BY DATE(created_at)");
 $daily_actual_stmt->execute([$chart_start_date, $chart_end_date]);
-$october_daily_map = [];
+$daily_reg_map = [];
 while ($r = $daily_actual_stmt->fetch()) {
-    $october_daily_map[$r['reg_date']] = (int)$r['cnt'];
+    $daily_reg_map[$r['reg_date']] = (int)$r['cnt'];
 }
 
 $trend_labels = [];
@@ -175,8 +236,7 @@ while ($curr_ts <= $end_ts) {
     $date_key = date('Y-m-d', $curr_ts);
     $display_label = date('j M', $curr_ts);
     
-    // Exactly how many users registered on this day in MySQL
-    $new_on_this_day = $october_daily_map[$date_key] ?? 0;
+    $new_on_this_day = $daily_reg_map[$date_key] ?? 0;
     $running_cumulative += $new_on_this_day;
     
     $trend_labels[] = $display_label;
@@ -186,59 +246,167 @@ while ($curr_ts <= $end_ts) {
     $curr_ts = strtotime('+1 day', $curr_ts);
 }
 
-// Real Weekly breakdown for October:
-// W1 (1-7 Oct): 2 users (Oct 2)
-// W2 (8-14 Oct): 0 users
-// W3 (15-21 Oct): 2 users (Oct 20)
-// W4 (22-31 Oct): 0 users
-$weekly_trend_labels = ['W1 (1-7 Oct)', 'W2 (8-14 Oct)', 'W3 (15-21 Oct)', 'W4 (22-31 Oct)'];
-$weekly_new_users = [2, 0, 2, 0];
-$weekly_cum_users = [23, 23, 25, 25];
+// Dynamic weekly breakdown for the month
+$month_days = (int)date('t', strtotime($chart_start_date));
+$month_abbr = date('M', strtotime($chart_start_date));
+$weeks = [
+    ['label' => "W1 (1-7 $month_abbr)", 'start' => date('Y-m-01', strtotime($chart_start_date)), 'end' => date('Y-m-07', strtotime($chart_start_date))],
+    ['label' => "W2 (8-14 $month_abbr)", 'start' => date('Y-m-08', strtotime($chart_start_date)), 'end' => date('Y-m-14', strtotime($chart_start_date))],
+    ['label' => "W3 (15-21 $month_abbr)", 'start' => date('Y-m-15', strtotime($chart_start_date)), 'end' => date('Y-m-21', strtotime($chart_start_date))],
+    ['label' => "W4 (22-$month_days $month_abbr)", 'start' => date('Y-m-22', strtotime($chart_start_date)), 'end' => date('Y-m-t', strtotime($chart_start_date))],
+];
+
+$weekly_trend_labels = [];
+$weekly_new_users = [];
+$weekly_cum_users = [];
+
+$w_cum_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE DATE(created_at) < ?");
+$w_cum_stmt->execute([$weeks[0]['start']]);
+$weekly_cum_running = (int)$w_cum_stmt->fetchColumn();
+
+foreach ($weeks as $w) {
+    $w_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?");
+    $w_stmt->execute([$w['start'], $w['end']]);
+    $cnt = (int)$w_stmt->fetchColumn();
+    $weekly_cum_running += $cnt;
+    
+    $weekly_trend_labels[] = $w['label'];
+    $weekly_new_users[] = $cnt;
+    $weekly_cum_users[] = $weekly_cum_running;
+}
 
 // -------------------------------------------------------------------------
-// 3. REAL RESUME ACTIVITY (Uploaded vs AI Checked)
+// 3. 100% DYNAMIC RESUME ACTIVITY (DATABASE-DRIVEN)
 // -------------------------------------------------------------------------
-// In October 2026:
-// W2 had 1 upload & 1 AI check (Nurul Hidayah on 12 Oct)
-// All-time real months:
-// Aug: 12 uploaded candidates, 1 AI check
-// Sep: 5 uploaded candidates, 2 AI checks
-// Oct: 1 uploaded candidate, 1 AI check
-$resume_weeks = ['W1', 'W2', 'W3', 'W4'];
-$resumes_uploaded = [0, 1, 0, 0];
-$resumes_ai_checked = [0, 1, 0, 0];
+$months_res_stmt = $pdo->query("
+    SELECT DISTINCT ym, m_label FROM (
+        SELECT DATE_FORMAT(created_at, '%Y-%m') as ym, DATE_FORMAT(created_at, '%b') as m_label FROM candidates
+        UNION
+        SELECT DATE_FORMAT(created_at, '%Y-%m') as ym, DATE_FORMAT(created_at, '%b') as m_label FROM resume_reviews
+        UNION
+        SELECT DATE_FORMAT(created_at, '%Y-%m') as ym, DATE_FORMAT(created_at, '%b') as m_label FROM resume_builds
+    ) t ORDER BY ym ASC
+");
+$all_resume_months = $months_res_stmt->fetchAll(PDO::FETCH_ASSOC);
+if (empty($all_resume_months)) {
+    $all_resume_months = [['ym' => date('Y-m'), 'm_label' => date('M')]];
+}
 
-$resume_months = ['Aug', 'Sep', 'Oct'];
-$resumes_uploaded_monthly = [12, 5, 1];
-$resumes_ai_checked_monthly = [1, 2, 1];
+$resume_months = [];
+$resumes_uploaded_monthly = [];
+$resumes_ai_checked_monthly = [];
+
+foreach ($all_resume_months as $rm) {
+    $ym = $rm['ym'];
+    $resume_months[] = $rm['m_label'];
+    
+    $up_stmt = $pdo->prepare("SELECT COUNT(*) FROM candidates WHERE DATE_FORMAT(created_at, '%Y-%m') = ?");
+    $up_stmt->execute([$ym]);
+    $resumes_uploaded_monthly[] = (int)$up_stmt->fetchColumn();
+    
+    $chk_stmt = $pdo->prepare("SELECT COUNT(*) FROM resume_reviews WHERE DATE_FORMAT(created_at, '%Y-%m') = ?");
+    $chk_stmt->execute([$ym]);
+    $resumes_ai_checked_monthly[] = (int)$chk_stmt->fetchColumn();
+}
+
+$resume_weeks = [];
+$resumes_uploaded = [];
+$resumes_ai_checked = [];
+foreach ($weeks as $w) {
+    $resume_weeks[] = explode(' ', $w['label'])[0];
+    
+    $up_w_stmt = $pdo->prepare("SELECT COUNT(*) FROM candidates WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?");
+    $up_w_stmt->execute([$w['start'], $w['end']]);
+    $resumes_uploaded[] = (int)$up_w_stmt->fetchColumn();
+    
+    $chk_w_stmt = $pdo->prepare("SELECT COUNT(*) FROM resume_reviews WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?");
+    $chk_w_stmt->execute([$w['start'], $w['end']]);
+    $resumes_ai_checked[] = (int)$chk_w_stmt->fetchColumn();
+}
 
 // -------------------------------------------------------------------------
-// 4. REAL EMPLOYER GROWTH
+// 4. 100% DYNAMIC EMPLOYER GROWTH (DATABASE-DRIVEN)
 // -------------------------------------------------------------------------
-// Real employers in system by month:
-// Aug: 3 employers (#2, #4, #9) -> Cumulative: 3
-// Sep: 3 employers (#44, #45, #46) -> Cumulative: 6
-// Oct: 0 new employers -> Cumulative: 6
-$employer_months = ['Aug', 'Sep', 'Oct'];
-$new_employers = [3, 3, 0];
-$cum_employers = [3, 6, 6];
+$emp_growth_stmt = $pdo->query("SELECT DATE_FORMAT(created_at, '%Y-%m') as ym, COUNT(*) as cnt FROM users WHERE role = 'employer' GROUP BY ym ORDER BY ym ASC");
+$emp_month_map = [];
+while ($r = $emp_growth_stmt->fetch()) {
+    $emp_month_map[$r['ym']] = (int)$r['cnt'];
+}
+
+$employer_months = [];
+$new_employers = [];
+$cum_employers = [];
+$running_employers = 0;
+
+foreach ($all_resume_months as $rm) {
+    $ym = $rm['ym'];
+    $employer_months[] = $rm['m_label'];
+    
+    $cnt = $emp_month_map[$ym] ?? 0;
+    $running_employers += $cnt;
+    
+    $new_employers[] = $cnt;
+    $cum_employers[] = $running_employers;
+}
 
 // -------------------------------------------------------------------------
-// 5. REAL AI TOKEN USAGE & COST (Grouped by actual review events)
+// 5. 100% DYNAMIC AI TOKEN USAGE & COST (From real resume reviews in database)
 // -------------------------------------------------------------------------
-$token_days = ['27 Aug', '8 Sep', '14 Sep', '12 Oct'];
-$input_tokens_actual = [1457, 1925, 2369, 1548];
-$output_tokens_actual = [620, 710, 840, 660];
-$cost_rm_actual = [0.001, 0.002, 0.003, 0.001];
+$tokens_event_stmt = $pdo->query("SELECT 
+    id,
+    DATE_FORMAT(created_at, '%e %b') as day_label,
+    ROUND(LENGTH(full_text) / 4 + 1200) as in_tokens,
+    ROUND((LENGTH(summary) + LENGTH(strengths) + LENGTH(improvements)) / 4) as out_tokens,
+    created_at
+FROM resume_reviews 
+ORDER BY created_at ASC");
+
+$token_days = [];
+$input_tokens_actual = [];
+$output_tokens_actual = [];
+$cost_rm_actual = [];
+
+while ($ev = $tokens_event_stmt->fetch(PDO::FETCH_ASSOC)) {
+    $token_days[] = $ev['day_label'];
+    $in = (int)$ev['in_tokens'];
+    $out = (int)$ev['out_tokens'];
+    $input_tokens_actual[] = $in;
+    $output_tokens_actual[] = $out;
+    $cost_rm_actual[] = round(($in * 0.00000035) + ($out * 0.00000105), 4);
+}
+
+if (empty($token_days)) {
+    $token_days = [date('j M')];
+    $input_tokens_actual = [0];
+    $output_tokens_actual = [0];
+    $cost_rm_actual = [0];
+}
 
 // -------------------------------------------------------------------------
-// 6. REAL AI MODEL BREAKDOWN
+// 6. 100% DYNAMIC AI MODEL BREAKDOWN
 // -------------------------------------------------------------------------
-// In this system, all calls are made through the configured Gemini model (Gemini 3.6 Flash / Gemini 1.5 Flash)
-$model_labels = ['Gemini Flash (' . htmlspecialchars($configured_ai_model) . ')'];
-$model_shares = [100];
-$model_tokens = [$ai_tokens_formatted];
-$model_colors = ['#226435'];
+$model_logs_stmt = $pdo->query("SELECT model_requested, COUNT(*) as cnt FROM gemini_api_logs WHERE model_requested IS NOT NULL AND model_requested != '' GROUP BY model_requested ORDER BY cnt DESC");
+$db_models = $model_logs_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+if (!empty($db_models)) {
+    $model_labels = [];
+    $model_shares = [];
+    $model_tokens = [];
+    $palette = ['#226435', '#2563EB', '#7C3AED', '#EA580C'];
+    $model_colors = [];
+    $total_cnt = array_sum(array_column($db_models, 'cnt'));
+    foreach ($db_models as $idx => $dm) {
+        $model_labels[] = $dm['model_requested'];
+        $model_shares[] = round(($dm['cnt'] / max(1, $total_cnt)) * 100);
+        $model_tokens[] = $dm['cnt'] . ' calls';
+        $model_colors[] = $palette[$idx % count($palette)];
+    }
+} else {
+    $model_labels = ['Gemini Flash (' . htmlspecialchars($configured_ai_model) . ')'];
+    $model_shares = [100];
+    $model_tokens = [$ai_tokens_formatted];
+    $model_colors = ['#226435'];
+}
 
 // -------------------------------------------------------------------------
 // 7. REAL RECENT ACTIVITIES FEED (Directly from Database)
@@ -1143,15 +1311,15 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                 <div class="header-controls">
                     <div class="date-picker-box">
                         <span>📅</span>
-                        <span id="currentDateDisplay">1 Oct 2026 – 31 Oct 2026</span>
+                        <span id="currentDateDisplay"><?= htmlspecialchars($current_period_label) ?></span>
                     </div>
 
                     <div class="period-filter-group">
-                        <button type="button" class="period-btn" onclick="setPeriodFilter('Today', this)">Today</button>
-                        <button type="button" class="period-btn" onclick="setPeriodFilter('7D', this)">7D</button>
-                        <button type="button" class="period-btn active" onclick="setPeriodFilter('30D', this)">30D</button>
-                        <button type="button" class="period-btn" onclick="setPeriodFilter('3M', this)">3M</button>
-                        <button type="button" class="period-btn" onclick="setPeriodFilter('1Y', this)">1Y</button>
+                        <button type="button" class="period-btn <?= $selected_period === 'today' ? 'active' : '' ?>" onclick="setPeriodFilter('Today', this)">Today</button>
+                        <button type="button" class="period-btn <?= $selected_period === '7d' ? 'active' : '' ?>" onclick="setPeriodFilter('7D', this)">7D</button>
+                        <button type="button" class="period-btn <?= $selected_period === '30d' ? 'active' : '' ?>" onclick="setPeriodFilter('30D', this)">30D</button>
+                        <button type="button" class="period-btn <?= $selected_period === '3m' ? 'active' : '' ?>" onclick="setPeriodFilter('3M', this)">3M</button>
+                        <button type="button" class="period-btn <?= $selected_period === '1y' ? 'active' : '' ?>" onclick="setPeriodFilter('1Y', this)">1Y</button>
                     </div>
                 </div>
             </header>
@@ -1176,9 +1344,9 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                         <div class="kpi-icon-pill" style="background:var(--accent-purple-light); color:#9333EA;">👥</div>
                         <div class="kpi-title">New Users</div>
                     </div>
-                    <div class="kpi-value"><?= number_format($new_users_30d) ?></div>
+                    <div class="kpi-value"><?= number_format($new_users_period) ?></div>
                     <div class="kpi-trend trend-up">
-                        <span>Last 30 Days</span>
+                        <span><?= $period_badge_label ?> (<?= $period_growth_sign ?>)</span>
                     </div>
                 </div>
 
@@ -1994,25 +2162,20 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                 });
             }
 
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState(null, null, '#' + tabId);
+            }
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function setPeriodFilter(period, btn) {
-            document.querySelectorAll('.period-btn').forEach(function(b) { b.classList.remove('active'); });
-            btn.classList.add('active');
-            
-            var dateDisplay = document.getElementById('currentDateDisplay');
-            if (period === 'Today') {
-                dateDisplay.textContent = '<?= date('j M Y') ?>';
-            } else if (period === '7D') {
-                dateDisplay.textContent = '<?= date('j M Y', strtotime('-7 days')) ?> – <?= date('j M Y') ?>';
-            } else if (period === '30D') {
-                dateDisplay.textContent = '1 Oct 2026 – 31 Oct 2026';
-            } else if (period === '3M') {
-                dateDisplay.textContent = '1 Aug 2026 – 31 Oct 2026';
-            } else if (period === '1Y') {
-                dateDisplay.textContent = '1 Nov 2025 – 31 Oct 2026';
+            var url = new URL(window.location.href);
+            url.searchParams.set('period', period.toLowerCase());
+            var activeTab = document.querySelector('.mgmt-tab-view.active');
+            if (activeTab && activeTab.id) {
+                url.hash = '#' + activeTab.id;
             }
+            window.location.href = url.toString();
         }
 
         function filterUserDirectory(query) {
@@ -2025,6 +2188,12 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
         }
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Restore active view tab from URL hash if present
+            var hash = window.location.hash ? window.location.hash.substring(1) : '';
+            if (hash && document.getElementById(hash)) {
+                switchMgmtTab(hash, null);
+            }
+
             // Chart 1: Real User Registration Trend
             var ctxUserTrend = document.getElementById('userTrendChart');
             if (ctxUserTrend) {

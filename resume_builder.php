@@ -1,6 +1,7 @@
 <?php
 require_once 'auth.php';
 require_once 'ai.php';
+require_once 'parser.php';
 @require_once 'notifications_helper.php';
 
 // AI Resume Builder — candidate fills a guided form (with an optional
@@ -53,16 +54,141 @@ if (isset($_GET['view'])) {
 
 // ---- Edit a previously generated resume ----
 if (isset($_GET['edit'])) {
-    $stmt = $pdo->prepare("SELECT raw_input FROM resume_builds WHERE id = ? AND user_id = ?");
+    $stmt = $pdo->prepare("SELECT raw_input, generated_content FROM resume_builds WHERE id = ? AND user_id = ?");
     $stmt->execute([(int)$_GET['edit'], $_SESSION['user_id']]);
     $row = $stmt->fetch();
     if ($row) {
-        $prefill = json_decode($row['raw_input'], true);
+        $prefill = json_decode($row['raw_input'], true) ?: [];
+        $gen = json_decode($row['generated_content'], true) ?: [];
+        if (empty($prefill['experience']) && !empty($gen['experience'])) {
+            $prefill['experience'] = [];
+            foreach ($gen['experience'] as $ge) {
+                $prefill['experience'][] = [
+                    'company' => $ge['company'] ?? '',
+                    'role' => $ge['role'] ?? '',
+                    'duration' => $ge['duration'] ?? '',
+                    'notes' => is_array($ge['bullets'] ?? null) ? implode("\n", $ge['bullets']) : ($ge['notes'] ?? '')
+                ];
+            }
+        }
+        if (empty($prefill['education']) && !empty($gen['education'])) {
+            $prefill['education'] = $gen['education'];
+        }
+        if (empty($prefill['skills']) && !empty($gen['skills'])) {
+            $prefill['skills'] = is_array($gen['skills']) ? implode(', ', $gen['skills']) : $gen['skills'];
+        }
+        if (empty($prefill['extra_notes']) && !empty($gen['achievements'])) {
+            $prefill['extra_notes'] = is_array($gen['achievements']) ? implode("\n", $gen['achievements']) : $gen['achievements'];
+        }
+        if (empty($prefill['target_title']) && !empty($gen['target_title'])) {
+            $prefill['target_title'] = $gen['target_title'];
+        }
+        if (empty($prefill['full_name']) && !empty($gen['full_name'])) {
+            $prefill['full_name'] = $gen['full_name'];
+        }
+        if (empty($prefill['contact_email']) && !empty($gen['contact_email'])) {
+            $prefill['contact_email'] = $gen['contact_email'];
+        }
+        if (empty($prefill['contact_phone']) && !empty($gen['contact_phone'])) {
+            $prefill['contact_phone'] = $gen['contact_phone'];
+        }
+        if (empty($prefill['location']) && !empty($gen['location'])) {
+            $prefill['location'] = $gen['location'];
+        }
     }
 }
 
-// ---- Generate a new resume ----
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'generate') {
+// ---- Auto-Generate Resume from Dropped / Uploaded File ----
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'auto_generate') {
+    $file = $_FILES['resume_file'] ?? null;
+    $target_title = trim($_POST['auto_target_title'] ?? '');
+    $full_name = trim($_POST['auto_full_name'] ?? $candidate_name);
+    $contact_email = trim($_POST['auto_contact_email'] ?? $candidate_email);
+    $contact_phone = trim($_POST['auto_contact_phone'] ?? '');
+    $location = trim($_POST['auto_location'] ?? '');
+    $use_saved_resume = !empty($_POST['use_saved_resume']);
+
+    $saved_resume_path = null;
+    if ($use_saved_resume && !empty($user_info['default_resume']) && file_exists($user_info['default_resume'])) {
+        $dest_path = $user_info['default_resume'];
+        $orig_filename = basename($dest_path);
+    } elseif (!$file || $file['error'] === UPLOAD_ERR_NO_FILE) {
+        $error = "Please drag & drop or select your resume file (PDF, DOCX, or TXT).";
+    } elseif ($file['error'] !== UPLOAD_ERR_OK || ($file['size'] ?? 0) > 10 * 1024 * 1024) {
+        $error = "Uploaded file exceeds the maximum allowed size limit (10MB) or encountered an upload error.";
+    } else {
+        $upload_dir = 'uploads/';
+        if (!is_dir($upload_dir)) @mkdir($upload_dir, 0755, true);
+
+        $orig_filename = basename($file['name']);
+        $dest_path = $upload_dir . uniqid('res_auto_') . '_' . $orig_filename;
+
+        if (!move_uploaded_file($file['tmp_name'], $dest_path)) {
+            $error = "Failed to save the uploaded resume. Please try again.";
+            $dest_path = null;
+        }
+    }
+
+    if (!$error && !empty($dest_path)) {
+        $extracted_text = extract_text_from_resume_file($dest_path);
+
+        if (empty(trim($extracted_text)) || mb_strlen(trim($extracted_text)) < 25) {
+            $error = "Could not extract readable text from the uploaded resume file. Please ensure it is not a scanned image PDF, or use the Step-by-Step Form.";
+        } else {
+            try {
+                $user_hints = [
+                    'name' => $full_name,
+                    'email' => $contact_email,
+                    'phone' => $contact_phone,
+                    'location' => $location
+                ];
+                $generated = auto_generate_resume_document($api_key, $extracted_text, $target_title, $user_hints);
+
+                $final_name = !empty($generated['full_name']) ? $generated['full_name'] : $full_name;
+                $final_title = !empty($generated['target_title']) ? $generated['target_title'] : ($target_title ?: 'Professional');
+                $final_email = !empty($generated['contact_email']) ? $generated['contact_email'] : $contact_email;
+                $final_phone = !empty($generated['contact_phone']) ? $generated['contact_phone'] : $contact_phone;
+                $final_location = !empty($generated['location']) ? $generated['location'] : $location;
+
+                $generated_meta = [
+                    'full_name' => $final_name,
+                    'target_title' => $final_title,
+                    'contact_email' => $final_email,
+                    'contact_phone' => $final_phone,
+                    'location' => $final_location
+                ];
+
+                $raw_input = [
+                    'source' => 'auto_generate',
+                    'original_filename' => $orig_filename,
+                    'target_title' => $final_title,
+                    'full_name' => $final_name,
+                    'contact_email' => $final_email,
+                    'contact_phone' => $final_phone,
+                    'location' => $final_location,
+                    'is_fresh_grad' => empty($generated['experience'])
+                ];
+
+                $stmt = $pdo->prepare("INSERT INTO resume_builds (user_id, target_title, raw_input, generated_content) VALUES (?, ?, ?, ?)");
+                $stmt->execute([
+                    $_SESSION['user_id'],
+                    $final_title,
+                    json_encode($raw_input),
+                    json_encode(array_merge($generated, $generated_meta))
+                ]);
+                $new_build_id = $pdo->lastInsertId();
+
+                $_SESSION['toast'] = "✨ Resume successfully transformed into a high-impact, ATS-friendly format!";
+            } catch (\Throwable $e) {
+                error_log("Auto Resume Builder Error: " . $e->getMessage());
+                $error = "Something went wrong generating your resume: " . $e->getMessage();
+            }
+        }
+    }
+}
+
+// ---- Generate a new resume via step-by-step form ----
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['action'] ?? '') === 'generate') {
     $target_title = trim($_POST['target_title'] ?? '');
     $full_name = trim($_POST['full_name'] ?? $candidate_name);
     $contact_email = trim($_POST['contact_email'] ?? '');
@@ -606,6 +732,76 @@ try {
         }
 
         /* Mode Switcher Bar */
+        
+        /* Auto Generate Dropzone Styles */
+        .resume-dropzone {
+            border: 2.5px dashed #D1D5DB;
+            border-radius: 18px;
+            background: #FAFAFA;
+            padding: 44px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            user-select: none;
+        }
+        .resume-dropzone:hover, .resume-dropzone.dragover {
+            border-color: #15803D;
+            background: #F0FDF4;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -5px rgba(21, 128, 61, 0.1);
+        }
+        .dropzone-icon-circle {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: #DCFCE7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            transition: transform 0.2s ease;
+        }
+        .resume-dropzone:hover .dropzone-icon-circle, .resume-dropzone.dragover .dropzone-icon-circle {
+            transform: scale(1.12);
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .auto-pulse-btn {
+            background: #0A0A0A;
+            color: #FFFFFF;
+            padding: 16px 28px;
+            font-size: 15px;
+            font-weight: 800;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+            transition: all 0.2s ease;
+        }
+        .auto-pulse-btn:hover {
+            background: #15803D;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(21, 128, 61, 0.25);
+        }
+        [data-theme="dark"] .resume-dropzone {
+            background: #18191D;
+            border-color: #383940;
+        }
+        [data-theme="dark"] .resume-dropzone:hover, [data-theme="dark"] .resume-dropzone.dragover {
+            border-color: var(--keria-lime);
+            background: rgba(210, 255, 58, 0.05);
+        }
+
         .mode-toggle-bar {
             background: #FFFFFF;
             border: 1px solid #E5E7EB;
@@ -1042,7 +1238,8 @@ try {
             <!-- Mode Switcher (Pill style) -->
             <div class="no-print" style="margin-bottom:20px;">
                 <div class="mode-toggle-bar">
-                    <button type="button" class="mode-toggle-btn active" id="tabFormBtn" onclick="switchMode('form')">📝 Step-by-Step Form</button>
+                    <button type="button" class="mode-toggle-btn <?= (!isset($_GET['edit']) ? 'active' : '') ?>" id="tabAutoBtn" onclick="switchMode('auto')">⚡ Auto Generate</button>
+                    <button type="button" class="mode-toggle-btn <?= (isset($_GET['edit']) ? 'active' : '') ?>" id="tabFormBtn" onclick="switchMode('form')">📝 Step-by-Step Form</button>
                     <button type="button" class="mode-toggle-btn" id="tabChatBtn" onclick="switchMode('chat')">💬 Chat with AI</button>
                 </div>
             </div>
@@ -1051,7 +1248,126 @@ try {
                 
                 <!-- Main Form Column -->
                 <div class="builder-main-col">
-                    <form method="POST" id="builderForm">
+                    
+                    <!-- PANEL 1: Auto Generate Mode (Drag & Drop 1-Click Generator) -->
+                    <div id="autoPanel" style="<?= isset($_GET['edit']) ? 'display:none;' : 'display:block;' ?>">
+                        <form method="POST" id="autoBuilderForm" enctype="multipart/form-data" onsubmit="return handleAutoSubmit(event)">
+                            <input type="hidden" name="action" value="auto_generate">
+                            <input type="hidden" name="use_saved_resume" id="useSavedResumeInput" value="0">
+
+                            <div class="keria-card">
+                                <div class="rb-card-header">
+                                    <div class="rb-num-badge" style="background:#0A0A0A; color:#FFFFFF;">⚡</div>
+                                    <div>
+                                        <h3 class="rb-card-title">1-Click Auto Generate ATS Resume</h3>
+                                        <p class="rb-card-subtitle">Drop your resume here and our AI will extract, elevate, and rebuild it into an ATS-friendly, high-impact resume in one click.</p>
+                                    </div>
+                                </div>
+
+                                <!-- Drag and Drop Zone -->
+                                <div class="resume-dropzone" id="resumeDropzone" onclick="document.getElementById('autoResumeInput').click()">
+                                    <input type="file" name="resume_file" id="autoResumeInput" accept=".pdf,.docx,.txt" style="display:none;" onchange="handleFileSelect(this.files)">
+                                    
+                                    <div class="dropzone-content" id="dropzoneEmpty">
+                                        <div class="dropzone-icon-circle">
+                                            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#15803D" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="17 8 12 3 7 8"></polyline>
+                                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                                            </svg>
+                                        </div>
+                                        <div style="font-size:16.5px; font-weight:800; color:#0A0A0A; margin-bottom:6px;">
+                                            Drag & drop your resume file here
+                                        </div>
+                                        <div style="font-size:13.5px; color:#6B7280; margin-bottom:14px;">
+                                            or <span style="color:#15803D; font-weight:700; text-decoration:underline;">browse from your computer</span>
+                                        </div>
+                                        <div style="display:inline-flex; align-items:center; gap:8px; background:#F3F4F6; padding:6px 16px; border-radius:20px; font-size:12px; color:#4B5563; font-weight:600;">
+                                            <span>📄 Supports PDF, DOCX, TXT</span>
+                                            <span>&bull;</span>
+                                            <span>Up to 10MB</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- File Selected Preview State -->
+                                    <div class="dropzone-file-preview" id="dropzoneFilePreview" style="display:none; width:100%;">
+                                        <div style="display:flex; align-items:center; gap:14px; width:100%; background:#FFFFFF; border:1px solid #86EFAC; border-radius:14px; padding:16px;">
+                                            <div style="width:48px; height:48px; border-radius:12px; background:#DCFCE7; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0;">
+                                                📑
+                                            </div>
+                                            <div style="flex:1; min-width:0; text-align:left;">
+                                                <div id="previewFileName" style="font-size:14.5px; font-weight:800; color:#0A0A0A; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">resume.pdf</div>
+                                                <div style="display:flex; align-items:center; gap:8px; margin-top:2px;">
+                                                    <span id="previewFileSize" style="font-size:12px; color:#6B7280;">245 KB</span>
+                                                    <span style="font-size:11px; background:#DCFCE7; color:#15803D; font-weight:800; padding:2px 8px; border-radius:6px;">✓ Ready to Auto Generate</span>
+                                                </div>
+                                            </div>
+                                            <button type="button" class="btn-browse-action" style="padding:6px 14px; font-size:12px; font-weight:700;" onclick="event.stopPropagation(); clearAutoFile();">
+                                                Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <?php if (!empty($user_info['default_resume']) && file_exists($user_info['default_resume'])): ?>
+                                    <div style="margin-top:12px; text-align:center;">
+                                        <button type="button" onclick="useProfileSavedResume('<?= htmlspecialchars(basename($user_info['default_resume'])) ?>', <?= (int)@filesize($user_info['default_resume']) ?>)" style="background:none; border:none; color:#15803D; font-size:12.5px; font-weight:700; cursor:pointer; text-decoration:underline;">
+                                            ⚡ Or use your saved profile resume (<?= htmlspecialchars(basename($user_info['default_resume'])) ?>)
+                                        </button>
+                                    </div>
+                                <?php endif; ?>
+
+                                <!-- Optional Tailoring Fields -->
+                                <div style="margin-top:22px; padding-top:20px; border-top:1px solid #F3F4F6;">
+                                    <div style="font-size:13.5px; font-weight:800; color:#0A0A0A; margin-bottom:12px; display:flex; align-items:center; gap:6px;">
+                                        <span>🎯 Role Targeting & Preferences</span>
+                                        <span style="font-size:11.5px; font-weight:600; color:#9CA3AF;">(Optional)</span>
+                                    </div>
+
+                                    <div class="rb-field-grid-2">
+                                        <div>
+                                            <label class="rb-label">Target Job Title <span style="font-weight:normal; color:#9CA3AF;">(leave blank to auto-detect from resume)</span></label>
+                                            <input type="text" name="auto_target_title" class="rb-input" placeholder="e.g. Senior Digital Marketing Manager">
+                                        </div>
+                                        <div>
+                                            <label class="rb-label">Location</label>
+                                            <input type="text" name="auto_location" class="rb-input" value="<?= htmlspecialchars($prefill['location'] ?? '') ?>" placeholder="e.g. Kuala Lumpur, Malaysia">
+                                        </div>
+                                    </div>
+
+                                    <div class="rb-field-grid-2" style="margin-top:12px;">
+                                        <div>
+                                            <label class="rb-label">Candidate Name</label>
+                                            <input type="text" name="auto_full_name" class="rb-input" value="<?= htmlspecialchars($candidate_name) ?>">
+                                        </div>
+                                        <div>
+                                            <label class="rb-label">Contact Email</label>
+                                            <input type="email" name="auto_contact_email" class="rb-input" value="<?= htmlspecialchars($candidate_email) ?>">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- One-Click Generate Button -->
+                                <div style="margin-top:24px;">
+                                    <button type="submit" id="autoGenerateBtn" class="auto-pulse-btn">
+                                        <span>✨ One-Click Auto Generate ATS Resume</span>
+                                        <span style="font-size:18px;">&rarr;</span>
+                                    </button>
+                                </div>
+
+                                <!-- Loading State Animation -->
+                                <div id="autoLoadingOverlay" style="display:none; text-align:center; padding:36px 20px; background:#FFFFFF; border-radius:16px; margin-top:20px; border:1px solid #E5E7EB; box-shadow:0 4px 15px rgba(0,0,0,0.04);">
+                                    <div style="width:48px; height:48px; border:4px solid #E5E7EB; border-top-color:#15803D; border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 16px;"></div>
+                                    <div style="font-size:17px; font-weight:800; color:#0A0A0A; margin-bottom:6px;" id="autoLoadingTitle">Transforming Your Resume with AI…</div>
+                                    <div style="font-size:13px; color:#6B7280; max-width:460px; margin:0 auto; line-height:1.5;" id="autoLoadingSubtitle">Analyzing your background, rewriting high-impact bullet points, and restructuring into ATS format.</div>
+                                </div>
+
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- PANEL 2 & 3: Step-by-Step Form & Interactive Chat Builder -->
+                    <form method="POST" id="builderForm" style="<?= isset($_GET['edit']) ? 'display:block;' : 'display:none;' ?>">
                         <input type="hidden" name="action" value="generate">
 
                         <div id="formPanel">
@@ -1431,20 +1747,132 @@ try {
         });
     });
 
-    // Mode Switcher
+    // Mode Switcher (Auto Generate, Step-by-Step Form, Chat with AI)
     function switchMode(mode) {
-        document.getElementById('tabFormBtn').classList.toggle('active', mode === 'form');
-        document.getElementById('tabChatBtn').classList.toggle('active', mode === 'chat');
-        document.getElementById('formPanel').style.display = (mode === 'form') ? 'block' : 'none';
-        document.getElementById('chatPanel').style.display = (mode === 'chat') ? 'block' : 'none';
+        var tabAutoBtn = document.getElementById('tabAutoBtn');
+        var tabFormBtn = document.getElementById('tabFormBtn');
+        var tabChatBtn = document.getElementById('tabChatBtn');
 
-        document.querySelectorAll('#formPanel input, #formPanel textarea, #formPanel button').forEach(el => el.disabled = (mode === 'chat'));
-        document.querySelectorAll('#chatHiddenFields input').forEach(el => el.disabled = (mode === 'form'));
+        if (tabAutoBtn) tabAutoBtn.classList.toggle('active', mode === 'auto');
+        if (tabFormBtn) tabFormBtn.classList.toggle('active', mode === 'form');
+        if (tabChatBtn) tabChatBtn.classList.toggle('active', mode === 'chat');
 
-        if (mode === 'chat' && !chatStarted) {
-            chatStarted = true;
-            chatStart();
+        var autoPanel = document.getElementById('autoPanel');
+        var builderForm = document.getElementById('builderForm');
+        var formPanel = document.getElementById('formPanel');
+        var chatPanel = document.getElementById('chatPanel');
+
+        if (mode === 'auto') {
+            if (autoPanel) autoPanel.style.display = 'block';
+            if (builderForm) builderForm.style.display = 'none';
+        } else if (mode === 'form') {
+            if (autoPanel) autoPanel.style.display = 'none';
+            if (builderForm) builderForm.style.display = 'block';
+            if (formPanel) formPanel.style.display = 'block';
+            if (chatPanel) chatPanel.style.display = 'none';
+            document.querySelectorAll('#formPanel input, #formPanel textarea, #formPanel button').forEach(el => el.disabled = false);
+            document.querySelectorAll('#chatHiddenFields input').forEach(el => el.disabled = true);
+        } else if (mode === 'chat') {
+            if (autoPanel) autoPanel.style.display = 'none';
+            if (builderForm) builderForm.style.display = 'block';
+            if (formPanel) formPanel.style.display = 'none';
+            if (chatPanel) chatPanel.style.display = 'block';
+            document.querySelectorAll('#formPanel input, #formPanel textarea, #formPanel button').forEach(el => el.disabled = true);
+            document.querySelectorAll('#chatHiddenFields input').forEach(el => el.disabled = false);
+
+            if (!chatStarted) {
+                chatStarted = true;
+                chatStart();
+            }
         }
+    }
+
+    // Dropzone Event Listeners and Handlers
+    document.addEventListener('DOMContentLoaded', function() {
+        var dropzone = document.getElementById('resumeDropzone');
+        if (dropzone) {
+            ['dragenter', 'dragover'].forEach(function(eventName) {
+                dropzone.addEventListener(eventName, function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.add('dragover');
+                }, false);
+            });
+            ['dragleave', 'drop'].forEach(function(eventName) {
+                dropzone.addEventListener(eventName, function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.remove('dragover');
+                }, false);
+            });
+            dropzone.addEventListener('drop', function(e) {
+                var dt = e.dataTransfer;
+                var files = dt.files;
+                if (files && files.length > 0) {
+                    document.getElementById('autoResumeInput').files = files;
+                    handleFileSelect(files);
+                }
+            }, false);
+        }
+    });
+
+    function handleFileSelect(files) {
+        if (!files || files.length === 0) return;
+        var file = files[0];
+        document.getElementById('dropzoneEmpty').style.display = 'none';
+        document.getElementById('dropzoneFilePreview').style.display = 'flex';
+        document.getElementById('previewFileName').textContent = file.name;
+        var sizeKb = Math.round(file.size / 1024);
+        document.getElementById('previewFileSize').textContent = (sizeKb > 1024) ? (sizeKb / 1024).toFixed(1) + ' MB' : sizeKb + ' KB';
+        document.getElementById('useSavedResumeInput').value = '0';
+    }
+
+    function clearAutoFile() {
+        document.getElementById('autoResumeInput').value = '';
+        document.getElementById('dropzoneEmpty').style.display = 'block';
+        document.getElementById('dropzoneFilePreview').style.display = 'none';
+        document.getElementById('useSavedResumeInput').value = '0';
+    }
+
+    function useProfileSavedResume(filename, filesize) {
+        document.getElementById('useSavedResumeInput').value = '1';
+        document.getElementById('dropzoneEmpty').style.display = 'none';
+        document.getElementById('dropzoneFilePreview').style.display = 'flex';
+        document.getElementById('previewFileName').textContent = filename;
+        var sizeKb = Math.round(filesize / 1024);
+        document.getElementById('previewFileSize').textContent = (sizeKb > 1024) ? (sizeKb / 1024).toFixed(1) + ' MB' : sizeKb + ' KB';
+    }
+
+    function handleAutoSubmit(e) {
+        var input = document.getElementById('autoResumeInput');
+        var useSaved = document.getElementById('useSavedResumeInput').value === '1';
+
+        if (!useSaved && (!input.files || input.files.length === 0)) {
+            alert("Please drag & drop or choose your resume file first.");
+            e.preventDefault();
+            return false;
+        }
+
+        var btn = document.getElementById('autoGenerateBtn');
+        var overlay = document.getElementById('autoLoadingOverlay');
+        if (btn) btn.style.display = 'none';
+        if (overlay) overlay.style.display = 'block';
+
+        var msgs = [
+            "Parsing uploaded resume text...",
+            "Analyzing career trajectory & target role...",
+            "Rewriting bullet points with high-impact action verbs...",
+            "Structuring competencies for ATS keyword matching...",
+            "Finalizing your polished ATS-friendly resume..."
+        ];
+        var idx = 0;
+        setInterval(function() {
+            idx = (idx + 1) % msgs.length;
+            var sub = document.getElementById('autoLoadingSubtitle');
+            if (sub) sub.textContent = msgs[idx];
+        }, 2200);
+
+        return true;
     }
 
     // Chat mode scripts

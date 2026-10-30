@@ -708,4 +708,197 @@ PROMPT;
     }
     return array_slice($bullets, 0, 4);
 }
+
+// =========================================================================
+// AUTO GENERATE RESUME FROM UPLOADED RESUME FILE (1-Click ATS Transformation)
+// =========================================================================
+
+function build_auto_resume_prompt($raw_text, $target_title = '', $user_info = []) {
+    $user_name = $user_info['name'] ?? '';
+    $user_email = $user_info['email'] ?? '';
+    $user_phone = $user_info['phone'] ?? '';
+    $user_location = $user_info['location'] ?? '';
+
+    $target_hint = !empty($target_title)
+        ? "Target Job Title requested by candidate: \"{$target_title}\"."
+        : "Target Job Title: Infer the best ATS-aligned professional target title from the candidate's career history.";
+
+    // Truncate raw text if extremely large to stay well within tokens
+    $clean_text = mb_substr(trim($raw_text), 0, 15000);
+
+    return <<<PROMPT
+You are a World-Class Executive Resume Writer and Applicant Tracking System (ATS) Optimization Specialist.
+Transform the candidate's uploaded resume text into a top-tier, polished, ATS-compliant resume document.
+
+{$target_hint}
+
+CANDIDATE'S PROFILE HINTS (use if not present in resume text):
+Name: {$user_name}
+Email: {$user_email}
+Phone: {$user_phone}
+Location: {$user_location}
+
+UPLOADED RESUME RAW TEXT:
+=== BEGIN ===
+{$clean_text}
+=== END ===
+
+TRANSFORMATION OBJECTIVES:
+1. Contact Details: Extract the candidate's Full Name, Professional Email, Phone Number, and Location (City, Country). Fallback to profile hints if missing.
+2. Target Title: Determine a crisp, modern target role title (e.g. "Senior Full-Stack Developer", "Digital Marketing Specialist").
+3. Professional Summary: Write a strong, 3-4 sentence ATS-optimized executive summary showcasing domain experience, core proficiencies, and professional impact.
+4. Work Experience:
+   - Identify each position in reverse chronological order.
+   - For each role, provide Company Name, Job Title/Role, Duration (e.g. "2021 – Present" or "Jan 2020 – Dec 2022").
+   - Elevate the bullet points into 3-5 high-impact, results-driven statements starting with strong action verbs (e.g. "Spearheaded", "Architected", "Engineered", "Optimized", "Collaborated", "Streamlined", "Accelerated"). Do NOT fabricate false numerical statistics or non-existent companies, but elaborate scope, methods, and responsibilities with maximum professional clarity.
+5. Education: Extract degrees, institutions, and graduation years.
+6. Core Skills & Competencies: Extract 8 to 16 keyword-rich technical and transferable skills formatted as clean strings.
+7. Key Achievements & Certifications: Extract certifications, awards, notable projects, or languages as short items.
+
+OUTPUT REQUIREMENTS:
+Respond STRICTLY with valid JSON. Do not write text before or after the JSON:
+{
+    "full_name": "Full Name",
+    "contact_email": "email@example.com",
+    "contact_phone": "+60 12-345 6789",
+    "location": "City, Country",
+    "target_title": "Target Role Title",
+    "summary": "3-4 sentence professional summary...",
+    "experience": [
+        {
+            "company": "Company Name",
+            "role": "Role / Position",
+            "duration": "Duration / Dates",
+            "bullets": [
+                "Action verb bullet point...",
+                "Action verb bullet point..."
+            ]
+        }
+    ],
+    "education": [
+        {"degree": "Degree / Qualification", "school": "University / School", "year": "Year"}
+    ],
+    "skills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5"],
+    "achievements": ["Certification or Achievement 1", "Achievement 2"]
+}
+PROMPT;
+}
+
+function generate_fallback_auto_resume($raw_text, $target_title = '', $user_info = []) {
+    $email = $user_info['email'] ?? '';
+    if (preg_match('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', $raw_text, $m)) {
+        $email = $m[0];
+    }
+    $phone = $user_info['phone'] ?? '';
+    if (preg_match('/(?:\+?6?01[0-9]{1}-?[0-9]{7,8})|(?:\+?[0-9]{2,3}[- ]?[0-9]{6,10})/', $raw_text, $m)) {
+        $phone = $m[0];
+    }
+    $name = $user_info['name'] ?? 'Professional Candidate';
+    $lines = array_values(array_filter(array_map('trim', explode("\n", $raw_text))));
+    if (!empty($lines[0]) && strlen($lines[0]) < 40 && !preg_match('/@|http|\.com|phone|resume/i', $lines[0])) {
+        $name = $lines[0];
+    }
+
+    $title = !empty($target_title) ? $target_title : 'Specialist';
+    $summary = "Dedicated and results-oriented {$title} with demonstrated experience in driving organizational goals and delivering quality outcomes. Proven ability to collaborate with cross-functional teams, solve complex problems, and apply industry-standard practices. Eager to contribute professional expertise to high-impact opportunities.";
+
+    $experience = [];
+    $education = [];
+    $skills = [];
+    $achievements = [];
+
+    $bullets = [];
+    foreach ($lines as $line) {
+        if (preg_match('/^[-•*]\s*(.+)/', $line, $bm)) {
+            $b = ucfirst(trim($bm[1]));
+            if (!preg_match('/[.!?]$/', $b)) $b .= '.';
+            $bullets[] = $b;
+        } elseif (preg_match('/(bachelor|master|diploma|degree|phd|certificate|university|college|school)/i', $line)) {
+            $education[] = [
+                'degree' => $line,
+                'school' => 'Academic Institution',
+                'year' => date('Y')
+            ];
+        } elseif (preg_match('/skills?[:\s]+(.+)/i', $line, $sm)) {
+            $s_items = preg_split('/[,|•;\/]/', $sm[1]);
+            foreach ($s_items as $si) {
+                $si = trim($si);
+                if ($si !== '' && strlen($si) < 35) $skills[] = $si;
+            }
+        }
+    }
+
+    if (empty($experience)) {
+        $experience[] = [
+            'company' => 'Professional Career Experience',
+            'role' => $title,
+            'duration' => 'Recent',
+            'bullets' => !empty($bullets) ? array_slice($bullets, 0, 5) : [
+                "Managed daily responsibilities and collaborated with cross-functional team members to achieve operational targets.",
+                "Utilized modern tools and industry methodologies to deliver high-quality deliverables on schedule.",
+                "Streamlined task workflows and contributed to ongoing team productivity enhancements."
+            ]
+        ];
+    }
+
+    if (empty($education)) {
+        $education[] = [
+            'degree' => 'Higher Education Degree / Diploma',
+            'school' => 'Accredited Institution',
+            'year' => 'Graduated'
+        ];
+    }
+
+    if (empty($skills)) {
+        $skills = ['Problem Solving', 'Team Collaboration', 'Communication', 'Project Management', 'Workflow Optimization'];
+    }
+
+    return [
+        'full_name' => $name,
+        'contact_email' => $email,
+        'contact_phone' => $phone,
+        'location' => $user_info['location'] ?? 'Malaysia',
+        'target_title' => $title,
+        'summary' => $summary,
+        'experience' => $experience,
+        'education' => $education,
+        'skills' => array_values(array_unique($skills)),
+        'achievements' => $achievements
+    ];
+}
+
+function auto_generate_resume_document($api_key, $raw_text, $target_title = '', $user_info = [], $source = 'resume_builder_auto') {
+    if (!empty($api_key) && trim($raw_text) !== '') {
+        try {
+            $prompt = build_auto_resume_prompt($raw_text, $target_title, $user_info);
+            $response = call_gemini_api($api_key, $prompt, $source);
+
+            $data = null;
+            if (preg_match('/\{[\s\S]*\}/', $response, $matches)) {
+                $data = json_decode($matches[0], true);
+            }
+            if (!is_array($data)) {
+                $clean_json = preg_replace('/^```json\s*|\s*```$/i', '', trim($response));
+                $data = json_decode($clean_json, true);
+            }
+            if (is_array($data) && !empty($data['summary'])) {
+                $data['experience'] = $data['experience'] ?? [];
+                $data['education'] = $data['education'] ?? [];
+                $data['skills'] = $data['skills'] ?? [];
+                $data['achievements'] = $data['achievements'] ?? [];
+                $data['full_name'] = !empty($data['full_name']) ? $data['full_name'] : ($user_info['name'] ?? 'Candidate');
+                $data['contact_email'] = !empty($data['contact_email']) ? $data['contact_email'] : ($user_info['email'] ?? '');
+                $data['contact_phone'] = !empty($data['contact_phone']) ? $data['contact_phone'] : ($user_info['phone'] ?? '');
+                $data['location'] = !empty($data['location']) ? $data['location'] : ($user_info['location'] ?? '');
+                $data['target_title'] = !empty($data['target_title']) ? $data['target_title'] : ($target_title ?: 'Professional');
+                return $data;
+            }
+        } catch (Exception $e) {
+            error_log("Gemini Auto Resume Builder Error: " . $e->getMessage());
+        }
+    }
+
+    return generate_fallback_auto_resume($raw_text, $target_title, $user_info);
+}
+
 ?>

@@ -217,6 +217,42 @@ try {
         error_log("signup_attempts migration notice: " . $e->getMessage());
     }
 
+    // Auto-verify gemini_api_logs schema availability (self-healing migration on deploy)
+    try {
+        require_once __DIR__ . '/gemini_logs_helper.php';
+        ensure_gemini_api_logs_table_exists($pdo);
+    } catch (\Throwable $e) {
+        error_log("gemini_api_logs auto-migration notice: " . $e->getMessage());
+    }
+
+    // Auto-verify admin_logs schema availability (self-healing migration on deploy)
+    try {
+        require_once __DIR__ . '/admin_logs_helper.php';
+        ensure_admin_logs_table_exists($pdo);
+    } catch (\Throwable $e) {
+        error_log("admin_logs auto-migration notice: " . $e->getMessage());
+    }
+
+    // Auto-verify resume_builds schema availability (self-healing migration on deploy)
+    try {
+        $pdo->query("SELECT 1 FROM resume_builds LIMIT 1");
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `resume_builds` (
+                `id` int(11) NOT NULL AUTO_INCREMENT,
+                `user_id` int(11) NOT NULL,
+                `target_title` varchar(255) DEFAULT NULL,
+                `raw_input` longtext DEFAULT NULL,
+                `generated_content` longtext DEFAULT NULL,
+                `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+                PRIMARY KEY (`id`),
+                KEY `fk_resumebuild_user` (`user_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } catch (\Throwable $migErr) {
+            error_log("resume_builds auto-migration notice: " . $migErr->getMessage());
+        }
+    }
+
 } catch (\PDOException $e) {
     error_log("Keria DB Connection Error: " . $e->getMessage());
     die("<div style='font-family:sans-serif; max-width:600px; margin:50px auto; padding:24px; border:1px solid #F87171; background:#FEF2F2; color:#991B1B; border-radius:12px; text-align:center;'>" .
