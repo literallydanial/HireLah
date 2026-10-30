@@ -16,10 +16,6 @@ if (ini_get("session.use_cookies")) {
 // Destroy session completely
 session_destroy();
 
-// Start fresh session to pass a logout success toast to index.php
-session_start();
-$_SESSION['toast'] = "You have been logged out successfully.";
-
-header("Location: index.php");
+header("Location: index.php?logged_out=1");
 exit;
 ?>

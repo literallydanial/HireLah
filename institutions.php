@@ -1550,7 +1550,7 @@ if ($stats_student_count < 100) $stats_student_count = 2840;
             <thead>
                 <tr>
                     <th style="width:30%;">Dimension</th>
-                    <th style="width:35%; color:var(--mut);">Traditional Tracer Studies</th>
+                    <th style="width:35%; color:var(--mut);">Traditional Graduate Tracker</th>
                     <th style="width:35%; color:var(--acc);">Keria Live Platform</th>
                 </tr>
             </thead>
@@ -1631,7 +1631,7 @@ if ($stats_student_count < 100) $stats_student_count = 2840;
                     <span class="uni-faq-icon">+</span>
                 </div>
                 <div class="uni-faq-a">
-                    No. Keria provides higher education institutional dashboards completely <strong>free of charge</strong> as part of our mission to improve graduate employability across Malaysia. Our platform is funded through enterprise employer recruitment services, not university budgets.
+                    No. Keria provides higher education institutional dashboards completely <strong>free of charge</strong> as part of our mission to improve graduate employability across Malaysia.
                 </div>
             </div>
 

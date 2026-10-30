@@ -1837,6 +1837,10 @@ if (file_exists('db.php')) {
             ✓ <?= htmlspecialchars($_SESSION['toast']) ?>
             <?php unset($_SESSION['toast']); ?>
         </div>
+    <?php elseif(isset($_GET['logged_out'])): ?>
+        <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.9); border-radius:10px; padding:12px 20px; color:#0A0A0A; font-size:14px; font-weight:700; box-shadow:0 10px 30px rgba(0,0,0,0.15);">
+            ✓ You have been logged out successfully.
+        </div>
     <?php endif; ?>
 
     <!-- HERO SECTION WITH FULL IMAGE BACKDROP -->
@@ -2388,6 +2392,7 @@ if (file_exists('db.php')) {
 
     <!-- INTERACTION SCRIPT & ANIME.JS -->
     <!-- INTERACTION SCRIPT & ANIME.JS -->
+    <script src="theme.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
     <script>if(typeof anime==='undefined'){document.write('<script src="assets/anime.min.js"><\/script>');}</script>
     <script>
