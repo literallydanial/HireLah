@@ -861,8 +861,16 @@ function render_resume_builder_printable_fallback($build, $error_msg = null) {
             <button onclick="window.print()" class="btn-print">
                 📥 Save as PDF / Print
             </button>
-            <a href="admin_resumes.php" class="btn-back">
-                ✕ Back to Hub
+            <?php
+                // "Back" must go somewhere the viewer is allowed to open: admin_resumes.php is
+                // admin-only, so candidates and employers were bounced to the login page.
+                $ev_back_role = $_SESSION['user_role'] ?? '';
+                if ($ev_back_role === 'admin') { $ev_back_url = 'admin_resumes.php'; $ev_back_label = 'Back to Hub'; }
+                elseif ($ev_back_role === 'employer') { $ev_back_url = 'employer_dashboard.php'; $ev_back_label = 'Back to Dashboard'; }
+                else { $ev_back_url = 'resume_builder.php'; $ev_back_label = 'Back to Resume Builder'; }
+            ?>
+            <a href="<?= htmlspecialchars($ev_back_url) ?>" class="btn-back">
+                ✕ <?= htmlspecialchars($ev_back_label) ?>
             </a>
         </div>
     </div>
