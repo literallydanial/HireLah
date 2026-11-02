@@ -20,6 +20,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // Students who already linked a university before faculty/intake year
+        // existed (or skipped them at registration) get asked once here,
+        // before their session starts -- see complete_profile.php.
+        if ($user['role'] === 'candidate' && !empty($user['university_id']) && (empty($user['faculty']) || empty($user['intake_year']))) {
+            $_SESSION['pending_profile_user_id'] = $user['id'];
+            header("Location: complete_profile.php");
+            exit;
+        }
+
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['user_name'] = $user['name'];
         $_SESSION['user_role'] = $user['role'];

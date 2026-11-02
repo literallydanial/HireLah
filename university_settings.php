@@ -79,7 +79,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($action === 'update_institution') {
         $institution_name = trim($_POST['institution_name'] ?? '');
         $uni_type = in_array($_POST['university_type'] ?? '', ['public', 'private'], true) ? $_POST['university_type'] : 'public';
-        $ssm_number = trim($_POST['ssm_number'] ?? '');
+        // The SSM field was removed from this form; preserve whatever was
+        // already on file instead of blanking it out on every save.
+        $ssm_number = trim($target_user['ssm_number'] ?? '');
         $company_website = trim($_POST['company_website'] ?? '');
         $company_address = trim($_POST['company_address'] ?? '');
         $contact_email = trim($_POST['contact_email'] ?? '');
@@ -232,15 +234,6 @@ $stmt = $pdo->prepare("
 $stmt->execute([$target_user_id]);
 $current = $stmt->fetch(PDO::FETCH_ASSOC) ?: $target_user;
 
-if (empty($current['ssm_number']) && !empty($current['linked_uni_ssm'])) {
-    $current['ssm_number'] = $current['linked_uni_ssm'];
-}
-
-$ssm_val = trim((string)($current['ssm_number'] ?? ''));
-$has_ssm = ($ssm_val !== '');
-$ssm_incomplete = !$has_ssm;
-$incomplete_count = $ssm_incomplete ? 1 : 0;
-
 $institution_display_name = !empty($current['company_name']) ? $current['company_name'] : ($current['name'] ?? 'University');
 $institution_logo = (!empty($current['company_logo']) && file_exists($current['company_logo'])) 
     ? $current['company_logo'] . '?v=' . @filemtime($current['company_logo']) 
@@ -253,6 +246,29 @@ $dir = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
 $base_url = $scheme . $host . $dir;
 $uni_link_id = $current['university_id'] ?? null;
 $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university_id=' . urlencode((string)$uni_link_id) : '');
+
+// Career Fair QR check-in counter -- cumulative count of students who
+// registered via this institution's link/QR (users.university_id is set
+// at signup, see register.php), with an optional date-range check.
+$qr_checkin_total = 0;
+$qr_checkin_filtered = null;
+$qr_from = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['qr_from'] ?? '') ? $_GET['qr_from'] : '';
+$qr_to   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['qr_to'] ?? '') ? $_GET['qr_to'] : '';
+if ($uni_link_id) {
+    $cnt_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE university_id = ? AND role = 'candidate'");
+    $cnt_stmt->execute([$uni_link_id]);
+    $qr_checkin_total = (int)$cnt_stmt->fetchColumn();
+
+    if ($qr_from !== '' || $qr_to !== '') {
+        $sql = "SELECT COUNT(*) FROM users WHERE university_id = ? AND role = 'candidate'";
+        $params = [$uni_link_id];
+        if ($qr_from !== '') { $sql .= " AND created_at >= ?"; $params[] = $qr_from . ' 00:00:00'; }
+        if ($qr_to !== '')   { $sql .= " AND created_at <= ?"; $params[] = $qr_to . ' 23:59:59'; }
+        $f_stmt = $pdo->prepare($sql);
+        $f_stmt->execute($params);
+        $qr_checkin_filtered = (int)$f_stmt->fetchColumn();
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -553,18 +569,12 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
             <button type="button" class="uni-menu-parent active" onclick="toggleUniMenu(this)">
                 <span class="uni-menu-parent-left">
                     <span>⚙️</span> Settings
-                    <?php if ($incomplete_count > 0): ?>
-                        <span class="uni-menu-badge danger" style="margin-left:4px;" title="1 incomplete requirement"><?= $incomplete_count ?></span>
-                    <?php endif; ?>
                 </span>
                 <span class="uni-menu-chevron">&#9662;</span>
             </button>
             <div class="uni-menu-children">
                 <button type="button" class="uni-menu-child active" onclick="switchTab('institutionTab', this)">
                     <span>🏛️ Institution Profile</span>
-                    <?php if ($ssm_incomplete): ?>
-                        <span class="uni-menu-badge danger" title="SSM registration number is incomplete">1</span>
-                    <?php endif; ?>
                 </button>
                 <button type="button" class="uni-menu-child" onclick="switchTab('liaisonTab', this)"><span>👤 Career Officer Liaison</span></button>
                 <button type="button" class="uni-menu-child" onclick="switchTab('qrTab', this)"><span>▦ Career Fair QR &amp; Link</span></button>
@@ -691,24 +701,12 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
                         <p class="card-desc">Configure your university's official name, higher-education classification, crest logo, and campus contact details.</p>
                     </div>
 
-                    <?php if ($ssm_incomplete): ?>
-                        <div style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.28); border-radius:12px; padding:12px 16px; margin-bottom:18px; display:flex; align-items:center; gap:12px;">
-                            <span style="font-size:20px;">⚠️</span>
-                            <div style="flex:1;">
-                                <div style="font-size:13px; font-weight:800; color:#EF4444;">1 Incomplete Detail: University SSM Number</div>
-                                <div style="font-size:12px; color:var(--mut); margin-top:2px;">
-                                    Please enter your university's SSM registration number below to complete your institutional verification.
-                                </div>
-                            </div>
-                        </div>
-                    <?php endif; ?>
-
                     <div class="form-grid-2">
                         <div class="form-group">
                             <label for="institution_name">Institution / University Name *</label>
-                            <input type="text" id="institution_name" name="institution_name" class="rb-input" 
+                            <input type="text" id="institution_name" name="institution_name" class="rb-input" list="institutionNameDatalist"
                                    value="<?= htmlspecialchars($current['company_name'] ?: ($current['linked_uni_name'] ?: $current['name'])) ?>" required>
-                            <div class="hint">The formal name displayed on student dashboards and career reports.</div>
+                            <div class="hint">The formal name displayed on student dashboards and career reports. Don't see your university listed? Just type its full name here.</div>
                         </div>
 
                         <div class="form-group">
@@ -720,22 +718,6 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
                             </select>
                             <div class="hint">Determines Ministry (KPT) tracer classification benchmarks.</div>
                         </div>
-                    </div>
-
-                    <div class="form-group" style="margin-top:4px;">
-                        <label for="ssm_number" style="display:flex; align-items:center; justify-content:space-between;">
-                            <span>SSM / University Registration Number *</span>
-                            <?php if ($ssm_incomplete): ?>
-                                <span class="uni-menu-badge danger" style="font-size:10px; padding:2px 8px;">1 Incomplete</span>
-                            <?php else: ?>
-                                <span class="uni-menu-badge success" style="font-size:10px; padding:2px 8px;">✓ Completed</span>
-                            <?php endif; ?>
-                        </label>
-                        <input type="text" id="ssm_number" name="ssm_number" class="rb-input" 
-                               placeholder="e.g. 201201012345 (1012345-X) or DU001(B)" 
-                               value="<?= htmlspecialchars($current['ssm_number'] ?? '') ?>"
-                               style="<?= $ssm_incomplete ? 'border-color: rgba(239,68,68,0.5);' : '' ?>">
-                        <div class="hint">Official Companies Commission of Malaysia (SSM) or Ministry entity registration number for institution verification.</div>
                     </div>
 
                     <!-- Logo / Crest Upload -->
@@ -873,6 +855,39 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
                                 </ul>
                             </div>
                         </div>
+                    </div>
+
+                    <div style="margin-top:20px; padding:16px; background:var(--surf,#F8FAF8); border:1px solid var(--bdr); border-radius:12px;">
+                        <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">
+                            <div class="stat-val" style="color:var(--acc);"><?= $qr_checkin_total ?></div>
+                            <div class="stat-lbl" style="margin-top:0;">Students Checked In via This QR/Link</div>
+                        </div>
+
+                        <form method="get" action="university_settings.php#qrTab" style="margin-top:14px; display:flex; align-items:flex-end; gap:8px; flex-wrap:wrap;">
+                            <?php if ($is_admin): ?>
+                                <input type="hidden" name="user_id" value="<?= (int)$target_user_id ?>">
+                            <?php endif; ?>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:var(--mut); display:block; margin-bottom:4px;">From</label>
+                                <input type="date" name="qr_from" value="<?= htmlspecialchars($qr_from) ?>" class="rb-input" style="padding:6px 10px; font-size:12px;">
+                            </div>
+                            <div>
+                                <label style="font-size:11px; font-weight:700; color:var(--mut); display:block; margin-bottom:4px;">To</label>
+                                <input type="date" name="qr_to" value="<?= htmlspecialchars($qr_to) ?>" class="rb-input" style="padding:6px 10px; font-size:12px;">
+                            </div>
+                            <button type="submit" class="btn-secondary" style="padding:7px 14px; font-size:12px;">Check Range</button>
+                            <?php if ($qr_from !== '' || $qr_to !== ''): ?>
+                                <a href="university_settings.php<?= $is_admin ? '?user_id=' . (int)$target_user_id : '' ?>#qrTab" class="btn-secondary" style="padding:7px 14px; font-size:12px; text-decoration:none;">Clear</a>
+                            <?php endif; ?>
+                        </form>
+
+                        <?php if ($qr_checkin_filtered !== null): ?>
+                            <div style="margin-top:12px; font-size:13px; color:var(--txt);">
+                                <strong><?= $qr_checkin_filtered ?></strong> student<?= $qr_checkin_filtered === 1 ? '' : 's' ?> checked in between
+                                <strong><?= $qr_from !== '' ? htmlspecialchars($qr_from) : 'the beginning' ?></strong> and
+                                <strong><?= $qr_to !== '' ? htmlspecialchars($qr_to) : 'now' ?></strong>.
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -1086,6 +1101,11 @@ $student_signup_url = $base_url . '/register.php' . ($uni_link_id ? '?university
         img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
     }
 </script>
+<datalist id="institutionNameDatalist">
+    <?php foreach ($all_system_unis as $u): ?>
+        <option value="<?= htmlspecialchars($u['name']) ?>"><?= htmlspecialchars($u['name']) ?> (<?= ucfirst($u['type']) ?>)</option>
+    <?php endforeach; ?>
+</datalist>
 <script src="theme.js"></script>
 </body>
 </html>

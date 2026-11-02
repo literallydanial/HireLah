@@ -130,13 +130,13 @@ function uni_time_ago($timestamp) {
 // resume's claimed work history.
 // ------------------------------------------------------------
 if ($university_filter_id !== null) {
-    $students_stmt = $pdo->prepare("SELECT u.id, u.name, u.email, u.default_resume, u.created_at, un.name AS university_name FROM users u LEFT JOIN universities un ON un.id = u.university_id WHERE u.role = 'candidate' AND u.university_id = ? ORDER BY u.name");
+    $students_stmt = $pdo->prepare("SELECT u.id, u.name, u.email, u.default_resume, u.created_at, u.faculty, u.intake_year, un.name AS university_name FROM users u LEFT JOIN universities un ON un.id = u.university_id WHERE u.role = 'candidate' AND u.university_id = ? ORDER BY u.name");
     $students_stmt->execute([$university_filter_id]);
     $students_raw = $students_stmt->fetchAll();
 } elseif (!$is_university_account) {
     // Admin preview with no single institution selected -- show every
     // student who has self-linked any university, across all of them.
-    $students_raw = $pdo->query("SELECT u.id, u.name, u.email, u.default_resume, u.created_at, un.name AS university_name FROM users u LEFT JOIN universities un ON un.id = u.university_id WHERE u.role = 'candidate' AND u.university_id IS NOT NULL ORDER BY un.name, u.name")->fetchAll();
+    $students_raw = $pdo->query("SELECT u.id, u.name, u.email, u.default_resume, u.created_at, u.faculty, u.intake_year, un.name AS university_name FROM users u LEFT JOIN universities un ON un.id = u.university_id WHERE u.role = 'candidate' AND u.university_id IS NOT NULL ORDER BY un.name, u.name")->fetchAll();
 } else {
     // A real university account with no matching students yet.
     $students_raw = [];
@@ -148,6 +148,7 @@ $applications_by_user = [];
 $readiness_by_user    = [];
 $last_build_by_user    = [];
 $placements_by_user    = [];
+$funnel_counts         = ['Review' => 0, 'Shortlisted' => 0, 'Rejected' => 0];
 
 if (!empty($student_ids)) {
     $in = implode(',', array_fill(0, count($student_ids), '?'));
@@ -159,6 +160,16 @@ if (!empty($student_ids)) {
     $app_stmt->execute($student_ids);
     foreach ($app_stmt->fetchAll() as $r) {
         $applications_by_user[$r['user_id']] = $r;
+    }
+
+    // Application funnel: real-time Review/Shortlisted/Rejected counts
+    // across every application any of these students has made (same
+    // `candidates.status` field employer_dashboard.php's per-job funnel
+    // chart already uses -- this is the same thing, summed university-wide).
+    $funnel_stmt = $pdo->prepare("SELECT status, COUNT(*) AS cnt FROM candidates WHERE user_id IN ($in) GROUP BY status");
+    $funnel_stmt->execute($student_ids);
+    foreach ($funnel_stmt->fetchAll() as $r) {
+        if (isset($funnel_counts[$r['status']])) $funnel_counts[$r['status']] = (int) $r['cnt'];
     }
 
     // Readiness score: latest AI resume review score for that student
@@ -225,6 +236,8 @@ foreach ($students_raw as $u) {
         'name' => $u['name'],
         'email' => $u['email'],
         'university' => $u['university_name'] ?? '',
+        'faculty' => $u['faculty'] ?? null,
+        'intake_year' => $u['intake_year'] ?? null,
         'resume' => !empty($u['default_resume']),
         'applications' => $app_count,
         'score' => $readiness_by_user[$u['id']] ?? null,
@@ -293,6 +306,28 @@ foreach ($placed_students as $s) {
     $companies[$c]['students']++;
     if (!empty($s['placement_type'])) $companies[$c]['types'][] = $s['placement_type'];
 }
+
+// Faculty & intake-year breakdown -- only counts students who've actually
+// answered these (see register.php / complete_profile.php); starts sparse
+// and fills in naturally as more students do.
+$faculty_breakdown = [];
+$intake_breakdown = [];
+foreach ($students as $s) {
+    if (!empty($s['faculty'])) {
+        $fac = $s['faculty'];
+        if (!isset($faculty_breakdown[$fac])) $faculty_breakdown[$fac] = ['total' => 0, 'placed' => 0];
+        $faculty_breakdown[$fac]['total']++;
+        if ($s['outcome'] === 'hired') $faculty_breakdown[$fac]['placed']++;
+    }
+    if (!empty($s['intake_year'])) {
+        $yr = $s['intake_year'];
+        if (!isset($intake_breakdown[$yr])) $intake_breakdown[$yr] = ['total' => 0, 'placed' => 0];
+        $intake_breakdown[$yr]['total']++;
+        if ($s['outcome'] === 'hired') $intake_breakdown[$yr]['placed']++;
+    }
+}
+uasort($faculty_breakdown, fn($a, $b) => $b['total'] <=> $a['total']);
+krsort($intake_breakdown);
 
 // ------------------------------------------------------------
 // CSV export — real per-student data, scoped the same way the page is.
@@ -676,6 +711,65 @@ if (($_GET['dashboard_action'] ?? '') === 'export_csv') {
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Application Funnel -->
+    <div class="panel" style="margin-bottom:24px;" id="application-funnel">
+        <div class="panel-title">📊 Application Funnel (All Students)</div>
+        <?php if ($total_apps === 0): ?>
+            <div style="padding:14px; text-align:center; color:var(--mut); font-size:12.5px;">No applications recorded yet.</div>
+        <?php else: ?>
+            <div style="display:flex; gap:16px; flex-wrap:wrap; padding:6px 0;">
+                <div><div class="stat-val" style="color:var(--acc);"><?= $funnel_counts['Review'] ?></div><div class="stat-lbl">In Review</div></div>
+                <div><div class="stat-val" style="color:var(--grn,#22C55E);"><?= $funnel_counts['Shortlisted'] ?></div><div class="stat-lbl">Shortlisted</div></div>
+                <div><div class="stat-val" style="color:var(--red,#EF4444);"><?= $funnel_counts['Rejected'] ?></div><div class="stat-lbl">Rejected</div></div>
+            </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Faculty & Intake Year Breakdown -->
+    <div class="panel" style="margin-bottom:24px;" id="faculty-intake-breakdown">
+        <div class="panel-title">🧭 Cohort & Faculty Breakdown</div>
+        <?php if (empty($faculty_breakdown) && empty($intake_breakdown)): ?>
+            <div style="padding:14px; text-align:center; color:var(--mut); font-size:12.5px;">No students have filled in their faculty / intake year yet.</div>
+        <?php else: ?>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+                <div>
+                    <div style="font-size:10.5px; font-weight:700; color:var(--mut); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">By Faculty</div>
+                    <?php if (empty($faculty_breakdown)): ?>
+                        <div style="padding:10px 0; color:var(--mut); font-size:12px;">No data yet.</div>
+                    <?php else: ?>
+                        <div class="faculty-row" style="font-weight:700; color:var(--mut); font-size:10.5px; text-transform:uppercase; letter-spacing:0.5px;">
+                            <div>Faculty</div><div>Students</div><div>Placed</div>
+                        </div>
+                        <?php foreach ($faculty_breakdown as $fac => $d): ?>
+                            <div class="faculty-row">
+                                <div style="font-weight:700; color:var(--txt);"><?= htmlspecialchars($fac) ?></div>
+                                <div style="color:var(--txt);"><?= $d['total'] ?></div>
+                                <div style="color:var(--acc); font-weight:700;"><?= $d['placed'] ?></div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+                <div>
+                    <div style="font-size:10.5px; font-weight:700; color:var(--mut); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">By Intake Year</div>
+                    <?php if (empty($intake_breakdown)): ?>
+                        <div style="padding:10px 0; color:var(--mut); font-size:12px;">No data yet.</div>
+                    <?php else: ?>
+                        <div class="faculty-row" style="font-weight:700; color:var(--mut); font-size:10.5px; text-transform:uppercase; letter-spacing:0.5px;">
+                            <div>Year</div><div>Students</div><div>Placed</div>
+                        </div>
+                        <?php foreach ($intake_breakdown as $yr => $d): ?>
+                            <div class="faculty-row">
+                                <div style="font-weight:700; color:var(--txt);"><?= htmlspecialchars((string)$yr) ?></div>
+                                <div style="color:var(--txt);"><?= $d['total'] ?></div>
+                                <div style="color:var(--acc); font-weight:700;"><?= $d['placed'] ?></div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
             </div>
         <?php endif; ?>
     </div>

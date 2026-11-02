@@ -1378,7 +1378,7 @@ if ($stats_student_count < 100) $stats_student_count = 2840;
                 </div>
                 <h3>Cohort & Faculty Telemetry</h3>
                 <p>
-                    Filter outcomes by faculty, degree program, or expected graduation intake. Understand which departments have high employer momentum and which require targeted industry partnerships.
+                    Filter outcomes by faculty or intake year. Understand which departments have high employer momentum and which require targeted industry partnerships.
                 </p>
                 <ul class="uni-feat-checklist">
                     <li><span class="check">✓</span> Faculty-by-faculty placement breakdown</li>

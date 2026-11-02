@@ -4,6 +4,7 @@ require_once 'db.php';
 require_once 'mailer.php';
 require_once 'company_helpers.php';
 require_once 'employer_verification.php';
+require_once 'faculty_helpers.php';
 
 // Universities for the candidate-signup "school" dropdown (self-selected, no verification).
 $universities_list = $pdo->query("SELECT id, name, type FROM universities ORDER BY FIELD(type,'public','private','other'), name")->fetchAll();
@@ -33,24 +34,26 @@ $admin_preset_uni_name = trim($_GET['university_name'] ?? $_GET['uni_name'] ?? $
 $admin_preset_uni_type = trim($_GET['university_type'] ?? $_GET['uni_type'] ?? $_POST['university_type'] ?? 'public');
 $admin_preset_uni_id = (string) ($_GET['university_id'] ?? $_POST['university_id'] ?? '');
 
-if ($is_university_signup) {
-    if ($admin_preset_uni_id !== '' && $admin_preset_uni_id !== 'other' && $admin_preset_uni_name === '') {
-        foreach ($universities_list as $u) {
-            if ((string)$u['id'] === $admin_preset_uni_id) {
-                $admin_preset_uni_name = $u['name'];
-                $admin_preset_uni_type = $u['type'];
-                break;
-            }
+// Resolved whenever a link supplies either half of the pair (an institution's
+// QR/link carries university_id; the "For Universities" signup flow may carry
+// university_name) -- not gated to $is_university_signup, since a student
+// arriving via an institution's QR/link needs this resolved too.
+if ($admin_preset_uni_id !== '' && $admin_preset_uni_id !== 'other' && $admin_preset_uni_name === '') {
+    foreach ($universities_list as $u) {
+        if ((string)$u['id'] === $admin_preset_uni_id) {
+            $admin_preset_uni_name = $u['name'];
+            $admin_preset_uni_type = $u['type'];
+            break;
         }
     }
-    if ($admin_preset_uni_name !== '' && $admin_preset_uni_id === '') {
-        foreach ($universities_list as $u) {
-            if (strcasecmp($u['name'], $admin_preset_uni_name) === 0) {
-                $admin_preset_uni_id = (string)$u['id'];
-                $admin_preset_uni_name = $u['name'];
-                $admin_preset_uni_type = $u['type'];
-                break;
-            }
+}
+if ($admin_preset_uni_name !== '' && $admin_preset_uni_id === '') {
+    foreach ($universities_list as $u) {
+        if (strcasecmp($u['name'], $admin_preset_uni_name) === 0) {
+            $admin_preset_uni_id = (string)$u['id'];
+            $admin_preset_uni_name = $u['name'];
+            $admin_preset_uni_type = $u['type'];
+            break;
         }
     }
 }
@@ -127,8 +130,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // A candidate may optionally self-link to their own university + matric number
+    // A candidate arriving via an institution's QR/link is locked to that
+    // university; otherwise they may optionally self-link + matric number
+    $faculty = null;
+    $intake_year = null;
     if ($role === 'candidate' && !isset($error)) {
+        if ($admin_preset_uni_id !== '' && $admin_preset_uni_name !== '') {
+            $university_id = (int)$admin_preset_uni_id;
+            $institution_name = $admin_preset_uni_name;
+        } else {
         $candidate_uni = trim($_POST['candidate_university_name'] ?? $_POST['university_name'] ?? '');
         if ($candidate_uni !== '') {
             $uni_check = $pdo->prepare("SELECT id, name FROM universities WHERE LOWER(name) = LOWER(?) LIMIT 1");
@@ -141,7 +151,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $institution_name = $candidate_uni;
             }
         }
+        }
         $matric_number = trim($_POST['matric_number'] ?? '') ?: null;
+
+        // Faculty/intake year: required whenever a university is linked at
+        // all, whether pre-set via QR/link or self-picked here -- "My
+        // University" itself stays optional, but once you opt into it you
+        // answer it properly rather than leaving it half-filled. The
+        // one-time login prompt (see login.php) only exists to catch
+        // accounts that linked a university before these fields existed.
+        $posted_faculty = resolve_posted_faculty($_POST);
+        $posted_intake = trim($_POST['intake_year'] ?? '');
+        $faculty_intake_required = ($admin_preset_uni_id !== '' && $admin_preset_uni_name !== '')
+            || (isset($candidate_uni) && $candidate_uni !== '');
+        if ($faculty_intake_required && ($posted_faculty === '' || $posted_intake === '')) {
+            $error = "Please select your faculty and intake year.";
+        }
+        if (!isset($error)) {
+            $faculty = $posted_faculty !== '' ? $posted_faculty : null;
+            $intake_year = ($posted_intake !== '' && ctype_digit($posted_intake)) ? (int)$posted_intake : null;
+        }
     }
 
     // Check if email exists
@@ -155,8 +184,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $otp = sprintf("%06d", random_int(100000, 999999));
         $otp_expires = date('Y-m-d H:i:s', strtotime('+15 minutes'));
 
-        $stmt = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, company_name, ssm_number, university_id, matric_number, is_verified, otp_code, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)");
-        if ($stmt->execute([$name, $email, $hash, $role, $institution_name, ($employer_ssm !== '' ? $employer_ssm : null), $university_id, $matric_number, $otp, $otp_expires])) {
+        $stmt = $pdo->prepare("INSERT INTO users (name, email, password_hash, role, company_name, ssm_number, university_id, matric_number, faculty, intake_year, is_verified, otp_code, otp_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)");
+        if ($stmt->execute([$name, $email, $hash, $role, $institution_name, ($employer_ssm !== '' ? $employer_ssm : null), $university_id, $matric_number, $faculty, $intake_year, $otp, $otp_expires])) {
             $user_id = $pdo->lastInsertId();
             ev_record_signup_attempt($pdo); // after lastInsertId(): this INSERT would reset it
             $_SESSION['pending_otp_user_id'] = $user_id;
@@ -598,17 +627,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <option value="employer" <?= (($_POST['role'] ?? '') === 'employer') ? 'selected' : '' ?>>I am an Employer</option>
                         </select>
                     </div>
+                    <?php
+                        // Faculty/intake year are required the moment a university is
+                        // linked at all (pre-set via QR/link, or already typed in on a
+                        // validation-error redisplay) -- "My University" itself stays
+                        // optional, but once opted into, it's answered properly.
+                        $faculty_required = ($admin_preset_uni_name !== '') || (trim($_POST['candidate_university_name'] ?? '') !== '');
+                        $posted_faculty_val = trim($_POST['faculty'] ?? '');
+                    ?>
                     <div id="studentFieldsBlock">
-                        <label class="auth-field-label">My University (optional — students only)</label>
+                        <?php if ($admin_preset_uni_name !== ''): ?>
+                            <label class="auth-field-label">My University</label>
+                            <input type="hidden" name="university_id" value="<?= htmlspecialchars($admin_preset_uni_id) ?>">
+                            <div style="display:flex; align-items:center; gap:8px; padding:11px 14px; background:var(--dim); border:1px solid var(--bdr); border-radius:14px; font-size:13.5px; font-weight:700; color:var(--txt); margin-bottom:14px;">
+                                <span>🎓</span>
+                                <span style="flex:1;"><?= htmlspecialchars($admin_preset_uni_name) ?></span>
+                                <span style="font-size:10.5px; font-weight:700; color:var(--acc); background:rgba(217,255,79,0.15); padding:2px 8px; border-radius:6px;">Pre-set</span>
+                            </div>
+                        <?php else: ?>
+                            <label class="auth-field-label">My University (optional — students only)</label>
+                            <div class="auth-input-wrap">
+                                <span class="auth-input-icon">🎓</span>
+                                <input type="text" name="candidate_university_name" id="registerCandidateUni" list="existingUniversitiesDatalist" placeholder="e.g. Universiti Malaya, UniKL..." oninput="toggleUniRequiredFields()" value="<?= htmlspecialchars($_POST['candidate_university_name'] ?? '') ?>">
+                            </div>
+                        <?php endif; ?>
                         <div class="auth-input-wrap">
-                            <span class="auth-input-icon">🎓</span>
-                            <input type="text" name="candidate_university_name" list="existingUniversitiesDatalist" placeholder="e.g. Universiti Malaya, UniKL..." value="<?= htmlspecialchars($_POST['candidate_university_name'] ?? '') ?>">
+                            <span class="auth-input-icon">🏛️</span>
+                            <select name="faculty" id="registerFacultySelect" onchange="toggleFacultyOther()" <?= $faculty_required ? 'required' : '' ?>>
+                                <option value="" id="registerFacultyPlaceholder">Faculty<?= $faculty_required ? ' *' : ' (optional)' ?></option>
+                                <?php foreach (faculty_categories() as $fac): ?>
+                                    <option value="<?= htmlspecialchars($fac) ?>" <?= $posted_faculty_val === $fac ? 'selected' : '' ?>><?= htmlspecialchars($fac) ?></option>
+                                <?php endforeach; ?>
+                                <option value="Other" <?= $posted_faculty_val === 'Other' ? 'selected' : '' ?>>Other (not listed)</option>
+                            </select>
                         </div>
+                        <div class="auth-input-wrap" id="facultyOtherWrap" style="<?= $posted_faculty_val === 'Other' ? '' : 'display:none;' ?>">
+                            <span class="auth-input-icon">✏️</span>
+                            <input type="text" name="faculty_other" id="registerFacultyOther" placeholder="Enter your faculty" value="<?= htmlspecialchars($_POST['faculty_other'] ?? '') ?>">
+                        </div>
+                        <div class="auth-input-wrap">
+                            <span class="auth-input-icon">📅</span>
+                            <select name="intake_year" id="registerIntakeYearSelect" <?= $faculty_required ? 'required' : '' ?>>
+                                <option value="" id="registerIntakeYearPlaceholder">Intake Year<?= $faculty_required ? ' *' : ' (optional)' ?></option>
+                                <?php $cur_year = (int)date('Y'); for ($y = $cur_year + 1; $y >= $cur_year - 10; $y--): ?>
+                                    <option value="<?= $y ?>" <?= (($_POST['intake_year'] ?? '') == $y) ? 'selected' : '' ?>><?= $y ?></option>
+                                <?php endfor; ?>
+                            </select>
+                        </div>
+                        <script>
+                            function toggleFacultyOther() {
+                                var sel = document.getElementById('registerFacultySelect');
+                                document.getElementById('facultyOtherWrap').style.display = (sel.value === 'Other') ? 'block' : 'none';
+                            }
+                            function toggleUniRequiredFields() {
+                                // Only the organic (non QR/link) flow has this text field --
+                                // on the QR-locked flow it doesn't exist, and that page's
+                                // already-correct required state must be left alone.
+                                var uniField = document.getElementById('registerCandidateUni');
+                                if (!uniField) return;
+                                var filled = uniField.value.trim() !== '';
+                                var facSel = document.getElementById('registerFacultySelect');
+                                var yearSel = document.getElementById('registerIntakeYearSelect');
+                                var facPlaceholder = document.getElementById('registerFacultyPlaceholder');
+                                var yearPlaceholder = document.getElementById('registerIntakeYearPlaceholder');
+                                if (facSel) facSel.required = filled;
+                                if (yearSel) yearSel.required = filled;
+                                if (facPlaceholder) facPlaceholder.textContent = filled ? 'Faculty *' : 'Faculty (optional)';
+                                if (yearPlaceholder) yearPlaceholder.textContent = filled ? 'Intake Year *' : 'Intake Year (optional)';
+                            }
+                            document.addEventListener('DOMContentLoaded', toggleUniRequiredFields);
+                        </script>
                         <div class="auth-input-wrap">
                             <span class="auth-input-icon">🪪</span>
                             <input type="text" name="matric_number" placeholder="Matric / Student ID Number (optional)" value="<?= htmlspecialchars($_POST['matric_number'] ?? '') ?>">
                         </div>
-                        <div style="font-size:11px; color:var(--mut); margin-top:-6px; margin-bottom:14px; text-align:left;">Only fill this in if you're a student — it lets your university see your career-readiness activity on their dashboard.</div>
+                        <div style="font-size:11px; color:var(--mut); margin-top:-6px; margin-bottom:14px; text-align:left;"><?= $admin_preset_uni_name !== '' ? 'You were linked to this institution via their registration QR/link.' : "Only fill this in if you're a student — it lets your university see your career-readiness activity on their dashboard." ?></div>
                     </div>
                     <div id="employerFieldsBlock" style="display:none;">
                         <div class="auth-input-wrap">

@@ -253,6 +253,18 @@ try {
         }
     }
 
+    // Auto-verify users.faculty / users.intake_year availability (self-healing
+    // migration on deploy) -- backs the university cohort/faculty breakdown.
+    try {
+        $pdo->query("SELECT faculty, intake_year FROM users LIMIT 1");
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec("ALTER TABLE users ADD COLUMN faculty VARCHAR(100) NULL DEFAULT NULL, ADD COLUMN intake_year SMALLINT(4) NULL DEFAULT NULL");
+        } catch (\Throwable $migErr) {
+            error_log("Users faculty/intake_year migration notice: " . $migErr->getMessage());
+        }
+    }
+
 } catch (\PDOException $e) {
     error_log("Keria DB Connection Error: " . $e->getMessage());
     die("<div style='font-family:sans-serif; max-width:600px; margin:50px auto; padding:24px; border:1px solid #F87171; background:#FEF2F2; color:#991B1B; border-radius:12px; text-align:center;'>" .
