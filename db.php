@@ -265,6 +265,20 @@ try {
         }
     }
 
+    // Auto-verify candidates.resume_hash availability (self-healing migration
+    // on deploy) -- upload.php's HR resume-upload feature checks this column
+    // to silently skip a resume already uploaded for the same job; a database
+    // that never ran this migration made every HR upload fail with HTTP 500.
+    try {
+        $pdo->query("SELECT resume_hash FROM candidates LIMIT 1");
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec("ALTER TABLE candidates ADD COLUMN resume_hash CHAR(64) NULL DEFAULT NULL AFTER resume_path, ADD INDEX idx_job_resume_hash (job_id, resume_hash)");
+        } catch (\Throwable $migErr) {
+            error_log("candidates.resume_hash migration notice: " . $migErr->getMessage());
+        }
+    }
+
 } catch (\PDOException $e) {
     error_log("Keria DB Connection Error: " . $e->getMessage());
     die("<div style='font-family:sans-serif; max-width:600px; margin:50px auto; padding:24px; border:1px solid #F87171; background:#FEF2F2; color:#991B1B; border-radius:12px; text-align:center;'>" .
