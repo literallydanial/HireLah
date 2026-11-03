@@ -333,6 +333,7 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
             <nav style="display:flex; gap:4px; margin-left:24px">
                 <a href="employer_dashboard.php">👥 Applications & Stats</a>
                 <a href="job_dashboard.php" class="active">💼 My Jobs</a>
+                <a href="upload.php">📤 Upload Resume</a>
                 <a href="questionnaire.php">📋 Questionnaires</a>
                 <a href="profile.php">⚙️ Settings</a>
             </nav>

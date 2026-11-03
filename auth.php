@@ -17,7 +17,7 @@ function require_login() {
 
 function require_role($role) {
     require_login();
-    if ($_SESSION['user_role'] !== $role) {
+    if (($_SESSION['user_role'] ?? null) !== $role) {
         $_SESSION['error'] = "Access denied. You do not have the required role.";
         header("Location: index.php");
         exit;

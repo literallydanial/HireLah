@@ -1755,6 +1755,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                 <?php elseif(isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'employer'): ?>
                     <a href="employer_dashboard.php">👥 Applications & Stats</a>
                     <a href="job_dashboard.php">💼 My Jobs</a>
+                    <a href="upload.php">📤 Upload Resume</a>
                     <a href="questionnaire.php">📋 Questionnaires</a>
                     <a href="resume_builder.php">📝 AI Resume Builder</a>
                     <a href="profile.php">⚙️ Settings</a>

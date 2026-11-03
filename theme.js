@@ -167,11 +167,11 @@ document.addEventListener("DOMContentLoaded", () => {
         // Check if form is resume upload
         if (form.id === "uploadForm" || form.action.includes("upload.php")) {
             showAiLoading(
-                "Gemini AI Screening Resumes",
+                "AI Screening Resumes",
                 [
                     "Uploading & securely extracting PDF text...",
                     "Stripping candidate PII (privacy redaction)...",
-                    "Analyzing skills & qualifications with Google Gemini AI...",
+                    "Analyzing skills & qualifications with AI...",
                     "Calculating match score and ATS recommendations...",
                     "Saving recruiter evaluation reports..."
                 ],
@@ -214,10 +214,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const submitter = e.submitter;
         if (submitter && submitter.name === "action" && submitter.value === "rescreen_ai") {
             showAiLoading(
-                "Re-screening with Gemini AI",
+                "Re-screening with AI",
                 [
                     "Fetching updated candidate resume text & job requirements...",
-                    "Re-evaluating skills alignment with Google Gemini AI...",
+                    "Re-evaluating skills alignment with AI...",
                     "Updating ATS match score & interview probing questions...",
                     "Finalizing candidate profile record..."
                 ],

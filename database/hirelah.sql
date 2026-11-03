@@ -84,6 +84,7 @@ CREATE TABLE `candidates` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `user_id` int(11) DEFAULT NULL,
   `resume_path` varchar(255) DEFAULT NULL,
+  `resume_hash` char(64) DEFAULT NULL,
   `youtube_url` varchar(255) DEFAULT NULL,
   `hiring_verdict` varchar(100) DEFAULT NULL,
   `verdict_reason` text DEFAULT NULL,
@@ -96,6 +97,7 @@ CREATE TABLE `candidates` (
   PRIMARY KEY (`id`),
   KEY `job_id` (`job_id`),
   KEY `fk_candidate_user` (`user_id`),
+  KEY `idx_job_resume_hash` (`job_id`,`resume_hash`),
   CONSTRAINT `candidates_ibfk_1` FOREIGN KEY (`job_id`) REFERENCES `jobs` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_candidate_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

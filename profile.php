@@ -1150,6 +1150,7 @@ if ($user['role'] === 'candidate') {
                 <?php elseif($user['role'] === 'employer'): ?>
                     <a href="employer_dashboard.php">👥 Applications & Stats</a>
                     <a href="job_dashboard.php">💼 My Jobs</a>
+                    <a href="upload.php">📤 Upload Resume</a>
                     <a href="questionnaire.php">📋 Questionnaires</a>
                     <a href="profile.php" class="active">⚙️ Settings</a>
                 <?php elseif($user['role'] === 'management'): ?>

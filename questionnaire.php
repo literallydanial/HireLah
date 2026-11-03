@@ -321,6 +321,7 @@ $job_id_param = $_GET['job_id'] ?? null;
             <nav style="display:flex; gap:4px; margin-left:24px">
                 <a href="employer_dashboard.php">👥 Applications & Stats</a>
                 <a href="job_dashboard.php">💼 My Jobs</a>
+                <a href="upload.php">📤 Upload Resume</a>
                 <a href="questionnaire.php" class="active">📋 Questionnaires</a>
                 <a href="profile.php">⚙️ Settings</a>
             </nav>

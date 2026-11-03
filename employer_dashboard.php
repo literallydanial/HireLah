@@ -240,6 +240,7 @@ foreach ($jobs as $j) {
             <nav style="display:flex; gap:4px; margin-left:24px">
                 <a href="employer_dashboard.php" class="active">👥 Applications & Stats</a>
                 <a href="job_dashboard.php">💼 My Jobs</a>
+                <a href="upload.php">📤 Upload Resume</a>
                 <a href="questionnaire.php">📋 Questionnaires</a>
                 <a href="profile.php">⚙️ Settings</a>
             </nav>
@@ -546,7 +547,10 @@ foreach ($jobs as $j) {
                 </select>
                 <?php if($job_id): ?>
                     <a href="compare_candidates.php?job_id=<?= $job_id ?>" class="btn-primary" style="white-space:nowrap; text-decoration:none; font-size:12px; padding:8px 14px;">⚖️ Compare Applicants</a>
+                    <a href="upload.php?job_id=<?= $job_id ?>" class="btn-secondary" style="white-space:nowrap; text-decoration:none; font-size:12px; padding:8px 14px;">📤 Upload Resume</a>
                     <a href="employer_dashboard.php" class="btn-secondary" style="white-space:nowrap;">Clear Filter</a>
+                <?php else: ?>
+                    <a href="upload.php" class="btn-secondary" style="white-space:nowrap; text-decoration:none; font-size:12px; padding:8px 14px;">📤 Upload Resume</a>
                 <?php endif; ?>
             </form>
 
@@ -583,7 +587,12 @@ foreach ($jobs as $j) {
                             #<?= $rank++ ?>
                         </div>
                         <div style="min-width:0;">
-                            <div style="font-size:13px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><?= htmlspecialchars($c['name']) ?></div>
+                            <div style="font-size:13px; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; gap:6px;">
+                                <?= htmlspecialchars($c['name']) ?>
+                                <?php if(empty($c['user_id'])): ?>
+                                    <span title="Added manually by HR — applied outside Keria" style="flex-shrink:0; font-size:9px; font-weight:800; color:var(--pur); background:rgba(155,89,255,0.12); border:1px solid rgba(155,89,255,0.3); border-radius:4px; padding:1px 5px;">🧑‍💼 HR Added</span>
+                                <?php endif; ?>
+                            </div>
                             <div style="font-size:10px; color:var(--mut); margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><?= htmlspecialchars($c['email'] ?: $c['filename']) ?></div>
                         </div>
                         <div style="display:flex; flex-wrap:wrap; gap:3px;">

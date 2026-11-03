@@ -142,6 +142,7 @@ if (!empty($selected_ids)) {
             <nav style="display:flex; gap:4px; margin-left:24px">
                 <a href="employer_dashboard.php?job_id=<?= $selected_job_id ?>">&larr; Back to Applicants</a>
                 <a href="job_dashboard.php">💼 My Jobs</a>
+                <a href="upload.php?job_id=<?= $selected_job_id ?>">📤 Upload Resume</a>
             </nav>
             <?php include 'company_switcher.php'; ?>
 
@@ -234,7 +235,12 @@ if (!empty($selected_ids)) {
                                             </div>
                                         <?php endif; ?>
 
-                                        <div style="font-size:15px; font-weight:800; color:var(--txt);"><?= htmlspecialchars($c['name']) ?></div>
+                                        <div style="font-size:15px; font-weight:800; color:var(--txt); display:flex; align-items:center; gap:6px;">
+                                            <?= htmlspecialchars($c['name']) ?>
+                                            <?php if(empty($c['user_id'])): ?>
+                                                <span title="Added manually by HR — applied outside Keria" style="flex-shrink:0; font-size:9px; font-weight:800; color:var(--pur); background:rgba(155,89,255,0.12); border:1px solid rgba(155,89,255,0.3); border-radius:4px; padding:1px 5px;">🧑‍💼 HR Added</span>
+                                            <?php endif; ?>
+                                        </div>
                                         <div style="font-size:11px; color:var(--mut); margin-top:2px;"><?= htmlspecialchars($c['email'] ?? '') ?></div>
                                         
                                         <div style="margin-top:10px;">

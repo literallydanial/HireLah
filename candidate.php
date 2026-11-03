@@ -518,8 +518,13 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
                         </div>
                     <?php endif; ?>
                     <div>
-                        <div style="font-size:21px; font-weight:800; color:var(--txt);"><?= htmlspecialchars($c['name']) ?></div>
-                        <?php 
+                        <div style="font-size:21px; font-weight:800; color:var(--txt); display:flex; align-items:center; gap:8px;">
+                            <?= htmlspecialchars($c['name']) ?>
+                            <?php if(empty($c['user_id'])): ?>
+                                <span title="Added manually by HR — applied outside Keria" style="font-size:10px; font-weight:800; color:var(--pur); background:rgba(155,89,255,0.12); border:1px solid rgba(155,89,255,0.3); border-radius:5px; padding:2px 7px;">🧑‍💼 HR Added</span>
+                            <?php endif; ?>
+                        </div>
+                        <?php
                             $is_job_closed = strtolower($c['job_status'] ?? '') === 'deleted' || strtolower($c['job_status'] ?? '') === 'closed' || !empty($c['job_deleted_at']) || empty($c['job_title']);
                             $job_display_name = !empty($c['job_title']) ? $c['job_title'] : 'Archived Position';
                         ?>
