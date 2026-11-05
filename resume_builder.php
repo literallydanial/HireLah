@@ -1174,7 +1174,7 @@ try {
 
                     <?php if(!empty($generated['summary'])): ?>
                         <h4>Professional Summary</h4>
-                        <div style="margin-bottom:14px; text-align:justify; font-size:13.5px;"><?= htmlspecialchars($generated['summary']) ?></div>
+                        <div style="margin-bottom:14px; text-align:justify; font-size:13.5px;"><?= htmlspecialchars(preg_replace('/\s*\(Automated draft\s*—\s*AI not configured[^)]*\)/i', '', $generated['summary'])) ?></div>
                     <?php endif; ?>
 
                     <?php
@@ -1186,7 +1186,7 @@ try {
                                 <?php if(!empty($exp['duration'])): ?><div style="font-size:12px; color:#666; margin-bottom:4px;"><?= htmlspecialchars($exp['duration']) ?></div><?php endif; ?>
                                 <?php if(!empty($exp['bullets'])): ?>
                                     <ul style="margin:4px 0 12px 18px; padding:0; font-size:13px;">
-                                        <?php foreach($exp['bullets'] as $b): ?><li><?= htmlspecialchars($b) ?></li><?php endforeach; ?>
+                                        <?php foreach(array_slice($exp['bullets'], 0, 5) as $b): ?><li><?= htmlspecialchars($b) ?></li><?php endforeach; ?>
                                     </ul>
                                 <?php endif; ?>
                             <?php endforeach; ?>
@@ -1208,7 +1208,7 @@ try {
                     <?php if(!empty($generated['skills'])): ?>
                         <h4>Core Skills &amp; Competencies</h4>
                         <ul style="margin:4px 0 14px 18px; padding:0; display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:4px 16px; font-size:13px;">
-                            <?php foreach($generated['skills'] as $s): ?><li><?= htmlspecialchars($s) ?></li><?php endforeach; ?>
+                            <?php foreach(sanitize_resume_skills($generated['skills']) as $s): ?><li><?= htmlspecialchars($s) ?></li><?php endforeach; ?>
                         </ul>
                     <?php endif; ?>
 

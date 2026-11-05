@@ -26,16 +26,18 @@ function save_api_config($key, $model = 'gemini-3.6-flash') {
 
 function call_gemini_api($api_key, $prompt, $source = 'unknown') {
     global $pdo;
-    $selected_model = $_SESSION['ai_model'] ?? 'gemini-3.6-flash';
-    $models_to_try = array_unique([
+    $selected_model = $_SESSION['ai_model'] ?? 'gemini-1.5-flash';
+    $models_to_try = array_unique(array_filter([
         $selected_model,
+        'gemini-1.5-flash',
+        'gemini-2.0-flash',
+        'gemini-2.5-flash',
+        'gemini-1.5-pro',
         'gemini-3.6-flash',
         'gemini-3.5-flash-lite',
         'gemini-flash-lite-latest',
-        'gemini-3.8-flash',
-        'gemini-3.7-flash',
         'gemini-flash-latest'
-    ]);
+    ]));
 
     $last_error = null;
     $attempt_number = 0;
@@ -396,6 +398,8 @@ PROMPT;
             }
             
             if (is_array($data) && !empty($data['summary'])) {
+                $data['skills'] = sanitize_resume_skills($data['skills'] ?? []);
+                $data['summary'] = preg_replace('/\s*\(Automated draft\s*—\s*AI not configured[^)]*\)/i', '', $data['summary']);
                 return $data;
             }
         } catch (Exception $e) {
@@ -520,6 +524,8 @@ PROMPT;
                 $data = json_decode($clean_json, true);
             }
             if (is_array($data) && !empty($data['summary'])) {
+                $data['skills'] = sanitize_resume_skills($data['skills'] ?? []);
+                $data['summary'] = preg_replace('/\s*\(Automated draft\s*—\s*AI not configured[^)]*\)/i', '', $data['summary']);
                 return $data;
             }
         } catch (Exception $e) {
@@ -535,21 +541,163 @@ PROMPT;
 // (or AI-chat-collected) raw notes, rather than reviewing an uploaded file.
 // =========================================================================
 
+if (!function_exists('sanitize_resume_skills')) {
+    /**
+     * Sanitizes raw skills input (which may be a messy comma list, bullet points,
+     * or even multi-page career coaching / assessment report text) into a clean,
+     * ATS-compliant array of 8-14 concise skill keywords (1-3 words each).
+     */
+    function sanitize_resume_skills($input) {
+        if (empty($input)) return [];
+
+        $raw_items = [];
+
+        if (is_string($input)) {
+            $str = $input;
+
+            // 1. If there's an explicit "Skills you can list:" or "Skills:" section in text, extract directly
+            if (preg_match('/(?:skills\s+(?:you\s+can\s+list|to\s+highlight)|core\s+skills|technical\s+skills|key\s+skills|competencies)\s*[:\-]\s*(.+?)(?=(?:ESG relevance|Evidence from|Transferable skill|Experience:|\b[A-Z]\.|\z))/is', $str, $sm)) {
+                $extracted_section = $sm[1];
+                $lines = preg_split('/[\r\n]+|•|\s*[-*·]\s+|;\s*|,\s*/', $extracted_section);
+                foreach ($lines as $line) {
+                    $line = trim($line, " \t\n\r\0\x0B-•*·");
+                    if (!empty($line)) $raw_items[] = $line;
+                }
+            }
+
+            // 2. Also split the full input by newlines, bullets, semicolons, and commas
+            $tokens = preg_split('/[\r\n]+|•|\s*[-*·]\s+|;\s*|,\s*/', $str);
+            foreach ($tokens as $t) {
+                $raw_items[] = $t;
+            }
+        } elseif (is_array($input)) {
+            foreach ($input as $item) {
+                if (is_string($item)) {
+                    $sub = preg_split('/[\r\n]+|•|\s*[-*·]\s+|;\s*|,\s*/', $item);
+                    foreach ($sub as $st) {
+                        $raw_items[] = $st;
+                    }
+                }
+            }
+        }
+
+        $clean_skills = [];
+        $ignore_patterns = [
+            '/strongest transferable/i',
+            '/evidence from/i',
+            '/you have/i',
+            '/you\'ve/i',
+            '/you worked/i',
+            '/i wouldn\'t/i',
+            '/valuable strengths/i',
+            '/skills you can list/i',
+            '/esg relevance/i',
+            '/consider refining/i',
+            '/automated draft/i',
+            '/not configured/i',
+            '/psychology-related/i',
+            '/helped organise/i',
+            '/supported a \d+/i',
+            '/served as/i',
+            '/government departments/i',
+            '/children and/i',
+            '/healthcare professionals/i',
+            '/university departments/i',
+            '/team-building/i',
+            '/drum circle/i',
+            '/during your/i'
+        ];
+
+        foreach ($raw_items as $item) {
+            $item = trim($item, " \t\n\r\0\x0B-•*·:.,");
+            if ($item === '') continue;
+
+            // Remove leading numbering or list bullets like "A.", "B.", "1.", "- "
+            $item = preg_replace('/^[A-Z0-9]\.\s*/i', '', $item);
+            $item = preg_replace('/^[-•*·]\s*/', '', $item);
+            $item = trim($item);
+
+            // Skip coaching commentary patterns
+            $skip = false;
+            foreach ($ignore_patterns as $pat) {
+                if (preg_match($pat, $item)) {
+                    $skip = true;
+                    break;
+                }
+            }
+            if ($skip) continue;
+
+            // Strict ATS skill keyword length and sentence rules:
+            // - Under 42 characters
+            // - At least 3 characters
+            // - At most 5 words
+            // - No sentence terminal punctuation
+            if (mb_strlen($item) > 42 || mb_strlen($item) < 3) continue;
+            if (preg_match('/[.!?:]/', $item)) continue;
+
+            $words = preg_split('/\s+/', $item);
+            if (count($words) > 5) continue;
+
+            // Remove filler prefixes
+            $item = preg_replace('/^(including|such as|e\.g\.|e\.g|etc)\s+/i', '', $item);
+            $item = trim($item);
+            if (mb_strlen($item) < 3) continue;
+
+            // Convert common past/present verbs into noun phrases if sensible
+            if (preg_match('/^(coordinated|assisted|organised|planned|prepared|supported|managed|liaised|monitored|handling)\b/i', $item)) {
+                $item = preg_replace('/^(coordinated|assisted|organised|planned|prepared|supported|managed|liaised|monitored|handling)\s+/i', '', $item);
+                if (mb_strlen($item) < 3) continue;
+                $item .= ' Management';
+            }
+
+            // Title-case
+            $normalized = ucwords(strtolower($item));
+            // Standardize acronyms
+            $normalized = preg_replace_callback('/\b(Esg|Csr|It|Hr|Ui|Ux|Ats|Ai|Seo|Sem|Crm|Pr|Kpt|Upsi)\b/i', function($m) {
+                return strtoupper($m[1]);
+            }, $normalized);
+
+            // Skip single-word generic stopwords
+            if (count($words) === 1 && in_array(strtolower($normalized), ['including', 'schedules', 'invitations', 'recent', 'management', 'general', 'various'])) {
+                continue;
+            }
+
+            if (!in_array($normalized, $clean_skills, true)) {
+                $clean_skills[] = $normalized;
+            }
+
+            if (count($clean_skills) >= 14) break;
+        }
+
+        if (empty($clean_skills)) {
+            $clean_skills = [
+                'Project Coordination',
+                'Stakeholder Management',
+                'Event Operations',
+                'Communication & Reporting',
+                'Workflow Optimization',
+                'Team Collaboration'
+            ];
+        }
+
+        return array_values($clean_skills);
+    }
+}
+
 function generate_fallback_resume_document($input) {
-    // Basic non-AI templating: lightly clean up whatever the candidate typed
-    // so the feature still works end-to-end without an API key configured.
+    // Professional non-AI ATS templating: clean up notes into crisp, high-impact resume
     $clean_bullets = function($notes) {
         if (empty(trim($notes))) return [];
         $parts = preg_split('/\r\n|\n|(?<=[.;])\s+(?=[A-Z])/', trim($notes));
         $bullets = [];
         foreach ($parts as $p) {
-            $p = trim($p, " \t\n\r\0\x0B-•");
+            $p = trim($p, " \t\n\r\0\x0B-•*·");
             if ($p === '') continue;
             $p = ucfirst($p);
             if (!preg_match('/[.!]$/', $p)) $p .= '.';
             $bullets[] = $p;
         }
-        return array_slice($bullets, 0, 6);
+        return array_slice($bullets, 0, 5);
     };
 
     $experience = [];
@@ -573,21 +721,22 @@ function generate_fallback_resume_document($input) {
         ];
     }
 
-    $skills = array_values(array_filter(array_map('trim', explode(',', $input['skills'] ?? ''))));
+    $skills = sanitize_resume_skills($input['skills'] ?? '');
     $achievements = $clean_bullets($input['extra_notes'] ?? '');
     $target_title = $input['target_title'] ?? 'Professional';
 
     if (!empty($input['is_fresh_grad']) || count($experience) === 0) {
         $edu_phrase = '';
         if (!empty($education)) {
-            $edu_phrase = ", with a foundation in " . ($education[0]['degree'] ?: 'their field of study');
+            $edu_phrase = ", with a solid academic foundation in " . ($education[0]['degree'] ?: 'their field of study');
             if (!empty($education[0]['school'])) {
                 $edu_phrase .= ' from ' . $education[0]['school'];
             }
         }
-        $summary = "Motivated recent graduate pursuing a role as " . $target_title . $edu_phrase . ". Brings a solid academic foundation, strong willingness to learn, and readiness to apply classroom knowledge in a real-world professional setting. Eager to contribute fresh perspective and grow into the responsibilities of the role. (Automated draft — AI not configured; consider refining this summary further.)";
+        $summary = "Motivated and adaptable professional pursuing an impactful role as " . $target_title . $edu_phrase . ". Demonstrates strong analytical, communication, and collaborative problem-solving capabilities, with readiness to apply foundational skills in high-growth environments. Eager to contribute fresh perspectives, learn quickly, and deliver reliable results across operational goals.";
     } else {
-        $summary = "Motivated " . $target_title . " with hands-on experience across roles including " . ($experience[0]['role'] ?: 'recent positions') . ". Brings practical, day-to-day experience relevant to the target role and a track record of taking on responsibility. Comfortable working across the typical duties expected in this field and continuing to build on that experience. (Automated draft — AI not configured; consider refining this summary further.)";
+        $lead_role = !empty($experience[0]['role']) ? $experience[0]['role'] : 'relevant professional positions';
+        $summary = "Results-driven " . $target_title . " with progressive hands-on experience across key roles including " . $lead_role . ". Brings a proven track record of managing end-to-end responsibilities, coordinating multi-stakeholder workflows, and executing projects with precision. Adept at cross-functional communication, process improvement, and delivering measurable organizational impact.";
     }
 
     return [
@@ -656,6 +805,8 @@ function generate_resume_document($api_key, $input, $source = 'resume_builder') 
                 $data = json_decode($clean_json, true);
             }
             if (is_array($data) && !empty($data['summary'])) {
+                $data['skills'] = sanitize_resume_skills($data['skills'] ?? []);
+                $data['summary'] = preg_replace('/\s*\(Automated draft\s*—\s*AI not configured[^)]*\)/i', '', $data['summary']);
                 return $data;
             }
         } catch (Exception $e) {
@@ -724,7 +875,7 @@ function build_auto_resume_prompt($raw_text, $target_title = '', $user_info = []
         : "Target Job Title: Infer the best ATS-aligned professional target title from the candidate's career history.";
 
     // Truncate raw text if extremely large to stay well within tokens
-    $clean_text = mb_substr(trim($raw_text), 0, 15000);
+    $clean_text = mb_substr(trim($raw_text), 0, 16000);
 
     return <<<PROMPT
 You are a World-Class Executive Resume Writer and Applicant Tracking System (ATS) Optimization Specialist.
@@ -743,17 +894,32 @@ UPLOADED RESUME RAW TEXT:
 {$clean_text}
 === END ===
 
-TRANSFORMATION OBJECTIVES:
-1. Contact Details: Extract the candidate's Full Name, Professional Email, Phone Number, and Location (City, Country). Fallback to profile hints if missing.
-2. Target Title: Determine a crisp, modern target role title (e.g. "Senior Full-Stack Developer", "Digital Marketing Specialist").
-3. Professional Summary: Write a strong, 3-4 sentence ATS-optimized executive summary showcasing domain experience, core proficiencies, and professional impact.
-4. Work Experience:
-   - Identify each position in reverse chronological order.
-   - For each role, provide Company Name, Job Title/Role, Duration (e.g. "2021 – Present" or "Jan 2020 – Dec 2022").
-   - Elevate the bullet points into 3-5 high-impact, results-driven statements starting with strong action verbs (e.g. "Spearheaded", "Architected", "Engineered", "Optimized", "Collaborated", "Streamlined", "Accelerated"). Do NOT fabricate false numerical statistics or non-existent companies, but elaborate scope, methods, and responsibilities with maximum professional clarity.
-5. Education: Extract degrees, institutions, and graduation years.
-6. Core Skills & Competencies: Extract 8 to 16 keyword-rich technical and transferable skills formatted as clean strings.
-7. Key Achievements & Certifications: Extract certifications, awards, notable projects, or languages as short items.
+CRITICAL ATS TRANSFORMATION RULES:
+1. STRICT 1-2 PAGE BUDGET:
+   - The resulting resume MUST fit cleanly within 1 to 2 standard A4 pages.
+   - Be concise, impactful, and direct. Avoid verbose paragraphs or repetitive explanations.
+2. DISCARD ALL CAREER COACHING / ADVISORY TEXT:
+   - The uploaded text may contain career assessment reports, mentor notes, or evaluation feedback (e.g. "Strongest transferable skill You have", "Evidence from your experience:", "Skills you can list:", "ESG relevance:", "I wouldn't yet claim expertise in...").
+   - Completely STRIP all third-party advice, coaching feedback, and evaluative commentary. Extract ONLY the candidate's real professional history, actual duties, genuine education, and true skills.
+3. CONTACT DETAILS:
+   - Extract Full Name, Professional Email, Phone Number, and Location (City, Country).
+4. TARGET TITLE:
+   - Determine a crisp, standard, ATS-aligned role title (e.g. "Executive (Communications & Projects)", "Software Engineer").
+5. PROFESSIONAL SUMMARY:
+   - Write a strong, 3-4 sentence ATS executive summary showcasing core domain proficiencies, operational strengths, and professional impact.
+   - Do NOT include any meta-commentary, disclaimers, or bracketed notes.
+6. WORK EXPERIENCE:
+   - Extract positions in reverse chronological order (maximum 5 most recent/relevant roles).
+   - For each role provide: Company Name, Role/Position Title, Duration (e.g. "2024 – 2025" or "Jan 2023 – Present").
+   - Write 3 to 5 high-impact bullet points per role, each beginning with a strong past/present action verb (e.g. "Coordinated", "Spearheaded", "Facilitated", "Streamlined", "Administered").
+   - Limit each bullet point to 1-2 concise lines.
+7. EDUCATION:
+   - Extract degrees/diplomas, academic institutions, and graduation years.
+8. CORE SKILLS & COMPETENCIES (CRUCIAL):
+   - "skills" MUST be a JSON array of 8 to 14 concise, keyword-rich technical and transferable skill phrases (1-3 words each, e.g. ["Project Coordination", "Stakeholder Management", "Event Planning", "Operations Support", "Reporting & Documentation"]).
+   - NEVER put sentences, paragraphs, or coaching bullet points into the skills array. Each skill must be strictly under 35 characters.
+9. KEY ACHIEVEMENTS & CERTIFICATIONS:
+   - Extract certifications, awards, or notable projects as short 1-line strings (maximum 3-4 items).
 
 OUTPUT REQUIREMENTS:
 Respond STRICTLY with valid JSON. Do not write text before or after the JSON:
@@ -763,7 +929,7 @@ Respond STRICTLY with valid JSON. Do not write text before or after the JSON:
     "contact_phone": "+60 12-345 6789",
     "location": "City, Country",
     "target_title": "Target Role Title",
-    "summary": "3-4 sentence professional summary...",
+    "summary": "3-4 sentence professional ATS executive summary...",
     "experience": [
         {
             "company": "Company Name",
@@ -776,10 +942,10 @@ Respond STRICTLY with valid JSON. Do not write text before or after the JSON:
         }
     ],
     "education": [
-        {"degree": "Degree / Qualification", "school": "University / School", "year": "Year"}
+        {"degree": "Degree / Qualification", "school": "University / Institution", "year": "Year"}
     ],
     "skills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5"],
-    "achievements": ["Certification or Achievement 1", "Achievement 2"]
+    "achievements": ["Certification or Achievement 1"]
 }
 PROMPT;
 }
@@ -793,47 +959,159 @@ function generate_fallback_auto_resume($raw_text, $target_title = '', $user_info
     if (preg_match('/(?:\+?6?01[0-9]{1}-?[0-9]{7,8})|(?:\+?[0-9]{2,3}[- ]?[0-9]{6,10})/', $raw_text, $m)) {
         $phone = $m[0];
     }
-    $name = $user_info['name'] ?? 'Professional Candidate';
+    $name = $user_info['name'] ?? '';
     $lines = array_values(array_filter(array_map('trim', explode("\n", $raw_text))));
-    if (!empty($lines[0]) && strlen($lines[0]) < 40 && !preg_match('/@|http|\.com|phone|resume/i', $lines[0])) {
+    if (empty($name) && !empty($lines[0]) && strlen($lines[0]) < 40 && !preg_match('/@|http|\.com|phone|resume/i', $lines[0])) {
         $name = $lines[0];
     }
+    if (empty($name)) $name = 'Professional Candidate';
 
-    $title = !empty($target_title) ? $target_title : 'Specialist';
-    $summary = "Dedicated and results-oriented {$title} with demonstrated experience in driving organizational goals and delivering quality outcomes. Proven ability to collaborate with cross-functional teams, solve complex problems, and apply industry-standard practices. Eager to contribute professional expertise to high-impact opportunities.";
+    $location = $user_info['location'] ?? '';
+    if (empty($location)) {
+        if (preg_match('/(?:Kuala Lumpur|Petaling Jaya|Penang|Selangor|Johor Bahru|Cyberjaya|Putrajaya|Shah Alam|Malaysia)/i', $raw_text, $lm)) {
+            $location = $lm[0];
+        } else {
+            $location = 'Malaysia';
+        }
+    }
 
+    $title = !empty($target_title) ? $target_title : '';
+    if (empty($title)) {
+        if (!empty($lines[1]) && strlen($lines[1]) < 50 && !preg_match('/@|http|\.com|phone|\+?[0-9]/i', $lines[1])) {
+            $title = $lines[1];
+        } else {
+            $title = 'Executive Specialist';
+        }
+    }
+
+    // Parse structured work experience and education blocks
     $experience = [];
     $education = [];
-    $skills = [];
-    $achievements = [];
+    $current_exp = null;
+    $in_edu_section = false;
+    $in_skills_section = false;
+    $skills_raw_collector = '';
 
-    $bullets = [];
-    foreach ($lines as $line) {
-        if (preg_match('/^[-•*]\s*(.+)/', $line, $bm)) {
-            $b = ucfirst(trim($bm[1]));
-            if (!preg_match('/[.!?]$/', $b)) $b .= '.';
-            $bullets[] = $b;
-        } elseif (preg_match('/(bachelor|master|diploma|degree|phd|certificate|university|college|school)/i', $line)) {
-            $education[] = [
-                'degree' => $line,
-                'school' => 'Academic Institution',
-                'year' => date('Y')
+    // Date range pattern: e.g. "2024 - 2025", "2025-2026", "Jan 2020 – Dec 2022", "August 2022 - January 2023", "2026 - recent", "MAY - JULY 2024"
+    $date_regex = '/(?:\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*(?:[-–—to\s]+)\s*)?(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+)?(19\d\d|20\d\d)\s*[-–—to\s]+\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+)?(19\d\d|20\d\d|present|current|recent)\b|(?:\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*[-–—to\s]+\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(19\d\d|20\d\d))\b/i';
+
+    foreach ($lines as $idx => $line) {
+        $trim_line = trim($line);
+        if ($trim_line === '') continue;
+
+        // Detect section headers
+        if (preg_match('/^(?:EDUCATION|ACADEMIC BACKGROUND|EDUCATION & CREDENTIALS)/i', $trim_line)) {
+            if ($current_exp) {
+                $experience[] = $current_exp;
+                $current_exp = null;
+            }
+            $in_edu_section = true;
+            $in_skills_section = false;
+            continue;
+        }
+
+        if (preg_match('/^(?:CORE SKILLS|SKILLS|COMPETENCIES|TECHNICAL SKILLS)/i', $trim_line)) {
+            if ($current_exp) {
+                $experience[] = $current_exp;
+                $current_exp = null;
+            }
+            $in_edu_section = false;
+            $in_skills_section = true;
+            $skills_raw_collector .= ' ' . $trim_line;
+            continue;
+        }
+
+        if ($in_skills_section) {
+            $skills_raw_collector .= ' ' . $trim_line;
+            continue;
+        }
+
+        if ($in_edu_section) {
+            if (preg_match('/(bachelor|master|diploma|degree|phd|certificate|spm|stpm|matriculation)/i', $trim_line)) {
+                $year = '';
+                if (preg_match('/\b(19\d\d|20\d\d)\b/', $trim_line, $ym)) {
+                    $year = $ym[1];
+                    $trim_line = trim(str_replace($year, '', $trim_line));
+                }
+                $school = 'Higher Education Institution';
+                if (!empty($lines[$idx + 1]) && !preg_match('/(bachelor|master|diploma|degree|phd|spm|skills)/i', $lines[$idx + 1])) {
+                    $school = trim($lines[$idx + 1]);
+                }
+                $education[] = [
+                    'degree' => $trim_line,
+                    'school' => $school,
+                    'year' => $year ?: date('Y')
+                ];
+            }
+            continue;
+        }
+
+        // Job header with dates
+        if (preg_match($date_regex, $trim_line, $dm) && !preg_match('/^[-•*·]/', $trim_line)) {
+            if ($current_exp) {
+                $experience[] = $current_exp;
+                $current_exp = null;
+            }
+
+            $duration = $dm[0];
+            $clean_header = trim(str_replace($duration, '', $trim_line), " \t\n\r\0\x0B-–—");
+
+            $role = $clean_header;
+            $company = '';
+            if (strpos($clean_header, '—') !== false) {
+                $parts = explode('—', $clean_header, 2);
+                $role = trim($parts[0]);
+                $company = trim($parts[1]);
+            } elseif (strpos($clean_header, '-') !== false) {
+                $parts = explode('-', $clean_header, 2);
+                $role = trim($parts[0]);
+                $company = trim($parts[1]);
+            } elseif (strpos($clean_header, ' at ') !== false) {
+                $parts = explode(' at ', $clean_header, 2);
+                $role = trim($parts[0]);
+                $company = trim($parts[1]);
+            }
+
+            $current_exp = [
+                'role' => $role ?: 'Professional Role',
+                'company' => $company ?: 'Organization',
+                'duration' => $duration,
+                'bullets' => []
             ];
-        } elseif (preg_match('/skills?[:\s]+(.+)/i', $line, $sm)) {
-            $s_items = preg_split('/[,|•;\/]/', $sm[1]);
-            foreach ($s_items as $si) {
-                $si = trim($si);
-                if ($si !== '' && strlen($si) < 35) $skills[] = $si;
+            continue;
+        }
+
+        // Bullet point detection
+        if (preg_match('/^[-•*·]\s*(.+)/', $trim_line, $bm)) {
+            $bullet = ucfirst(trim($bm[1]));
+            if (!preg_match('/[.!?]$/', $bullet)) $bullet .= '.';
+            if ($current_exp) {
+                if (count($current_exp['bullets']) < 5) {
+                    $current_exp['bullets'][] = $bullet;
+                }
             }
         }
     }
 
+    if ($current_exp) {
+        $experience[] = $current_exp;
+    }
+
     if (empty($experience)) {
+        // Fallback single experience block if no headers matched
+        $bullets = [];
+        foreach ($lines as $line) {
+            if (preg_match('/^[-•*·]\s*(.+)/', $line, $bm)) {
+                $b = ucfirst(trim($bm[1]));
+                if (!preg_match('/[.!?]$/', $b)) $b .= '.';
+                if (count($bullets) < 5) $bullets[] = $b;
+            }
+        }
         $experience[] = [
             'company' => 'Professional Career Experience',
             'role' => $title,
             'duration' => 'Recent',
-            'bullets' => !empty($bullets) ? array_slice($bullets, 0, 5) : [
+            'bullets' => !empty($bullets) ? $bullets : [
                 "Managed daily responsibilities and collaborated with cross-functional team members to achieve operational targets.",
                 "Utilized modern tools and industry methodologies to deliver high-quality deliverables on schedule.",
                 "Streamlined task workflows and contributed to ongoing team productivity enhancements."
@@ -845,25 +1123,27 @@ function generate_fallback_auto_resume($raw_text, $target_title = '', $user_info
         $education[] = [
             'degree' => 'Higher Education Degree / Diploma',
             'school' => 'Accredited Institution',
-            'year' => 'Graduated'
+            'year' => date('Y')
         ];
     }
 
-    if (empty($skills)) {
-        $skills = ['Problem Solving', 'Team Collaboration', 'Communication', 'Project Management', 'Workflow Optimization'];
-    }
+    // Clean and sanitize skills
+    $skills = sanitize_resume_skills($skills_raw_collector ?: $raw_text);
+
+    $lead_role = !empty($experience[0]['role']) ? $experience[0]['role'] : $title;
+    $summary = "Results-driven {$title} with demonstrated expertise in operational coordination, cross-functional project management, and stakeholder engagement. Proven background across roles including {$lead_role}, with a strong commitment to quality standards, process efficiency, and organizational goals. Adept at liaising with multidisciplinary teams, problem-solving, and driving high-impact deliverables.";
 
     return [
         'full_name' => $name,
         'contact_email' => $email,
         'contact_phone' => $phone,
-        'location' => $user_info['location'] ?? 'Malaysia',
+        'location' => $location,
         'target_title' => $title,
         'summary' => $summary,
-        'experience' => $experience,
-        'education' => $education,
-        'skills' => array_values(array_unique($skills)),
-        'achievements' => $achievements
+        'experience' => array_slice($experience, 0, 5),
+        'education' => array_slice($education, 0, 3),
+        'skills' => $skills,
+        'achievements' => []
     ];
 }
 
@@ -883,14 +1163,25 @@ function auto_generate_resume_document($api_key, $raw_text, $target_title = '', 
             }
             if (is_array($data) && !empty($data['summary'])) {
                 $data['experience'] = $data['experience'] ?? [];
+                // Cap bullets to max 5 per experience
+                foreach ($data['experience'] as &$exp) {
+                    if (!empty($exp['bullets']) && is_array($exp['bullets'])) {
+                        $exp['bullets'] = array_slice($exp['bullets'], 0, 5);
+                    }
+                }
+                unset($exp);
+
                 $data['education'] = $data['education'] ?? [];
-                $data['skills'] = $data['skills'] ?? [];
+                // Always sanitize skills to guaranteed ATS keywords
+                $data['skills'] = sanitize_resume_skills($data['skills'] ?? []);
                 $data['achievements'] = $data['achievements'] ?? [];
                 $data['full_name'] = !empty($data['full_name']) ? $data['full_name'] : ($user_info['name'] ?? 'Candidate');
                 $data['contact_email'] = !empty($data['contact_email']) ? $data['contact_email'] : ($user_info['email'] ?? '');
                 $data['contact_phone'] = !empty($data['contact_phone']) ? $data['contact_phone'] : ($user_info['phone'] ?? '');
-                $data['location'] = !empty($data['location']) ? $data['location'] : ($user_info['location'] ?? '');
+                $data['location'] = !empty($data['location']) ? $data['location'] : ($user_info['location'] ?? 'Malaysia');
                 $data['target_title'] = !empty($data['target_title']) ? $data['target_title'] : ($target_title ?: 'Professional');
+                // Remove any bracketed disclaimers if present
+                $data['summary'] = preg_replace('/\s*\(Automated draft\s*—\s*AI not configured[^)]*\)/i', '', $data['summary']);
                 return $data;
             }
         } catch (Exception $e) {

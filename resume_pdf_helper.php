@@ -8,6 +8,149 @@ require_once __DIR__ . '/vendor/autoload.php';
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
+if (!function_exists('sanitize_resume_skills')) {
+    /**
+     * Sanitizes raw skills input (which may be a messy comma list, bullet points,
+     * or even multi-page career coaching / assessment report text) into a clean,
+     * ATS-compliant array of 8-14 concise skill keywords (1-3 words each).
+     */
+    function sanitize_resume_skills($input) {
+        if (empty($input)) return [];
+
+        $raw_items = [];
+
+        if (is_string($input)) {
+            $str = $input;
+
+            // 1. If there's an explicit "Skills you can list:" or "Skills:" section in text, extract directly
+            if (preg_match('/(?:skills\s+(?:you\s+can\s+list|to\s+highlight)|core\s+skills|technical\s+skills|key\s+skills|competencies)\s*[:\-]\s*(.+?)(?=(?:ESG relevance|Evidence from|Transferable skill|Experience:|\b[A-Z]\.|\z))/is', $str, $sm)) {
+                $extracted_section = $sm[1];
+                $lines = preg_split('/[\r\n]+|•|\s*[-*·]\s+|;\s*|,\s*/', $extracted_section);
+                foreach ($lines as $line) {
+                    $line = trim($line, " \t\n\r\0\x0B-•*·");
+                    if (!empty($line)) $raw_items[] = $line;
+                }
+            }
+
+            // 2. Also split the full input by newlines, bullets, semicolons, and commas
+            $tokens = preg_split('/[\r\n]+|•|\s*[-*·]\s+|;\s*|,\s*/', $str);
+            foreach ($tokens as $t) {
+                $raw_items[] = $t;
+            }
+        } elseif (is_array($input)) {
+            foreach ($input as $item) {
+                if (is_string($item)) {
+                    $sub = preg_split('/[\r\n]+|•|\s*[-*·]\s+|;\s*|,\s*/', $item);
+                    foreach ($sub as $st) {
+                        $raw_items[] = $st;
+                    }
+                }
+            }
+        }
+
+        $clean_skills = [];
+        $ignore_patterns = [
+            '/strongest transferable/i',
+            '/evidence from/i',
+            '/you have/i',
+            '/you\'ve/i',
+            '/you worked/i',
+            '/i wouldn\'t/i',
+            '/valuable strengths/i',
+            '/skills you can list/i',
+            '/esg relevance/i',
+            '/consider refining/i',
+            '/automated draft/i',
+            '/not configured/i',
+            '/psychology-related/i',
+            '/helped organise/i',
+            '/supported a \d+/i',
+            '/served as/i',
+            '/government departments/i',
+            '/children and/i',
+            '/healthcare professionals/i',
+            '/university departments/i',
+            '/team-building/i',
+            '/drum circle/i',
+            '/during your/i'
+        ];
+
+        foreach ($raw_items as $item) {
+            $item = trim($item, " \t\n\r\0\x0B-•*·:.,");
+            if ($item === '') continue;
+
+            // Remove leading numbering or list bullets like "A.", "B.", "1.", "- "
+            $item = preg_replace('/^[A-Z0-9]\.\s*/i', '', $item);
+            $item = preg_replace('/^[-•*·]\s*/', '', $item);
+            $item = trim($item);
+
+            // Skip coaching commentary patterns
+            $skip = false;
+            foreach ($ignore_patterns as $pat) {
+                if (preg_match($pat, $item)) {
+                    $skip = true;
+                    break;
+                }
+            }
+            if ($skip) continue;
+
+            // Strict ATS skill keyword length and sentence rules:
+            // - Under 42 characters
+            // - At least 3 characters
+            // - At most 5 words
+            // - No sentence terminal punctuation
+            if (mb_strlen($item) > 42 || mb_strlen($item) < 3) continue;
+            if (preg_match('/[.!?:]/', $item)) continue;
+
+            $words = preg_split('/\s+/', $item);
+            if (count($words) > 5) continue;
+
+            // Remove filler prefixes
+            $item = preg_replace('/^(including|such as|e\.g\.|e\.g|etc)\s+/i', '', $item);
+            $item = trim($item);
+            if (mb_strlen($item) < 3) continue;
+
+            // Convert common past/present verbs into noun phrases if sensible
+            if (preg_match('/^(coordinated|assisted|organised|planned|prepared|supported|managed|liaised|monitored|handling)\b/i', $item)) {
+                $item = preg_replace('/^(coordinated|assisted|organised|planned|prepared|supported|managed|liaised|monitored|handling)\s+/i', '', $item);
+                if (mb_strlen($item) < 3) continue;
+                $item .= ' Management';
+            }
+
+            // Title-case
+            $normalized = ucwords(strtolower($item));
+            // Standardize acronyms
+            $normalized = preg_replace_callback('/\b(Esg|Csr|It|Hr|Ui|Ux|Ats|Ai|Seo|Sem|Crm|Pr|Kpt|Upsi)\b/i', function($m) {
+                return strtoupper($m[1]);
+            }, $normalized);
+
+            // Skip single-word generic stopwords
+            if (count($words) === 1 && in_array(strtolower($normalized), ['including', 'schedules', 'invitations', 'recent', 'management', 'general', 'various'])) {
+                continue;
+            }
+
+            if (!in_array($normalized, $clean_skills, true)) {
+                $clean_skills[] = $normalized;
+            }
+
+            if (count($clean_skills) >= 14) break;
+        }
+
+        if (empty($clean_skills)) {
+            $clean_skills = [
+                'Project Coordination',
+                'Stakeholder Management',
+                'Event Operations',
+                'Communication & Reporting',
+                'Workflow Optimization',
+                'Team Collaboration'
+            ];
+        }
+
+        return array_values($clean_skills);
+    }
+}
+
 /**
  * Safely parse and normalize resume builder data from raw/generated JSON or DB arrays.
  */
@@ -34,6 +177,9 @@ function get_resume_builder_data($build, $user = null) {
     $is_fresh_grad = !empty($raw['is_fresh_grad']) || !empty($gen['is_fresh_grad']) || !empty($build['is_fresh_grad']);
 
     $summary = trim($gen['summary'] ?? ($raw['summary'] ?? ($build['summary'] ?? '')));
+    $summary = preg_replace('/\s*\(Automated draft\s*—\s*AI not configured[^)]*\)/i', '', $summary);
+    $summary = preg_replace('/\s*\(AI not configured[^)]*\)/i', '', $summary);
+    $summary = trim($summary);
 
     $experience = $gen['experience'] ?? ($raw['experience'] ?? ($build['experience'] ?? []));
     if (is_string($experience)) $experience = json_decode($experience, true) ?: [];
@@ -46,6 +192,7 @@ function get_resume_builder_data($build, $user = null) {
         $decoded = json_decode($skills, true);
         if (is_array($decoded)) $skills = $decoded;
     }
+    $skills = sanitize_resume_skills($skills);
 
     $achievements = $gen['achievements'] ?? ($raw['achievements'] ?? ($build['achievements'] ?? []));
     if (is_string($achievements)) $achievements = json_decode($achievements, true) ?: [];
@@ -85,18 +232,13 @@ function render_resume_builder_html($build, $user = null) {
     $contact_line = implode(' &nbsp;&bull;&nbsp; ', $contacts);
 
     $skills_list = [];
-    if (is_array($data['skills'])) {
+    if (!empty($data['skills']) && is_array($data['skills'])) {
         foreach ($data['skills'] as $s) {
-            $s = trim($s);
+            $s = trim((string)$s);
             if ($s !== '') $skills_list[] = htmlspecialchars($s);
         }
-    } elseif (is_string($data['skills']) && trim($data['skills']) !== '') {
-        $parts = explode(',', $data['skills']);
-        foreach ($parts as $p) {
-            $p = trim($p);
-            if ($p !== '') $skills_list[] = htmlspecialchars($p);
-        }
     }
+    $skills_list = array_slice($skills_list, 0, 14);
 
     $exp_html = '';
     if (!empty($data['experience'])) {
@@ -117,7 +259,7 @@ function render_resume_builder_html($build, $user = null) {
 
             if (!empty($exp['bullets']) && is_array($exp['bullets'])) {
                 $exp_html .= '<ul class="entry-bullets">';
-                foreach ($exp['bullets'] as $b) {
+                foreach (array_slice($exp['bullets'], 0, 5) as $b) {
                     $b = trim($b);
                     if ($b !== '') $exp_html .= '<li>' . htmlspecialchars($b) . '</li>';
                 }
@@ -168,47 +310,29 @@ function render_resume_builder_html($build, $user = null) {
         $body_content .= '<div class="section-title">Core Skills & Competencies</div>';
 
         $total_skills = count($skills_list);
-        $max_len = 0;
-        foreach ($skills_list as $sk_item) {
-            $len = strlen(strip_tags($sk_item));
-            if ($len > $max_len) $max_len = $len;
-        }
+        $cols = ($total_skills >= 6) ? 3 : 2;
+        $chunk_size = ceil($total_skills / $cols);
+        $chunks = array_chunk($skills_list, $chunk_size);
+        $col_width = round(100 / count($chunks));
 
-        $cols = 1;
-        if ($total_skills >= 6 && $max_len <= 20) {
-            $cols = 3;
-        } elseif ($total_skills >= 2) {
-            $cols = 2;
-        }
-
-        if ($cols > 1) {
-            $chunk_size = ceil($total_skills / $cols);
-            $chunks = array_chunk($skills_list, $chunk_size);
-            $col_width = round(100 / count($chunks));
-
-            $body_content .= '<table class="skills-table"><tr>';
-            foreach ($chunks as $chunk) {
-                $body_content .= '<td style="vertical-align:top; width:' . $col_width . '%;">';
-                $body_content .= '<ul class="entry-bullets skills-bullets">';
-                foreach ($chunk as $sk) {
-                    $body_content .= '<li>' . $sk . '</li>';
-                }
-                $body_content .= '</ul></td>';
-            }
-            $body_content .= '</tr></table>';
-        } else {
-            $body_content .= '<ul class="entry-bullets skills-bullets">';
-            foreach ($skills_list as $sk) {
+        $body_content .= '<div class="skills-wrapper">';
+        $body_content .= '<table class="skills-table"><tr>';
+        foreach ($chunks as $chunk) {
+            $body_content .= '<td style="vertical-align:top; width:' . $col_width . '%;">';
+            $body_content .= '<ul class="skills-bullets">';
+            foreach ($chunk as $sk) {
                 $body_content .= '<li>' . $sk . '</li>';
             }
-            $body_content .= '</ul>';
+            $body_content .= '</ul></td>';
         }
+        $body_content .= '</tr></table>';
+        $body_content .= '</div>';
     }
 
     if (!empty($data['achievements'])) {
         $body_content .= '<div class="section-title">Key Achievements & Certifications</div>';
         $body_content .= '<ul class="entry-bullets">';
-        foreach ($data['achievements'] as $ach) {
+        foreach (array_slice($data['achievements'], 0, 4) as $ach) {
             $ach = trim($ach);
             if ($ach !== '') $body_content .= '<li>' . htmlspecialchars($ach) . '</li>';
         }
@@ -250,7 +374,7 @@ function render_resume_builder_html($build, $user = null) {
 <title>' . htmlspecialchars($data['full_name'] . ' - ' . $data['target_title']) . '</title>
 <style>
     @page {
-        margin: 26px 34px 28px 34px;
+        margin: 24px 32px 24px 32px;
         size: A4 portrait;
     }
     * {
@@ -259,63 +383,64 @@ function render_resume_builder_html($build, $user = null) {
     body {
         font-family: Helvetica, Arial, sans-serif;
         color: #1F2421;
-        font-size: 10pt;
-        line-height: 1.5;
+        font-size: 9.5pt;
+        line-height: 1.4;
         margin: 0;
         padding: 0;
         background: #FFFFFF;
     }
     .resume-header {
-        border-bottom: 2.5px solid #6B8A00;
-        padding-bottom: 12px;
-        margin-bottom: 14px;
+        border-bottom: 2px solid #6B8A00;
+        padding-bottom: 8px;
+        margin-bottom: 10px;
     }
     .candidate-name {
-        font-size: 22pt;
+        font-size: 20pt;
         font-weight: bold;
         color: #0E0F12;
-        margin: 0 0 3px 0;
+        margin: 0 0 2px 0;
         line-height: 1.15;
     }
     .target-title {
-        font-size: 12pt;
+        font-size: 11pt;
         font-weight: bold;
         color: #6B8A00;
-        margin: 0 0 5px 0;
-        letter-spacing: 0.3px;
+        margin: 0 0 4px 0;
+        letter-spacing: 0.2px;
     }
     .contact-bar {
-        font-size: 9pt;
+        font-size: 8.5pt;
         color: #4B5563;
-        margin-top: 3px;
+        margin-top: 2px;
     }
     .section-title {
-        font-size: 10.5pt;
+        font-size: 10pt;
         font-weight: bold;
         text-transform: uppercase;
-        letter-spacing: 0.8px;
+        letter-spacing: 0.6px;
         color: #384800;
         border-bottom: 1px solid #D6E4A8;
-        padding-bottom: 3px;
-        margin-top: 13px;
-        margin-bottom: 8px;
+        padding-bottom: 2px;
+        margin-top: 10px;
+        margin-bottom: 5px;
+        page-break-after: avoid;
     }
     .summary-paragraph {
-        font-size: 9.5pt;
+        font-size: 9pt;
         color: #374151;
-        line-height: 1.55;
-        margin-bottom: 8px;
+        line-height: 1.45;
+        margin-bottom: 6px;
         text-align: justify;
     }
     .entry-block {
-        margin-bottom: 8px;
+        margin-bottom: 6px;
         page-break-inside: avoid;
     }
     .entry-header-table {
-        margin-bottom: 2px;
+        margin-bottom: 1px;
     }
     .entry-title {
-        font-size: 10pt;
+        font-size: 9.5pt;
         font-weight: bold;
         color: #111827;
         display: inline-block;
@@ -327,45 +452,48 @@ function render_resume_builder_html($build, $user = null) {
         margin-top: 1px;
     }
     .entry-sub {
-        font-size: 9pt;
+        font-size: 8.5pt;
         color: #4B5563;
         font-style: italic;
-        margin-bottom: 2px;
+        margin-bottom: 1px;
     }
     .entry-bullets {
-        margin: 3px 0 5px 18px;
+        margin: 2px 0 3px 16px;
         padding: 0;
     }
     .entry-bullets li {
-        font-size: 9pt;
+        font-size: 8.5pt;
         color: #374151;
-        line-height: 1.45;
-        margin-bottom: 2px;
+        line-height: 1.35;
+        margin-bottom: 1.5px;
     }
     .entry-notes {
-        font-size: 9pt;
+        font-size: 8.5pt;
         color: #374151;
-        line-height: 1.45;
+        line-height: 1.35;
         text-align: justify;
+    }
+    .skills-wrapper {
+        page-break-inside: avoid;
+        margin-top: 2px;
+        margin-bottom: 4px;
     }
     .skills-table {
         width: 100%;
         border-collapse: collapse;
-        margin-top: 2px;
-        margin-bottom: 6px;
     }
     .skills-table td {
-        padding: 0 10px 0 0;
+        padding: 0 8px 0 0;
     }
     .skills-bullets {
-        margin: 2px 0 4px 18px;
+        margin: 1px 0 2px 14px;
         padding: 0;
     }
     .skills-bullets li {
-        font-size: 9pt;
+        font-size: 8.5pt;
         color: #374151;
-        line-height: 1.45;
-        margin-bottom: 2px;
+        line-height: 1.35;
+        margin-bottom: 1.5px;
     }
 </style>
 </head>
@@ -1079,7 +1207,7 @@ function generate_resume_builder_docx($build, $user = null) {
             $exp_xml .= docx_line($title_line ?: 'Experience Entry', true, false, 20, '111827', 10);
             if ($dur) $exp_xml .= docx_line($dur, false, true, 18, '6B7280', 30);
             if (!empty($exp['bullets']) && is_array($exp['bullets'])) {
-                foreach ($exp['bullets'] as $b) {
+                foreach (array_slice($exp['bullets'], 0, 5) as $b) {
                     $b = trim($b);
                     if ($b !== '') $exp_xml .= docx_bullet($b);
                 }
@@ -1105,18 +1233,7 @@ function generate_resume_builder_docx($build, $user = null) {
     $body .= $data['is_fresh_grad'] ? ($edu_xml . $exp_xml) : ($exp_xml . $edu_xml);
 
     if (!empty($data['skills'])) {
-        $skills_list = [];
-        if (is_array($data['skills'])) {
-            foreach ($data['skills'] as $s) {
-                $s = trim((string)$s);
-                if ($s !== '') $skills_list[] = $s;
-            }
-        } elseif (is_string($data['skills']) && trim($data['skills']) !== '') {
-            foreach (explode(',', $data['skills']) as $p) {
-                $p = trim($p);
-                if ($p !== '') $skills_list[] = $p;
-            }
-        }
+        $skills_list = array_slice(sanitize_resume_skills($data['skills']), 0, 14);
         if (!empty($skills_list)) {
             $body .= docx_heading('Core Skills & Competencies');
             foreach ($skills_list as $sk) {
