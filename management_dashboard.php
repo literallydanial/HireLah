@@ -1275,7 +1275,7 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
         </nav>
 
         <div class="sidebar-mascot-box">
-            <div class="speech-bubble">Good people, Brighter days</div>
+            <div class="speech-bubble">Good people, brighter days</div>
             <div class="mascot-image-wrapper">
                 <img src="assets/casey-1.png" alt="Casey" class="mascot-image">
             </div>

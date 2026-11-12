@@ -181,9 +181,9 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
         .keria-hero-banner {
             position: relative;
             width: 100%;
-            background-image: url('assets/Keria_banner_v2.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner_v2.jpg'); ?>');
+            background-image: url('assets/banner_dashboard.jpg?v=<?php echo @filemtime(__DIR__.'/assets/banner_dashboard.jpg'); ?>');
             background-size: cover;
-            background-position: center center;
+            background-position: right 80%;
             background-repeat: no-repeat;
             /* This section sits directly after <header>, outside <main>,
                so it didn't get style.css's main{margin-top} compensation
@@ -194,7 +194,12 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
                the box, so the image keeps its original sizing/crop. */
             margin-top: 72px;
             padding: 44px 32px 48px;
-            min-height: 280px;
+            /* clamp, not a fixed px, so the box's aspect ratio (and thus
+               background-size:cover's effective zoom) stays roughly
+               constant across monitor widths -- a fixed height here
+               made cover zoom in further on wider screens, cropping
+               more of the mascots the wider the viewport got. */
+            min-height: clamp(280px, 20vw, 420px);
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             overflow: hidden;
             display: flex;
@@ -221,6 +226,9 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
             .keria-main-container {
                 margin-top: 0 !important;
             }
+            .banner-explore-wrap {
+                margin-right: 0;
+            }
         }
 
         .banner-content-inner {
@@ -240,6 +248,13 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
             margin-bottom: 28px;
         }
 
+        /* Reserves clearance so this button doesn't land on top of the
+           mascots anchored to the banner image's right edge -- only
+           needed once the row stops wrapping (see the 840px override). */
+        .banner-explore-wrap {
+            margin-right: 200px;
+        }
+
         .banner-title-block {
             max-width: 680px;
         }
@@ -256,9 +271,10 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
         .banner-sub-text {
             font-size: 14.5px;
             font-weight: 500;
-            color: #374151;
+            color: #0A0A0A;
             line-height: 1.45;
             margin: 0;
+            text-shadow: 0 0 2px rgba(255,255,255,1), 0 1px 3px rgba(255,255,255,1), 0 0 10px rgba(255,255,255,1), 0 0 20px rgba(255,255,255,0.95);
         }
 
         .btn-banner-explore {
@@ -691,7 +707,7 @@ $avg_score = $total_apps > 0 ? round($total_score_sum / $total_apps) : 0;
                     <h1 class="banner-title-text">My Job Applications</h1>
                     <p class="banner-sub-text">Track your application statuses, AI match feedback, and employer questionnaire requests.</p>
                 </div>
-                <div>
+                <div class="banner-explore-wrap">
                     <a href="jobs.php" class="btn-banner-explore">
                         🔍 Explore More Jobs
                     </a>

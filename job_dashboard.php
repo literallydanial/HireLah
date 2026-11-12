@@ -71,6 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             header("Location: job_dashboard.php");
             exit;
         }
+    } else {
+        $_SESSION['error'] = "Please fill in the job title, description, and both salary fields before publishing.";
+        header("Location: job_dashboard.php?open_post=1");
+        exit;
     }
 }
 
@@ -390,6 +394,12 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
             <div style="position:fixed; top:20px; right:20px; z-index:3000; background:rgba(0, 232, 122, 0.18); border:1px solid rgba(0, 232, 122, 0.5); border-radius:10px; padding:10px 18px; color:var(--grn); font-size:13px; font-weight:700;">
                 <?= htmlspecialchars($_SESSION['toast']) ?>
                 <?php unset($_SESSION['toast']); ?>
+            </div>
+        <?php endif; ?>
+        <?php if(isset($_SESSION['error'])): ?>
+            <div style="background:rgba(255, 77, 106, 0.1); border:1px solid rgba(255, 77, 106, 0.35); border-radius:12px; padding:11px 18px; margin-bottom:20px; color:var(--red); font-size:13px;">
+                ⚠️ <?= htmlspecialchars($_SESSION['error']) ?>
+                <?php unset($_SESSION['error']); ?>
             </div>
         <?php endif; ?>
         <?php $ev_block_msg = ev_posting_block_message($pdo, $active_company_id); if ($ev_block_msg): ?>
