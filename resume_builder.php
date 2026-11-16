@@ -346,9 +346,9 @@ try {
         .keria-hero-banner {
             position: relative;
             width: 100%;
-            background-image: url('assets/Keria_banner_v2.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner_v2.jpg'); ?>');
+            background-image: url('assets/banner_resume_builder.jpg?v=<?php echo @filemtime(__DIR__.'/assets/banner_resume_builder.jpg'); ?>');
             background-size: cover;
-            background-position: center top;
+            background-position: right 80%;
             background-repeat: no-repeat;
             /* This section sits directly after <header>, outside <main>,
                so it didn't get style.css's main{margin-top} compensation
@@ -359,6 +359,12 @@ try {
                the box, so the image keeps its original sizing/crop. */
             margin-top: 72px;
             padding: 36px 32px 40px;
+            /* clamp, not a fixed px, so the box's aspect ratio (and thus
+               background-size:cover's effective zoom) stays roughly
+               constant across monitor widths -- a fixed height here
+               made cover zoom in further on wider screens, cropping
+               more of the mascots the wider the viewport got. */
+            min-height: clamp(280px, 20vw, 420px);
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             overflow: hidden;
         }
@@ -372,6 +378,7 @@ try {
             .keria-hero-banner {
                 margin-top: 170px;
                 padding: 24px 20px 28px;
+                min-height: 0;
             }
             /* style.css also forces main{margin-top:170px!important} at
                this breakpoint, assuming main sits directly under the
@@ -381,6 +388,25 @@ try {
                page content. */
             .keria-main-container {
                 margin-top: 0 !important;
+            }
+        }
+
+        @media (max-width: 560px) {
+            /* On phones the title+subtitle text block spans the full
+               narrow width, so the mascots (anchored right) end up
+               sitting directly under the subtitle text instead of
+               beside it. Shifting background-position was too fragile
+               (depends on this box's exact height, which differs per
+               page), and dropping the photo entirely read as the page's
+               header/banner having vanished, inconsistent with jobs.php
+               and candidate_dashboard.php which keep their photo on
+               mobile. Keep the photo but layer a readability scrim over
+               it -- solid near the text, fading out toward the mascots
+               -- so legibility no longer depends on exact crop math. */
+            .keria-hero-banner {
+                background-image:
+                    linear-gradient(to right, rgba(248,250,248,0.97) 0%, rgba(248,250,248,0.9) 45%, rgba(248,250,248,0.55) 70%, rgba(248,250,248,0.15) 100%),
+                    url('assets/banner_resume_builder.jpg?v=<?php echo @filemtime(__DIR__.'/assets/banner_resume_builder.jpg'); ?>');
             }
         }
 
@@ -423,10 +449,11 @@ try {
         .banner-sub-text {
             font-size: 14.5px;
             font-weight: 500;
-            color: #374151;
+            color: #0A0A0A;
             line-height: 1.45;
             max-width: 580px;
             margin-bottom: 6px;
+            text-shadow: 0 0 2px rgba(255,255,255,1), 0 1px 3px rgba(255,255,255,1), 0 0 10px rgba(255,255,255,1), 0 0 20px rgba(255,255,255,0.95);
         }
 
         .banner-sub-smile {

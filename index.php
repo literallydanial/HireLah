@@ -1910,7 +1910,7 @@ if (file_exists('db.php')) {
             <div class="keria-hero-content-left">
                 
                 <h1 class="keria-hero-title">
-                    good people<br>
+                    good people,<br>
                     <span class="keria-title-underline-wrap">
                         brighter days.
                         <span class="keria-brush-underline"></span>

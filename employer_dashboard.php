@@ -533,10 +533,10 @@ foreach ($jobs as $j) {
 
         <!-- Filter & Search Controls -->
         <div class="panel filter-controls-panel" style="margin-bottom:16px; display:flex; gap:16px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
-            <form method="GET" action="employer_dashboard.php" class="filter-controls-form" style="display:flex; gap:10px; flex:1; max-width:500px;">
-                <select name="job_id" onchange="this.form.submit()" style="flex:1;">
+            <form method="GET" action="employer_dashboard.php" class="filter-controls-form" style="display:flex; gap:10px; flex:1; max-width:720px; flex-wrap:wrap; align-items:center;">
+                <select name="job_id" onchange="this.form.submit()" style="flex:1; min-width:200px;">
                     <option value="">All My Job Postings</option>
-                    <?php foreach($jobs as $j): 
+                    <?php foreach($jobs as $j):
                         $is_closed = (strtolower($j['status'] ?? '') === 'deleted' || strtolower($j['status'] ?? '') === 'closed' || !empty($j['deleted_at']));
                         $status_suffix = $is_closed ? " [Closed / Archived]" : "";
                     ?>
@@ -546,9 +546,11 @@ foreach ($jobs as $j) {
                     <?php endforeach; ?>
                 </select>
                 <?php if($job_id): ?>
-                    <a href="compare_candidates.php?job_id=<?= $job_id ?>" class="btn-primary" style="white-space:nowrap; text-decoration:none; font-size:12px; padding:8px 14px;">⚖️ Compare Applicants</a>
-                    <a href="upload.php?job_id=<?= $job_id ?>" class="btn-secondary" style="white-space:nowrap; text-decoration:none; font-size:12px; padding:8px 14px;">📤 Upload Resume</a>
-                    <a href="employer_dashboard.php" class="btn-secondary" style="white-space:nowrap;">Clear Filter</a>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <a href="compare_candidates.php?job_id=<?= $job_id ?>" class="btn-primary" style="white-space:nowrap; text-decoration:none; font-size:12px; padding:8px 14px; width:auto;">⚖️ Compare Applicants</a>
+                        <a href="upload.php?job_id=<?= $job_id ?>" class="btn-secondary" style="white-space:nowrap; text-decoration:none; font-size:12px; padding:8px 14px;">📤 Upload Resume</a>
+                        <a href="employer_dashboard.php" class="btn-secondary" style="white-space:nowrap;">Clear Filter</a>
+                    </div>
                 <?php else: ?>
                     <a href="upload.php" class="btn-secondary" style="white-space:nowrap; text-decoration:none; font-size:12px; padding:8px 14px;">📤 Upload Resume</a>
                 <?php endif; ?>

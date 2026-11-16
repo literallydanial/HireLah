@@ -349,9 +349,9 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         .keria-hero-banner {
             position: relative;
             width: 100%;
-            background-image: url('assets/Keria_banner_v2.jpg?v=<?php echo @filemtime(__DIR__.'/assets/Keria_banner_v2.jpg'); ?>');
+            background-image: url('assets/banner_jobs.jpg?v=<?php echo @filemtime(__DIR__.'/assets/banner_jobs.jpg'); ?>');
             background-size: cover;
-            background-position: center top;
+            background-position: right 80%;
             background-repeat: no-repeat;
             /* This section sits directly after <header>, outside <main>,
                so it didn't get style.css's main{margin-top} compensation
@@ -363,6 +363,12 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                its original sizing/crop untouched. */
             margin-top: 72px;
             padding: 32px 32px 36px;
+            /* clamp, not a fixed px, so the box's aspect ratio (and thus
+               background-size:cover's effective zoom) stays roughly
+               constant across monitor widths -- a fixed height here
+               made cover zoom in further on wider screens, cropping
+               more of the mascots the wider the viewport got. */
+            min-height: clamp(280px, 20vw, 420px);
             border-bottom: 1px solid rgba(0, 0, 0, 0.05);
             overflow: hidden;
         }
@@ -406,10 +412,11 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         .banner-sub-text {
             font-size: 13.5px;
             font-weight: 500;
-            color: #374151;
+            color: #0A0A0A;
             line-height: 1.4;
             max-width: 250px;
             margin-bottom: 6px;
+            text-shadow: 0 0 2px rgba(255,255,255,1), 0 1px 3px rgba(255,255,255,1), 0 0 10px rgba(255,255,255,1), 0 0 20px rgba(255,255,255,0.95);
         }
 
         .banner-sub-smile {
@@ -424,14 +431,14 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
 
         /* Right Banner Doodle Area */
         .banner-right-doodle-box {
-            flex: 0 0 160px;
+            flex: 0 0 280px;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             text-align: center;
             position: relative;
-            margin-right: 30px;
+            margin-right: 40px;
             user-select: none;
         }
 
@@ -1391,6 +1398,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                    lines). */
                 margin-top: 170px;
                 padding: 20px 16px;
+                min-height: 0;
             }
             .keria-main-container {
                 padding: 16px 14px;

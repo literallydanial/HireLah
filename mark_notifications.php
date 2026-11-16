@@ -14,8 +14,11 @@ $data = json_decode(file_get_contents('php://input'), true);
 
 if (isset($data['mark_all']) && $data['mark_all']) {
     require_once 'notifications_helper.php';
-    $notifsData = getCandidateNotifications($pdo, $user_id);
-    
+    $role = $_SESSION['user_role'] ?? '';
+    $notifsData = ($role === 'candidate')
+        ? getCandidateNotifications($pdo, $user_id)
+        : getEmployerNotifications($pdo, $user_id);
+
     $stmt = $pdo->prepare("INSERT IGNORE INTO notification_reads (user_id, notification_key) VALUES (?, ?)");
     foreach ($notifsData['items'] as $item) {
         $stmt->execute([$user_id, $item['key']]);
