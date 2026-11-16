@@ -4,6 +4,7 @@ require_once 'ai.php';
 require_once 'config_manager.php';
 require_once 'notifications_helper.php';
 require_once 'company_helpers.php';
+require_once 'quota_helper.php';
 require_login();
 
 if (($_SESSION['user_role'] ?? '') === 'university') {
@@ -76,6 +77,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['error'] = "Name and Email cannot be empty.";
         }
         header("Location: profile.php");
+        exit;
+    }
+    elseif ($action === 'redeem_referral') {
+        if ($user['role'] !== 'candidate') {
+            $_SESSION['error'] = "Referrals are only available for candidate accounts.";
+        } else {
+            $code = trim($_POST['referral_code'] ?? '');
+            $res = redeem_referral_code($pdo, $user_id, $code);
+            if ($res['success']) {
+                $_SESSION['toast'] = $res['message'];
+            } else {
+                $_SESSION['error'] = $res['message'];
+            }
+        }
+        header("Location: profile.php#referral-section");
         exit;
     }
     elseif ($action === 'update_api_key') {
@@ -558,7 +574,16 @@ if ($user['role'] === 'employer') {
 }
 
 $cand_applications = [];
+$quota_screening = null;
+$quota_builder = null;
+$referral_stats = null;
+$my_referral_code = null;
 if ($user['role'] === 'candidate') {
+    require_once 'quota_helper.php';
+    $my_referral_code = ensure_user_referral_code($pdo, $user_id);
+    $quota_screening = get_user_quota($pdo, $user_id, 'screening');
+    $quota_builder = get_user_quota($pdo, $user_id, 'builder');
+    $referral_stats = get_user_referral_stats($pdo, $user_id);
     try {
         $c_stmt = $pdo->prepare("
             SELECT c.*, j.job_title, j.department, COALESCE(NULLIF(u.company_name, ''), u.name) as employer_name
@@ -1866,7 +1891,150 @@ if ($user['role'] === 'candidate') {
                     </form>
                 </div>
 
+                <!-- Candidate AI Quota & Referral Rewards Panel -->
+                <div class="panel" style="grid-column: 1 / -1; padding:32px; background: linear-gradient(135deg, rgba(210, 255, 58, 0.04) 0%, rgba(255, 255, 255, 0.95) 100%); border: 1.5px solid rgba(210, 255, 58, 0.45); border-radius: 18px; box-shadow: 0 4px 20px rgba(0,0,0,0.02);">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; margin-bottom:20px;">
+                        <div>
+                            <div class="panel-title" style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                                <span style="font-size:22px;">🎁</span>
+                                <span>Weekly AI Quotas &amp; Referral Rewards</span>
+                                <span style="font-size:11px; font-weight:800; background:var(--keria-lime); color:#0A0A0A; padding:3px 10px; border-radius:100px; text-transform:uppercase; letter-spacing:0.5px;">Refreshes Every Monday</span>
+                            </div>
+                            <p style="font-size:13.5px; color:var(--mut); margin:0; line-height:1.5; max-width:680px;">
+                                Candidates get <strong>3 free submissions each week</strong> for AI Resume Screening and AI Resume Builder. Need more? Give your referral code to friends — every friend who enters it gets you <strong>+3 extra Resume Screenings and +3 extra Resume Builder uses</strong> (and they get +3 too)!
+                            </p>
+                        </div>
+                    </div>
 
+                    <!-- Quota Status Cards Grid -->
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:18px; margin-bottom:28px;">
+                        <!-- Screening Quota Card -->
+                        <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:14px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="font-size:20px;">📄⚡</span>
+                                    <span style="font-size:14px; font-weight:800; color:#111827;">AI Resume Screening</span>
+                                </div>
+                                <span style="font-size:12px; font-weight:700; color:var(--keria-green-text); background:var(--keria-green-bg); padding:3px 8px; border-radius:6px;">
+                                    <?= ($quota_screening['is_admin']) ? 'Unlimited' : ($quota_screening['total_remaining'] . ' left') ?>
+                                </span>
+                            </div>
+                            
+                            <div style="margin-bottom:12px;">
+                                <div style="display:flex; justify-content:space-between; font-size:12.5px; color:var(--mut); margin-bottom:6px;">
+                                    <span>Weekly Free Used: <strong><?= $quota_screening['used_this_week'] ?> / 3</strong></span>
+                                    <span>Bonus Credits: <strong style="color:var(--keria-green-text);">+<?= $quota_screening['bonus_credits'] ?></strong></span>
+                                </div>
+                                <?php 
+                                    $scr_pct = min(100, round(($quota_screening['used_this_week'] / 3) * 100));
+                                ?>
+                                <div style="height:7px; background:#F3F4F6; border-radius:99px; overflow:hidden;">
+                                    <div style="height:100%; width:<?= $scr_pct ?>%; background:<?= ($quota_screening['free_remaining'] === 0) ? '#F59E0B' : '#10B981' ?>; border-radius:99px;"></div>
+                                </div>
+                            </div>
+
+                            <div style="display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:#6B7280; padding-top:10px; border-top:1px dashed #E5E7EB;">
+                                <span>🔄 Weekly refresh: <strong><?= htmlspecialchars($quota_screening['reset_day']) ?></strong></span>
+                                <a href="resume_check.php" style="color:#0A0A0A; font-weight:700; text-decoration:underline;">Screen Resume &rarr;</a>
+                            </div>
+                        </div>
+
+                        <!-- Builder Quota Card -->
+                        <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:14px; padding:20px; box-shadow:0 2px 8px rgba(0,0,0,0.03);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="font-size:20px;">🛠️✨</span>
+                                    <span style="font-size:14px; font-weight:800; color:#111827;">AI Resume Builder</span>
+                                </div>
+                                <span style="font-size:12px; font-weight:700; color:var(--keria-green-text); background:var(--keria-green-bg); padding:3px 8px; border-radius:6px;">
+                                    <?= ($quota_builder['is_admin']) ? 'Unlimited' : ($quota_builder['total_remaining'] . ' left') ?>
+                                </span>
+                            </div>
+                            
+                            <div style="margin-bottom:12px;">
+                                <div style="display:flex; justify-content:space-between; font-size:12.5px; color:var(--mut); margin-bottom:6px;">
+                                    <span>Weekly Free Used: <strong><?= $quota_builder['used_this_week'] ?> / 3</strong></span>
+                                    <span>Bonus Credits: <strong style="color:var(--keria-green-text);">+<?= $quota_builder['bonus_credits'] ?></strong></span>
+                                </div>
+                                <?php 
+                                    $bld_pct = min(100, round(($quota_builder['used_this_week'] / 3) * 100));
+                                ?>
+                                <div style="height:7px; background:#F3F4F6; border-radius:99px; overflow:hidden;">
+                                    <div style="height:100%; width:<?= $bld_pct ?>%; background:<?= ($quota_builder['free_remaining'] === 0) ? '#F59E0B' : '#10B981' ?>; border-radius:99px;"></div>
+                                </div>
+                            </div>
+
+                            <div style="display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:#6B7280; padding-top:10px; border-top:1px dashed #E5E7EB;">
+                                <span>🔄 Weekly refresh: <strong><?= htmlspecialchars($quota_builder['reset_day']) ?></strong></span>
+                                <a href="resume_builder.php" style="color:#0A0A0A; font-weight:700; text-decoration:underline;">Build Resume &rarr;</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Referral Sharing & Redeem Section -->
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:20px;">
+                        <!-- Column 1: Your Referral Code to Share -->
+                        <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:14px; padding:20px; display:flex; flex-direction:column; justify-content:space-between;">
+                            <div>
+                                <div style="font-size:13px; font-weight:800; color:#111827; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                                    <span>🚀</span> Your Personal Referral Code
+                                </div>
+                                <p style="font-size:12.5px; color:var(--mut); margin-bottom:14px; line-height:1.4;">
+                                    Send this code to friends. When they enter it in their profile, you get <strong>+3 extra Screenings</strong> and <strong>+3 extra Builder uses</strong>!
+                                </p>
+                                
+                                <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+                                    <div id="referralCodeText" style="font-family:monospace; font-size:19px; font-weight:900; letter-spacing:1.5px; background:#FFFFFF; border:2px dashed #0A0A0A; padding:10px 18px; border-radius:10px; color:#0A0A0A; user-select:all;">
+                                        <?= htmlspecialchars($my_referral_code ?? 'KL-REWARDS') ?>
+                                    </div>
+                                    <button type="button" onclick="copyReferralCode()" class="btn-primary" style="padding:11px 18px; font-size:12.5px; font-weight:800; border-radius:10px; display:inline-flex; align-items:center; gap:6px; width:auto; cursor:pointer;" id="copyRefBtn">
+                                        📋 Copy Code
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div style="font-size:12px; color:#374151; background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px; padding:8px 12px; display:flex; align-items:center; justify-content:space-between;">
+                                <span>👥 Friends Referred: <strong><?= (int)$referral_stats['total_referred'] ?></strong></span>
+                                <span style="color:var(--keria-green-text); font-weight:700;">+<?= (int)$referral_stats['credits_earned'] ?> Total Bonus Earned</span>
+                            </div>
+                        </div>
+
+                        <!-- Column 2: Redeem a Friend's Referral Code -->
+                        <div style="background:#F9FAFB; border:1px solid #E5E7EB; border-radius:14px; padding:20px; display:flex; flex-direction:column; justify-content:space-between;">
+                            <div>
+                                <div style="font-size:13px; font-weight:800; color:#111827; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                                    <span>🎁</span> Redeem a Friend's Code
+                                </div>
+                                <p style="font-size:12.5px; color:var(--mut); margin-bottom:14px; line-height:1.4;">
+                                    Have a friend on Keria? Enter their referral code below to receive <strong>+3 extra Resume Screenings</strong> and <strong>+3 extra Resume Builder uses</strong> immediately.
+                                </p>
+
+                                <?php if (!empty($referral_stats['referred_by_code'])): ?>
+                                    <div style="background:#DCFCE7; border:1px solid #86EFAC; border-radius:10px; padding:14px 16px; display:flex; align-items:center; gap:12px;">
+                                        <span style="font-size:24px;">🎉</span>
+                                        <div>
+                                            <div style="font-size:13px; font-weight:800; color:#166534;">Referral Code Redeemed!</div>
+                                            <div style="font-size:12px; color:#15803D;">
+                                                You applied code <strong><?= htmlspecialchars($referral_stats['referred_by_code']) ?></strong><?= !empty($referral_stats['referrer_name']) ? (' from ' . htmlspecialchars($referral_stats['referrer_name'])) : '' ?> and received +3 credits.
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php else: ?>
+                                    <form method="POST" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                        <input type="hidden" name="action" value="redeem_referral">
+                                        <input type="text" name="referral_code" placeholder="e.g. KL-2A8B9C" required style="flex:1; min-width:180px; padding:11px 14px; font-size:13.5px; font-weight:700; text-transform:uppercase; letter-spacing:1px; border:1px solid #D1D5DB; border-radius:10px; background:#FFFFFF;">
+                                        <button type="submit" class="btn-primary" style="padding:11px 20px; font-size:13px; font-weight:800; border-radius:10px; width:auto; cursor:pointer;">
+                                            Redeem (+3)
+                                        </button>
+                                    </form>
+                                    <div style="font-size:11px; color:#9CA3AF; margin-top:8px;">
+                                        * Each account can redeem one friend's code once. You can share your own code with unlimited friends.
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Danger Zone: Account Deletion Panel -->
                 <div class="panel danger-zone-panel" style="grid-column: 1 / -1; padding:32px;">
@@ -2162,6 +2330,34 @@ if ($user['role'] === 'candidate') {
             document.getElementById('pic_input').value = '';
             document.getElementById('avatarCropModal').style.display = 'none';
             document.getElementById('avatarForm').submit();
+        }
+
+        function copyReferralCode() {
+            const el = document.getElementById('referralCodeText');
+            if (!el) return;
+            const code = el.innerText.trim();
+            const btn = document.getElementById('copyRefBtn');
+            const onCopied = () => {
+                if (!btn) return;
+                const orig = btn.innerHTML;
+                btn.innerHTML = '✅ Copied!';
+                btn.style.background = '#10B981';
+                btn.style.color = '#FFFFFF';
+                setTimeout(() => {
+                    btn.innerHTML = orig;
+                    btn.style.background = '';
+                    btn.style.color = '';
+                }, 2500);
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code).then(onCopied).catch(() => {
+                    // Fallback
+                    prompt('Your referral code (press Ctrl+C to copy):', code);
+                });
+            } else {
+                prompt('Your referral code (press Ctrl+C to copy):', code);
+            }
         }
     </script>
     <script src="theme.js"></script>

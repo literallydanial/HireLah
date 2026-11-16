@@ -3,11 +3,15 @@ require_once 'auth.php';
 require_once 'parser.php';
 require_once 'ai.php';
 @require_once 'notifications_helper.php';
+require_once 'quota_helper.php';
 
 // AI Resume Checker — a standalone, general resume-quality feedback tool.
 // Not tied to any job posting; gives the candidate coaching-style feedback
 // on their own resume (clarity, impact, formatting, ATS-friendliness).
 $is_candidate = is_logged_in() && ($_SESSION['user_role'] ?? '') === 'candidate';
+$is_logged_in = is_logged_in();
+$logged_user_id = $_SESSION['user_id'] ?? null;
+$screening_quota = get_user_quota($pdo, $logged_user_id, 'screening');
 
 $api_key = get_api_key();
 $error = null;
@@ -35,61 +39,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($file['error'] !== UPLOAD_ERR_OK) {
         $error = "Please upload a valid PDF resume file.";
     } else {
-        $upload_dir = 'uploads/';
-        if (!is_dir($upload_dir)) {
-            @mkdir($upload_dir, 0755, true);
+        // If logged in, check & consume candidate weekly quota
+        $quota_check = ['allowed' => true, 'used_bonus' => false];
+        if ($is_logged_in) {
+            $quota_check = consume_quota_on_submit($pdo, $logged_user_id, 'screening');
         }
 
-        if (!is_dir($upload_dir) || !is_writable($upload_dir)) {
-            $error = "Upload folder 'uploads/' is not writable on the server. Please check directory permissions.";
+        if (!$quota_check['allowed']) {
+            $error = $quota_check['error'];
         } else {
-            $uploaded_filename = basename($file['name']);
-            $path = $upload_dir . uniqid() . '_' . $uploaded_filename;
+            $upload_dir = 'uploads/';
+            if (!is_dir($upload_dir)) {
+                @mkdir($upload_dir, 0755, true);
+            }
 
-            if (!move_uploaded_file($file['tmp_name'], $path)) {
-                $error = "Failed to save uploaded file. Please try again.";
+            if (!is_dir($upload_dir) || !is_writable($upload_dir)) {
+                $error = "Upload folder 'uploads/' is not writable on the server. Please check directory permissions.";
+                if (!empty($quota_check['used_bonus'])) {
+                    refund_bonus_credit($pdo, $logged_user_id, 'screening');
+                }
             } else {
-                try {
-                    $text = extract_text_from_pdf($path);
-                    $stripped = strip_pii($text);
+                $uploaded_filename = basename($file['name']);
+                $path = $upload_dir . uniqid() . '_' . $uploaded_filename;
 
-                    $result = generate_resume_review($api_key, $stripped);
-
-                    // Every upload gets a record, whether or not the
-                    // person is logged in -- user_id is simply NULL for a
-                    // guest, instead of no row existing at all. file_path
-                    // stores exactly where this file was saved, so admin
-                    // pages don't have to re-find it later by filename.
-                    $stmt = $pdo->prepare("INSERT INTO resume_reviews (
-                        user_id, filename, file_path, full_text, stripped_text, overall_score, rating_label,
-                        summary, strengths, improvements, formatting_notes, ats_tips
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-
-                    $stmt->execute([
-                        $_SESSION['user_id'] ?? null,
-                        $uploaded_filename,
-                        $path,
-                        $text,
-                        $stripped,
-                        $result['overall_score'] ?? 0,
-                        $result['rating_label'] ?? null,
-                        $result['summary'] ?? null,
-                        json_encode($result['strengths'] ?? []),
-                        json_encode($result['improvements'] ?? []),
-                        $result['formatting_notes'] ?? null,
-                        json_encode($result['ats_tips'] ?? [])
-                    ]);
-
-                    if (!$is_candidate) {
-                        // Remember which review this was so that if they
-                        // register or log in right after, it gets claimed
-                        // as theirs instead of staying ownerless forever.
-                        $_SESSION['pending_resume_review_id'] = (int)$pdo->lastInsertId();
-                        $_SESSION['redirect_after_login'] = "resume_check.php";
+                if (!move_uploaded_file($file['tmp_name'], $path)) {
+                    $error = "Failed to save uploaded file. Please try again.";
+                    if (!empty($quota_check['used_bonus'])) {
+                        refund_bonus_credit($pdo, $logged_user_id, 'screening');
                     }
-                } catch (\Throwable $e) {
-                    $error = "Error processing resume: " . $e->getMessage();
-                    error_log("Resume Check Error: " . $e->getMessage());
+                } else {
+                    try {
+                        $text = extract_text_from_pdf($path);
+                        $stripped = strip_pii($text);
+
+                        $result = generate_resume_review($api_key, $stripped);
+
+                        // Every upload gets a record, whether or not the
+                        // person is logged in -- user_id is simply NULL for a
+                        // guest, which shows on the admin dashboard.
+                        $stmt = $pdo->prepare("INSERT INTO resume_reviews (
+                            user_id, filename, file_path, full_text, stripped_text, overall_score, rating_label,
+                            summary, strengths, improvements, formatting_notes, ats_tips
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+                        $stmt->execute([
+                            $_SESSION['user_id'] ?? null,
+                            $uploaded_filename,
+                            $path,
+                            $text,
+                            $stripped,
+                            $result['overall_score'] ?? 0,
+                            $result['rating_label'] ?? null,
+                            $result['summary'] ?? null,
+                            json_encode($result['strengths'] ?? []),
+                            json_encode($result['improvements'] ?? []),
+                            $result['formatting_notes'] ?? null,
+                            json_encode($result['ats_tips'] ?? [])
+                        ]);
+
+                        if (!$is_candidate) {
+                            // Remember which review this was so that if they
+                            // register or log in right after, it gets claimed
+                            // as theirs instead of staying ownerless forever.
+                            $_SESSION['pending_resume_review_id'] = (int)$pdo->lastInsertId();
+                            $_SESSION['redirect_after_login'] = "resume_check.php";
+                        } elseif (!empty($quota_check['used_bonus'])) {
+                            $_SESSION['toast'] = "⚡ 1 referral bonus credit was used for this review!";
+                        }
+                    } catch (\Throwable $e) {
+                        if (!empty($quota_check['used_bonus'])) {
+                            refund_bonus_credit($pdo, $logged_user_id, 'screening');
+                        }
+                        $error = "Error processing resume: " . $e->getMessage();
+                        error_log("Resume Check Error: " . $e->getMessage());
+                    }
                 }
             }
         }
@@ -112,6 +135,7 @@ if (!empty($_SESSION['resume_check_flash'])) {
     $error = $flash['error'] ?? null;
     $result = $flash['result'] ?? null;
     $uploaded_filename = $flash['filename'] ?? null;
+    $screening_quota = get_user_quota($pdo, $logged_user_id, 'screening');
 }
 
 // Claim a review uploaded as a guest, now that they've logged in/registered
@@ -1167,6 +1191,40 @@ function score_badge_class($score) {
                     
                     <!-- Upload Dropzone Card -->
                     <div class="keria-card">
+                        <?php if (!$is_logged_in): ?>
+                            <!-- Guest Banner -->
+                            <div style="background:#EFF6FF; border:1px solid #BFDBFE; border-radius:12px; padding:12px 16px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                                <div style="font-size:12.5px; color:#1E40AF; line-height:1.4;">
+                                    <strong>⚡ Instant Resume Screening:</strong> Drop your resume below to evaluate your score and ATS readiness.
+                                </div>
+                                <a href="login.php?redirect=resume_check.php" class="btn-browse-action" style="padding:6px 14px; font-size:12px; border-radius:6px; text-decoration:none; white-space:nowrap; background:#2563EB; color:#FFFFFF;">Log In / Register</a>
+                            </div>
+                        <?php else: ?>
+                            <!-- Logged In Quota Status -->
+                            <div style="background:<?= ($screening_quota['can_submit']) ? '#F9FAFB' : '#FEF2F2' ?>; border:1px solid <?= ($screening_quota['can_submit']) ? '#E5E7EB' : '#FECACA' ?>; border-radius:12px; padding:12px 16px; margin-bottom:16px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <span style="font-size:14px;">⚡</span>
+                                        <span style="font-size:12.5px; font-weight:800; color:<?= ($screening_quota['can_submit']) ? '#111827' : '#991B1B' ?>;">
+                                            Weekly Quota: <?= ($screening_quota['is_admin']) ? 'Unlimited (Admin)' : ($screening_quota['free_remaining'] . ' of 3 free remaining') ?>
+                                            <?php if ($screening_quota['bonus_credits'] > 0): ?>
+                                                <span style="color:#059669; font-weight:800;">(+<?= $screening_quota['bonus_credits'] ?> bonus)</span>
+                                            <?php endif; ?>
+                                        </span>
+                                    </div>
+                                    <span style="font-size:11.5px; color:#6B7280;">
+                                        🔄 Refreshes <?= htmlspecialchars($screening_quota['reset_day']) ?>
+                                    </span>
+                                </div>
+                                <?php if (!$screening_quota['can_submit']): ?>
+                                    <div style="font-size:12px; color:#991B1B; line-height:1.4; margin-top:8px; padding-top:8px; border-top:1px dashed #FCA5A5;">
+                                        You have used all 3 free screenings this week. 
+                                        <a href="profile.php" style="color:#B91C1C; font-weight:800; text-decoration:underline;">Share your referral code in your profile</a> with a friend to unlock <strong>+3 extra submissions</strong> immediately!
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+
                         <form method="POST" enctype="multipart/form-data" id="checkForm">
                             <div class="keria-dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
                                 <div class="dropzone-icon-circle">
@@ -1326,7 +1384,14 @@ function score_badge_class($score) {
         // Form Submit Loading State
         const checkForm = document.getElementById('checkForm');
         if (checkForm) {
-            checkForm.addEventListener('submit', function() {
+            checkForm.addEventListener('submit', function(e) {
+                const isLoggedIn = <?= json_encode($is_logged_in) ?>;
+                const canSubmit = <?= json_encode($screening_quota['can_submit']) ?>;
+                if (isLoggedIn && !canSubmit) {
+                    e.preventDefault();
+                    alert("You have used all 3 free Resume Screenings for this week.\n\nShare your referral code in your profile with a friend to get +3 extra submissions immediately!");
+                    return false;
+                }
                 const submitBtn = document.getElementById('submitBtn');
                 submitBtn.disabled = true;
                 document.getElementById('btnIcon').innerHTML = '<span class="spinner-icon"></span>';

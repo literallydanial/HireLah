@@ -279,6 +279,42 @@ try {
         }
     }
 
+    // Auto-verify referral and AI quota system schema (schema_update19)
+    try {
+        $pdo->query("SELECT referral_code, bonus_screening_credits, bonus_builder_credits, referred_by_user_id FROM users LIMIT 1");
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec("ALTER TABLE users 
+                ADD COLUMN referral_code VARCHAR(30) NULL DEFAULT NULL AFTER role,
+                ADD COLUMN bonus_screening_credits INT(11) NOT NULL DEFAULT 0 AFTER referral_code,
+                ADD COLUMN bonus_builder_credits INT(11) NOT NULL DEFAULT 0 AFTER bonus_screening_credits,
+                ADD COLUMN referred_by_user_id INT(11) NULL DEFAULT NULL AFTER bonus_builder_credits,
+                ADD INDEX idx_users_referral_code (referral_code)");
+        } catch (\Throwable $migErr) {
+            error_log("Users referral columns migration notice: " . $migErr->getMessage());
+        }
+    }
+
+    try {
+        $pdo->query("SELECT 1 FROM user_referrals LIMIT 1");
+    } catch (\Throwable $e) {
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `user_referrals` (
+                `id` int(11) NOT NULL AUTO_INCREMENT,
+                `referrer_id` int(11) NOT NULL,
+                `referred_id` int(11) NOT NULL,
+                `referral_code` varchar(30) NOT NULL,
+                `credits_awarded` int(11) NOT NULL DEFAULT 3,
+                `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `idx_referred_unique` (`referred_id`),
+                KEY `idx_referrer` (`referrer_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } catch (\Throwable $migErr) {
+            error_log("user_referrals table migration notice: " . $migErr->getMessage());
+        }
+    }
+
 } catch (\PDOException $e) {
     error_log("Keria DB Connection Error: " . $e->getMessage());
     die("<div style='font-family:sans-serif; max-width:600px; margin:50px auto; padding:24px; border:1px solid #F87171; background:#FEF2F2; color:#991B1B; border-radius:12px; text-align:center;'>" .

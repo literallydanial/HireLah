@@ -181,6 +181,36 @@ function getCandidateNotifications($pdo, $user_id) {
         ];
     }
 
+    // 7. Fetch referral bonus rewards for this candidate
+    try {
+        $stmtRefs = $pdo->prepare("
+            SELECT ur.id as ref_id, ur.credits_awarded, ur.created_at, u.name as referred_name
+            FROM user_referrals ur
+            JOIN users u ON ur.referred_id = u.id
+            WHERE ur.referrer_id = ?
+            ORDER BY ur.created_at DESC
+            LIMIT 5
+        ");
+        $stmtRefs->execute([$user_id]);
+        $referralAlerts = $stmtRefs->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($referralAlerts as $ra) {
+            $key = "referral_bonus_" . $ra['ref_id'];
+            $isRead = isset($readSet[$key]);
+            $notifications[] = [
+                'key' => $key,
+                'title' => '🎁 +3 Referral Bonus Credits Earned!',
+                'message' => htmlspecialchars($ra['referred_name']) . ' used your referral code! You received +3 Resume Screenings & +3 Builds.',
+                'link' => 'profile.php#referral-section',
+                'type' => 'referral',
+                'time' => $ra['created_at'],
+                'is_read' => $isRead
+            ];
+        }
+    } catch (\Throwable $e) {
+        // user_referrals table may not exist yet on fresh install
+    }
+
     // Sort notifications by time descending
     usort($notifications, function($a, $b) {
         return strtotime($b['time']) - strtotime($a['time']);
