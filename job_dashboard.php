@@ -4,6 +4,7 @@ require_role('employer');
 require_once 'notifications_helper.php';
 require_once 'company_helpers.php';
 require_once 'employer_verification.php';
+require_once 'job_description_helper.php';
 
 $empNotifs = getEmployerNotifications($pdo, $_SESSION['user_id']);
 $notifItems = $empNotifs['items'];
@@ -21,6 +22,19 @@ if (empty($curr_company_ssm)) {
     $u_stmt = $pdo->prepare("SELECT ssm_number FROM users WHERE id = ?");
     $u_stmt->execute([$_SESSION['user_id']]);
     $curr_company_ssm = trim($u_stmt->fetchColumn() ?: '');
+}
+
+// Company name shown in the "preview as candidate" popup
+$curr_company_name = '';
+if ($active_company_id) {
+    $cn_stmt = $pdo->prepare("SELECT name FROM companies WHERE id = ?");
+    $cn_stmt->execute([$active_company_id]);
+    $curr_company_name = trim($cn_stmt->fetchColumn() ?: '');
+}
+if (empty($curr_company_name)) {
+    $un_stmt = $pdo->prepare("SELECT COALESCE(NULLIF(company_name, ''), name) FROM users WHERE id = ?");
+    $un_stmt->execute([$_SESSION['user_id']]);
+    $curr_company_name = trim($un_stmt->fetchColumn() ?: 'Your Company');
 }
 
 // Handle creation of a new job posting via popup modal
@@ -126,6 +140,24 @@ $sql = "SELECT j.*,
 $stmt = $pdo->prepare($sql);
 $stmt->execute($active_company_id ? [$active_company_id, $_SESSION['user_id']] : [$_SESSION['user_id']]);
 $my_jobs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Company gallery media, keyed by employer_id exactly like jobs.php does —
+// so the "preview as candidate" popup shows the same gallery photos a
+// candidate would actually see under that job's description.
+$galleryByEmployer = [];
+$jobEmployerIds = array_values(array_unique(array_filter(array_column($my_jobs, 'employer_id'))));
+if (!empty($jobEmployerIds)) {
+    try {
+        $gp = implode(',', array_fill(0, count($jobEmployerIds), '?'));
+        $gm_stmt = $pdo->prepare("SELECT * FROM company_media WHERE user_id IN ($gp) ORDER BY sort_order ASC, id ASC");
+        $gm_stmt->execute($jobEmployerIds);
+        foreach ($gm_stmt->fetchAll(PDO::FETCH_ASSOC) as $gm) {
+            $galleryByEmployer[$gm['user_id']][] = $gm;
+        }
+    } catch (\Throwable $e) {
+        $galleryByEmployer = [];
+    }
+}
 
 // Calculate summary metrics
 $total_jobs = count($my_jobs);
@@ -293,12 +325,26 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
             border-color: transparent;
         }
         .job-action-bar {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 8px;
             border-top: 1px solid var(--bdr);
             padding-top: 16px;
             margin-top: 12px;
+        }
+        .job-action-bar .job-action-full {
+            grid-column: 1 / -1;
+        }
+        .job-action-bar a,
+        .job-action-bar > button,
+        .job-action-bar form button {
+            display: flex;
             align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+            box-sizing: border-box;
+            white-space: nowrap;
         }
         @media (max-width: 900px) {
             .stats-summary-grid { grid-template-columns: 1fr 1fr; }
@@ -508,28 +554,80 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                             </div>
 
                             <div style="font-size:12px; color:var(--mut); line-height:1.5; margin-bottom:18px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; text-overflow:ellipsis;">
-                                <?= htmlspecialchars($j['description']) ?>
+                                <?= htmlspecialchars(strip_job_description_markers($j['description'])) ?>
+                            </div>
+
+                            <?php
+                                // Hidden markup for this one job's "preview as candidate" popup.
+                                // openJobPreview() below just copies this div's innerHTML into
+                                // the shared modal -- nothing is fetched from another page.
+                                $jd_salary = 'Salary Undisclosed';
+                                if (!empty($j['salary_text'])) {
+                                    $jd_salary = htmlspecialchars($j['salary_text']);
+                                } elseif (!empty($j['salary_min']) && !empty($j['salary_max'])) {
+                                    $jd_unit = job_salary_unit_label($j['salary_rate_type'] ?? null);
+                                    $jd_salary = 'RM ' . number_format($j['salary_min']) . ' &ndash; RM ' . number_format($j['salary_max']) . ' ' . $jd_unit;
+                                } elseif (!empty($j['salary_min'])) {
+                                    $jd_unit = job_salary_unit_label($j['salary_rate_type'] ?? null);
+                                    $jd_salary = 'From RM ' . number_format($j['salary_min']) . ' ' . $jd_unit;
+                                } elseif (!empty($j['salary_max'])) {
+                                    $jd_unit = job_salary_unit_label($j['salary_rate_type'] ?? null);
+                                    $jd_salary = 'Up to RM ' . number_format($j['salary_max']) . ' ' . $jd_unit;
+                                }
+                            ?>
+                            <div id="jobPreviewData-<?= (int)$j['id'] ?>" style="display:none;">
+                                <h2 style="font-size:22px; font-weight:800; color:var(--txt); margin:0 0 8px;"><?= htmlspecialchars($j['job_title']) ?></h2>
+                                <div style="font-size:13.5px; color:var(--mut); margin-bottom:10px;">
+                                    <strong style="color:var(--txt);"><?= htmlspecialchars($curr_company_name) ?></strong>
+                                    <span style="margin:0 6px;">&bull;</span>
+                                    <span>📍 <?= htmlspecialchars($j['location'] ?: ($j['department'] ?: 'Kuala Lumpur')) ?></span>
+                                </div>
+                                <div style="font-size:14px; font-weight:700; color:var(--grn); margin-bottom:12px;">💰 <?= $jd_salary ?></div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;">
+                                    <span class="meta-chip">📋 <?= htmlspecialchars($j['employment_type'] ?: 'Full-time') ?></span>
+                                    <span class="meta-chip">🏢 <?= htmlspecialchars($j['work_mode'] ?: 'On-site') ?></span>
+                                </div>
+                                <div style="border-top:1px solid var(--bdr); padding-top:18px;">
+                                    <div style="font-size:14px; font-weight:800; color:var(--txt); margin-bottom:10px;">📄 Job Description</div>
+                                    <div class="jd-preview-formatted-desc">
+                                        <?= format_job_description($j['description'] ?? '') ?>
+                                    </div>
+                                </div>
+                                <?php $jd_gallery = $galleryByEmployer[$j['employer_id']] ?? []; ?>
+                                <?php if (!empty($jd_gallery)): ?>
+                                    <div style="border-top:1px solid var(--bdr); margin-top:18px; padding-top:18px;">
+                                        <div style="font-size:14px; font-weight:800; color:var(--txt); margin-bottom:4px;">🏢 Company Culture & Gallery</div>
+                                        <div style="font-size:12px; color:var(--mut); margin-bottom:12px;">Photos from the workplace, team and office environment.</div>
+                                        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;">
+                                            <?php foreach ($jd_gallery as $gm): ?>
+                                                <a href="<?= htmlspecialchars($gm['file_path']) ?>" target="_blank" rel="noopener" style="display:block; border-radius:10px; overflow:hidden; aspect-ratio:1; background:var(--dim);">
+                                                    <img src="<?= htmlspecialchars($gm['file_path']) ?>" alt="Company Photo" style="width:100%; height:100%; object-fit:cover; display:block;">
+                                                </a>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
 
                         <!-- Action Toolbar -->
                         <div class="job-action-bar">
-                            <a href="employer_dashboard.php?job_id=<?= (int)$j['id'] ?>" class="btn-primary" style="flex:1.2; padding:9px 12px; font-size:12px; text-align:center; text-decoration:none; border-radius:8px; font-weight:700;">👥 Applicants (<?= (int)$j['applicant_count'] ?>)</a>
+                            <a href="employer_dashboard.php?job_id=<?= (int)$j['id'] ?>" class="btn-primary job-action-full" style="padding:9px 12px; font-size:12px; text-decoration:none; border-radius:8px; font-weight:700;">👥 Applicants (<?= (int)$j['applicant_count'] ?>)</a>
                             <a href="compare_candidates.php?job_id=<?= (int)$j['id'] ?>" class="btn-secondary" style="padding:8px 11px; font-size:12px; text-decoration:none;" title="Compare Candidates Side-by-Side">⚖️ Compare</a>
-                            <a href="questionnaire.php?job_id=<?= (int)$j['id'] ?>" class="btn-secondary" style="padding:8px 11px; font-size:12px; text-decoration:none;" title="Manage Job Questionnaire">📋</a>
-                            <a href="edit_job.php?id=<?= (int)$j['id'] ?>" class="btn-secondary" style="padding:8px 11px; font-size:12px; text-decoration:none;" title="Edit Job Details">✏️</a>
-                            
+                            <button type="button" class="btn-secondary" style="padding:8px 11px; font-size:12px;" onclick="openJobPreview(<?= (int)$j['id'] ?>)" title="Preview exactly as candidates would see this job">👁️ Preview</button>
+                            <a href="questionnaire.php?job_id=<?= (int)$j['id'] ?>" class="btn-secondary" style="padding:8px 11px; font-size:12px; text-decoration:none;" title="Manage Job Questionnaire">📋 Questionnaire</a>
+                            <a href="edit_job.php?id=<?= (int)$j['id'] ?>" class="btn-secondary" style="padding:8px 11px; font-size:12px; text-decoration:none;" title="Edit Job Details">✏️ Edit</a>
                             <?php if($is_closed): ?>
-                                <form method="POST" onsubmit="return confirm('Restore this job posting back to Active status? It will be published to the job board again.');" style="margin:0;">
+                                <form method="POST" onsubmit="return confirm('Restore this job posting back to Active status? It will be published to the job board again.');" class="job-action-full" style="margin:0;">
                                     <input type="hidden" name="action" value="restore_job">
                                     <input type="hidden" name="job_id" value="<?= (int)$j['id'] ?>">
-                                    <button type="submit" class="btn-secondary" style="padding:8px 11px; font-size:12px; color:var(--grn); border-color:rgba(0, 232, 122, 0.35);" title="Restore Job to Active">🔄 Restore</button>
+                                    <button type="submit" class="btn-secondary" style="padding:8px 11px; font-size:12px; color:var(--grn); border-color:rgba(0, 232, 122, 0.35);" title="Restore Job to Active">🔄 Restore Job</button>
                                 </form>
                             <?php else: ?>
-                                <form method="POST" onsubmit="return confirm('Are you sure you want to delete this job posting? It will be removed from the public job board, but candidate application history and data will be safely preserved.');" style="margin:0;">
+                                <form method="POST" onsubmit="return confirm('Are you sure you want to delete this job posting? It will be removed from the public job board, but candidate application history and data will be safely preserved.');" class="job-action-full" style="margin:0;">
                                     <input type="hidden" name="action" value="delete_job">
                                     <input type="hidden" name="job_id" value="<?= (int)$j['id'] ?>">
-                                    <button type="submit" class="btn-secondary" style="padding:8px 11px; font-size:12px; color:var(--red); border-color:rgba(255, 77, 106, 0.3);" title="Delete / Close Job Posting">🗑️</button>
+                                    <button type="submit" class="btn-secondary" style="padding:8px 11px; font-size:12px; color:var(--red); border-color:rgba(255, 77, 106, 0.3);" title="Close / Delete Job Posting">🗑️ Close Job</button>
                                 </form>
                             <?php endif; ?>
                         </div>
@@ -548,7 +646,7 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                 <div style="font-size:22px;">✨</div>
                 <div style="font-size:22px; font-weight:800; color:var(--txt);">Post a New Job Opening</div>
             </div>
-            <p style="font-size:13px; color:var(--mut); margin-bottom:24px;">Create a new role for candidates to apply to and enable automated Gemini AI resume screening.</p>
+            <p style="font-size:13px; color:var(--mut); margin-bottom:24px;">Create a new role for candidates to apply to and enable automated AI resume screening.</p>
 
             <form method="POST" id="postJobForm" onsubmit="return jdValidateBeforeSubmit('modal_jd_sections','modal_description_hidden')">
                 <input type="hidden" name="action" value="post_job">
@@ -666,6 +764,18 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
         </div>
     </div>
 
+    <!-- "Preview as Candidate" popup: same tab, scoped to one job only.
+         openJobPreview() just copies that job's hidden #jobPreviewData-<id>
+         block (built server-side above, right next to its card) into
+         #jobPreviewModalBody -- no navigation, no other postings shown. -->
+    <div id="jobPreviewModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); backdrop-filter:blur(8px); z-index:4000; align-items:center; justify-content:center; padding:20px;">
+        <div class="panel" style="max-width:640px; width:100%; max-height:90vh; overflow-y:auto; position:relative; border-radius:18px; box-shadow:var(--shadow-lg); animation:modalPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
+            <button onclick="closeJobPreview()" style="position:absolute; top:20px; right:20px; background:none; border:none; color:var(--mut); font-size:22px; cursor:pointer; line-height:1;">✕</button>
+            <div style="font-size:11px; font-weight:800; letter-spacing:0.04em; text-transform:uppercase; color:var(--acc); margin-bottom:14px;">👁️ Candidate Preview</div>
+            <div id="jobPreviewModalBody"></div>
+        </div>
+    </div>
+
     <style>
     @keyframes modalPop {
         from { opacity: 0; transform: scale(0.95); }
@@ -732,11 +842,41 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
         color: var(--txt);
         font-family: inherit;
     }
+    .jd-preview-formatted-desc {
+        font-size: 13.5px;
+        line-height: 1.7;
+        color: var(--txt);
+    }
+    .jd-preview-formatted-desc .job-spec-block-title {
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--txt);
+        margin: 16px 0 6px;
+    }
+    .jd-preview-formatted-desc .job-desc-paragraph {
+        margin: 0 0 10px;
+    }
+    .jd-preview-formatted-desc .job-bullet-list {
+        margin: 0 0 10px;
+        padding-left: 20px;
+    }
+    .jd-preview-formatted-desc .job-bullet-list li {
+        margin-bottom: 6px;
+    }
     </style>
 
     <script>
     function openPostJobModal() {
         document.getElementById('postJobModal').style.display = 'flex';
+    }
+    function openJobPreview(jobId) {
+        var src = document.getElementById('jobPreviewData-' + jobId);
+        var body = document.getElementById('jobPreviewModalBody');
+        if (src && body) body.innerHTML = src.innerHTML;
+        document.getElementById('jobPreviewModal').style.display = 'flex';
+    }
+    function closeJobPreview() {
+        document.getElementById('jobPreviewModal').style.display = 'none';
     }
     function closePostJobModal() {
         document.getElementById('postJobModal').style.display = 'none';
@@ -913,10 +1053,16 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
 
     // Close on ESC key or clicking outside content box
     window.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') closePostJobModal();
+        if (e.key === 'Escape') {
+            closePostJobModal();
+            closeJobPreview();
+        }
     });
     document.getElementById('postJobModal').addEventListener('click', function(e) {
         if (e.target === this) closePostJobModal();
+    });
+    document.getElementById('jobPreviewModal').addEventListener('click', function(e) {
+        if (e.target === this) closeJobPreview();
     });
 
     // Auto-open modal if URL contains ?open_post=1

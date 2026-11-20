@@ -135,7 +135,7 @@ session_start();
                 </ul>
 
                 <h3>1.2 AI Resume Screening & Match Scoring Evaluation</h3>
-                <p>Keria utilizes advanced artificial intelligence (Google Gemini AI models) to extract resume content, analyze skills, evaluate career experience, and compute non-binding job match scores.</p>
+                <p>Keria utilizes advanced artificial intelligence (AI models) to extract resume content, analyze skills, evaluate career experience, and compute non-binding job match scores.</p>
                 <ul>
                     <li>AI Match Scores are generated solely as supplementary screening assistance for prospective employers.</li>
                     <li>Scores and automated assessments do not constitute a guarantee of employment, interview invitation, or final hiring decision.</li>
@@ -197,7 +197,7 @@ session_start();
                 </ul>
 
                 <h3>1.2 Penapisan Resume AI & Penilaian Skor Padanan Kerja</h3>
-                <p>Keria menggunakan kecerdasan buatan (Model Google Gemini AI) untuk mengekstrak kandungan resume, menganalisis kemahiran, menilai pengalaman kerja, dan mengira skor padanan kelayakan kerja.</p>
+                <p>Keria menggunakan kecerdasan buatan (Model AI) untuk mengekstrak kandungan resume, menganalisis kemahiran, menilai pengalaman kerja, dan mengira skor padanan kelayakan kerja.</p>
                 <ul>
                     <li>Skor Padanan AI dihasilkan hanya sebagai bantuan penapisan tambahan untuk majikan.</li>
                     <li>Skor AI tidak menjamin tawaran temuduga atau keputusan pengambilan kerja muktamad.</li>

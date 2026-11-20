@@ -1,5 +1,4 @@
 <?php
-session_start();
 require_once 'auth.php';
 require 'db.php';
 require_once 'questionnaire_helpers.php';
@@ -487,7 +486,7 @@ $candidate_rank = (int)$rank_stmt->fetchColumn() + 1;
             <div class="logo-box"><img src="logo/logo.png?v=<?php echo @filemtime(__DIR__.'/logo/logo.png'); ?>" alt="Keria Logo" style="width:36px; height:36px; max-width:36px; max-height:36px; object-fit:contain;"></div>
             <div>
                 <div style="font-size:15px; font-weight:800; line-height:1">Keria AI Screener</div>
-                <div style="font-size:9px; color:var(--mut); letter-spacing:0.8px">POWERED BY GEMINI</div>
+                <div style="font-size:9px; color:var(--mut); letter-spacing:0.8px">POWERED BY AI</div>
             </div>
             <nav style="display:flex; gap:4px; margin-left:24px">
                 <?php 

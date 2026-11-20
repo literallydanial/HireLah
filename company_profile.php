@@ -63,6 +63,7 @@ $comp_phone = !empty($company['contact_number']) ? $company['contact_number'] : 
 $comp_address = !empty($company['address']) ? $company['address'] : 'Cyberjaya, Selangor, Malaysia';
 $comp_size = !empty($company['company_size']) ? $company['company_size'] : '11-50 employees';
 $comp_logo = !empty($company['logo']) ? $company['logo'] : null;
+$comp_is_verified = ($company['verification_status'] ?? null) === 'approved';
 
 // Clean website url for display
 $clean_website_display = preg_replace('#^https?://#i', '', rtrim($comp_website, '/'));
@@ -510,12 +511,14 @@ $page_title = htmlspecialchars($comp_name) . " — Employer Company Profile | Ke
                     <h1 class="company-primary-name"><?= htmlspecialchars($comp_name) ?></h1>
                     
                     <div class="company-status-badges-row">
+                        <?php if ($comp_is_verified): ?>
                         <span class="verified-employer-pill">
                             <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                             </svg>
                             Verified Employer
                         </span>
+                        <?php endif; ?>
                         <span class="industry-label-chip"><?= htmlspecialchars($comp_industry) ?></span>
                     </div>
                 </div>

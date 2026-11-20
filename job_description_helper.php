@@ -57,7 +57,7 @@ function format_job_description(?string $raw): string {
         if (preg_match('/^#{1,3}\s+(.*)$/', $trimmed, $m)) {
             if ($in_list) { $html .= "</ul>\n"; $in_list = false; }
             if ($in_para) { $html .= "</p>\n"; $in_para = false; }
-            $html .= '<h4 class="job-spec-block-title" style="margin-top:16px;">' . $m[1] . "</h4>\n";
+            $html .= '<h4 class="job-spec-block-title">' . $m[1] . "</h4>\n";
             continue;
         }
 
@@ -90,6 +90,43 @@ function format_job_description(?string $raw): string {
     if ($in_para) { $html .= "</p>\n"; }
 
     return $html;
+}
+
+/**
+ * Strips the toolbar's formatting markers (**bold**, "## " headings,
+ * "- "/"* "/"• " bullets) down to plain text, joined onto one line. Used
+ * for compact previews (e.g. a clamped card excerpt) where the full
+ * format_job_description() block HTML would not fit or clamp cleanly.
+ */
+function strip_job_description_markers(?string $raw): string {
+    $raw = trim((string)$raw);
+    if ($raw === '') {
+        return '';
+    }
+
+    $text = preg_replace('/\*\*(.+?)\*\*/s', '$1', $raw);
+    $lines = preg_split('/\r\n|\r|\n/', $text);
+
+    // Headings get a ": " label instead of being glued straight onto the
+    // next bullet with nothing but a space, and bullets are joined with a
+    // middot so a clamped preview reads as a list, not one run-on sentence.
+    $result = '';
+    $after_heading = false;
+    foreach ($lines as $line) {
+        $trimmed = trim($line);
+        if ($trimmed === '') continue;
+
+        if (preg_match('/^#{1,3}\s+(.*)$/', $trimmed, $m)) {
+            $result .= ($result === '' ? '' : ' • ') . rtrim($m[1], ':') . ': ';
+            $after_heading = true;
+            continue;
+        }
+
+        $trimmed = preg_replace('/^[-*•]\s+/u', '', $trimmed);
+        $result .= ($result === '' || $after_heading) ? $trimmed : ' • ' . $trimmed;
+        $after_heading = false;
+    }
+    return trim($result);
 }
 
 /**

@@ -146,16 +146,23 @@ img[src*="logo."] {
   transition: filter 0.3s ease;
 }
 
-[data-theme="dark"] .logo-box img,
-[data-theme="dark"] .energy-brand img,
-[data-theme="dark"] .energy-brand-logo-img,
-[data-theme="dark"] img[src*="logo/"],
-[data-theme="dark"] img[src*="logo."] {
-  filter: invert(1);
+/* logo.png/.jpeg is the full-colour keria wordmark + mascot, not a flat
+   black icon, so invert(1) was turning its black text and green/brown
+   mascot into a purple/blue negative in dark mode. Swap to the
+   pre-made logo_white.png variant (white text, mascot colours kept)
+   instead of inverting. */
+[data-theme="dark"] .logo-box img[src*="logo.png"],
+[data-theme="dark"] .logo-box img[src*="logo.jpeg"],
+[data-theme="dark"] .energy-brand img[src*="logo.png"],
+[data-theme="dark"] .energy-brand-logo-img[src*="logo.png"],
+[data-theme="dark"] img[src*="logo/logo.png"],
+[data-theme="dark"] img[src*="logo/logo.jpeg"] {
+  content: url("logo/logo_white.png");
 }
 
-[data-theme="dark"] .bg-watermark-logo img {
-  filter: invert(1) drop-shadow(0 0 40px rgba(217, 255, 79, 0.3));
+[data-theme="dark"] .bg-watermark-logo img[src*="logo.png"] {
+  content: url("logo/logo_white.png");
+  filter: drop-shadow(0 0 40px rgba(217, 255, 79, 0.3));
 }
 
 * { box-sizing: border-box; }

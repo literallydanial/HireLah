@@ -105,6 +105,23 @@ $token_stats = $tokens_stmt->fetch();
 $real_input_tokens = (int)$token_stats['input_tokens'];
 $real_output_tokens = (int)$token_stats['output_tokens'];
 
+// Employer-side AI usage: resumes HR bulk-uploads via upload.php also go through
+// generate_snapshot() AI screening and are stored in `candidates`. HR-added rows have
+// user_id NULL (candidate-submitted applications via apply.php always set user_id).
+$employer_tokens_stmt = $pdo->query("SELECT
+    COALESCE(SUM(ROUND(LENGTH(c.stripped_text) / 4) + ROUND(LENGTH(j.description) / 4) + 1200), 0) as input_tokens,
+    COALESCE(SUM(ROUND((LENGTH(c.summary) + LENGTH(c.education) + LENGTH(c.experience) + LENGTH(c.skills) + LENGTH(c.strengths) + LENGTH(c.gaps) + LENGTH(c.note) + LENGTH(c.suggested_question)) / 4)), 0) as output_tokens,
+    COUNT(*) as cnt
+FROM candidates c LEFT JOIN jobs j ON c.job_id = j.id
+WHERE c.screened = 1 AND c.user_id IS NULL");
+$employer_token_stats = $employer_tokens_stmt->fetch();
+$employer_input_tokens = (int)$employer_token_stats['input_tokens'];
+$employer_output_tokens = (int)$employer_token_stats['output_tokens'];
+$employer_screened_count = (int)$employer_token_stats['cnt'];
+
+$real_input_tokens += $employer_input_tokens;
+$real_output_tokens += $employer_output_tokens;
+
 // Add builder tokens (approx 1,800 tokens per build)
 $builder_tokens = $build_count * 1800;
 $total_real_tokens = $real_input_tokens + $real_output_tokens + $builder_tokens;
@@ -134,7 +151,26 @@ $total_review_tokens_sum = 0;
 foreach ($resume_reviews_tokens as $rt) {
     $total_review_tokens_sum += (int)$rt['total_tokens'];
 }
-$avg_tokens_per_resume = $review_count > 0 ? round($total_review_tokens_sum / $review_count) : 2114;
+
+// Employer bulk-upload AI screening breakdown (same estimate method, applied to HR-added candidates)
+$employer_upload_tokens = $pdo->query("SELECT
+    c.id, c.filename,
+    ROUND(LENGTH(c.stripped_text) / 4 + LENGTH(j.description) / 4 + 1200) as in_tokens,
+    ROUND((LENGTH(c.summary) + LENGTH(c.education) + LENGTH(c.experience) + LENGTH(c.skills) + LENGTH(c.strengths) + LENGTH(c.gaps) + LENGTH(c.note) + LENGTH(c.suggested_question)) / 4) as out_tokens,
+    ROUND(LENGTH(c.stripped_text) / 4 + LENGTH(j.description) / 4 + 1200 + (LENGTH(c.summary) + LENGTH(c.education) + LENGTH(c.experience) + LENGTH(c.skills) + LENGTH(c.strengths) + LENGTH(c.gaps) + LENGTH(c.note) + LENGTH(c.suggested_question)) / 4) as total_tokens,
+    c.created_at
+FROM candidates c LEFT JOIN jobs j ON c.job_id = j.id
+WHERE c.screened = 1 AND c.user_id IS NULL
+ORDER BY c.created_at DESC")->fetchAll();
+
+$total_employer_tokens_sum = 0;
+foreach ($employer_upload_tokens as $et) {
+    $total_employer_tokens_sum += (int)$et['total_tokens'];
+}
+
+$total_ai_evaluations_count = $review_count + $employer_screened_count;
+$combined_tokens_sum = $total_review_tokens_sum + $total_employer_tokens_sum;
+$avg_tokens_per_resume = $total_ai_evaluations_count > 0 ? round($combined_tokens_sum / $total_ai_evaluations_count) : 2114;
 $avg_tokens_per_resume_formatted = number_format($avg_tokens_per_resume);
 
 // Detailed role counts
@@ -1896,7 +1932,7 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
             <header class="mgmt-header">
                 <div class="mgmt-title-group">
                     <h1>5. AI Usage & Cost</h1>
-                    <p>Real token counts and API compute costs based on actual database entries</p>
+                    <p>Estimated token counts and API compute costs based on actual database entries</p>
                 </div>
             </header>
 
@@ -1904,7 +1940,7 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                 <div class="kpi-card">
                     <div class="kpi-top-row"><div class="kpi-title">Total Tokens</div></div>
                     <div class="kpi-value"><?= $ai_tokens_formatted ?></div>
-                    <div class="kpi-trend trend-up">Exact Real Tokens</div>
+                    <div class="kpi-trend trend-up">Estimated Tokens</div>
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-top-row"><div class="kpi-title">Input Tokens</div></div>
@@ -1919,7 +1955,7 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                 <div class="kpi-card">
                     <div class="kpi-top-row"><div class="kpi-title">Total Cost</div></div>
                     <div class="kpi-value"><?= $real_cost_formatted ?></div>
-                    <div class="kpi-trend trend-up">Real Gemini Compute</div>
+                    <div class="kpi-trend trend-up">Estimated Gemini Compute</div>
                 </div>
                 <div class="kpi-card" style="border: 1.5px solid rgba(34, 100, 53, 0.35); background: #FAFDF9;">
                     <div class="kpi-top-row">
@@ -1931,8 +1967,8 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-top-row"><div class="kpi-title">AI Evaluations</div></div>
-                    <div class="kpi-value"><?= $review_count ?></div>
-                    <div class="kpi-trend trend-up">resume_reviews</div>
+                    <div class="kpi-value"><?= $total_ai_evaluations_count ?></div>
+                    <div class="kpi-trend trend-up">resume_reviews + employer uploads</div>
                 </div>
             </div>
 
@@ -2005,6 +2041,47 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                     </tbody>
                 </table>
             </div>
+
+            <div class="data-table-container">
+                <div style="padding:16px 20px; font-weight:800; font-size:15px; border-bottom:1px solid var(--border-color);">
+                    Employer Bulk-Upload AI Screening Breakdown
+                </div>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Candidate ID</th>
+                            <th>Resume Document</th>
+                            <th>Input Tokens (Prompt & Text)</th>
+                            <th>Output Tokens (Evaluation)</th>
+                            <th>Total AI Tokens</th>
+                            <th>Est. Compute Cost</th>
+                            <th>Screened Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if(empty($employer_upload_tokens)): ?>
+                            <tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">No employer bulk-upload screenings logged</td></tr>
+                        <?php else: ?>
+                            <?php foreach($employer_upload_tokens as $et): ?>
+                                <?php $et_cost = round(($et['in_tokens'] * 0.00000035) + ($et['out_tokens'] * 0.00000105), 4); ?>
+                                <tr>
+                                    <td>#<?= htmlspecialchars($et['id']) ?></td>
+                                    <td style="font-weight:700;">📄 <?= htmlspecialchars($et['filename']) ?></td>
+                                    <td><?= number_format($et['in_tokens']) ?> tokens</td>
+                                    <td><?= number_format($et['out_tokens']) ?> tokens</td>
+                                    <td>
+                                        <span style="font-weight:800; color:#16A34A; background:rgba(34, 100, 53, 0.08); padding:3px 8px; border-radius:6px;">
+                                            <?= number_format($et['total_tokens']) ?> tokens
+                                        </span>
+                                    </td>
+                                    <td>RM <?= number_format($et_cost, 4) ?></td>
+                                    <td><?= date('M j, Y - h:i A', strtotime($et['created_at'])) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- ------------------------------------------------ -->
@@ -2033,7 +2110,7 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                 </div>
 
                 <div style="font-size:13.5px; line-height:1.7; color:#374151; margin-bottom:24px;">
-                    <strong>Executive System Summary:</strong> The Keria platform currently hosts <strong><?= $total_users_count ?> registered users</strong>, consisting of <strong><?= $total_candidates_count ?> job candidates</strong>, <strong><?= $total_employers_count ?> employer accounts</strong> (representing <?= $total_companies_count ?> corporate entities), <strong><?= $total_universities_count ?> university partners</strong>, <strong><?= $total_mgmt_count ?> management users</strong>, and <strong><?= $total_admin_count ?> system admins</strong>. The system hosts <strong><?= $active_jobs_count ?> active job vacancies</strong>. To date, <strong><?= $review_count ?> resumes</strong> have been screened through the Gemini AI resume review engine with an average score of <strong><?= round($avg_resume_score, 1) ?>/100</strong>, consuming a verified total of <strong><?= $ai_tokens_formatted ?> tokens</strong> (total estimated compute cost: <?= $real_cost_formatted ?>).
+                    <strong>Executive System Summary:</strong> The Keria platform currently hosts <strong><?= $total_users_count ?> registered users</strong>, consisting of <strong><?= $total_candidates_count ?> job candidates</strong>, <strong><?= $total_employers_count ?> employer accounts</strong> (representing <?= $total_companies_count ?> corporate entities), <strong><?= $total_universities_count ?> university partners</strong>, <strong><?= $total_mgmt_count ?> management users</strong>, and <strong><?= $total_admin_count ?> system admins</strong>. The system hosts <strong><?= $active_jobs_count ?> active job vacancies</strong>. To date, <strong><?= $review_count ?> resumes</strong> have been screened through the Gemini AI resume review engine with an average score of <strong><?= round($avg_resume_score, 1) ?>/100</strong>, consuming an estimated total of <strong><?= $ai_tokens_formatted ?> tokens</strong> (total estimated compute cost: <?= $real_cost_formatted ?>).
                 </div>
 
                 <div class="kpi-grid">

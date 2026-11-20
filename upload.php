@@ -199,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <?php if(!get_api_key()): ?>
                     <div style="background:rgba(255, 140, 66, 0.1); border:1px solid rgba(255, 140, 66, 0.3); border-radius:10px; padding:12px 16px; color:var(--org); font-size:12px; margin-bottom:16px;">
-                        <strong>Warning:</strong> AI screening is not yet configured. Resumes will be uploaded and text extracted, but AI screening will be skipped. Please contact your administrator to set up the Google Gemini API key.
+                        <strong>Warning:</strong> AI screening is not yet configured. Resumes will be uploaded and text extracted, but AI screening will be skipped. Please contact your administrator to set up the AI screening engine.
                     </div>
                 <?php endif; ?>
 

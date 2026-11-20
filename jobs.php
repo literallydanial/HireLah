@@ -143,7 +143,7 @@ if ($selected_job_id) {
         // (e.g. a shared link with search params still in the URL) —
         // look it up directly so the shared link still resolves.
         $sel_stmt = $pdo->prepare("SELECT j.*, COALESCE(NULLIF(c.name, ''), NULLIF(u.company_name, ''), u.name) as employer_name, COALESCE(NULLIF(c.logo, ''), u.company_logo) as company_logo
-                                    FROM jobs j 
+                                    FROM jobs j
                                     LEFT JOIN users u ON j.employer_id = u.id
                                     LEFT JOIN companies c ON j.company_id = c.id
                                     WHERE j.id = ? AND (j.status = 'Active' OR j.status IS NULL)");
@@ -1245,7 +1245,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         .job-desc-section-wrapper {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 12px;
         }
 
         .job-desc-header-row {
@@ -1270,6 +1270,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         }
 
         .job-desc-paragraph {
+            margin: 0;
             font-size: 14px;
             line-height: 1.65;
             color: #374151;
@@ -1277,13 +1278,14 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
         }
 
         .job-spec-block-title {
+            margin: 0;
             font-size: 15px;
             font-weight: 800;
             color: #0A0A0A;
-            margin-bottom: 8px;
         }
 
         .job-bullet-list {
+            margin: 0;
             padding-left: 20px;
             font-size: 13.5px;
             line-height: 1.65;
@@ -2391,7 +2393,7 @@ if (isset($_SESSION['user_id']) && ($_SESSION['user_role'] ?? '') === 'candidate
                                 <div style="font-size:26px;">🤖</div>
                                 <div>
                                     <div style="font-size:14px; font-weight:800; color:#0A0A0A;">AI Resume Match Evaluator</div>
-                                    <div style="font-size:12px; color:#4B5563; margin-top:2px;">Click Apply for Position to submit your resume and unlock instant Gemini AI match scoring!</div>
+                                    <div style="font-size:12px; color:#4B5563; margin-top:2px;">Click Apply for Position to submit your resume and unlock instant AI match scoring!</div>
                                 </div>
                             </div>
                             <a href="resume_builder.php" class="btn-search-find" style="padding:8px 14px; font-size:12px; text-decoration:none; white-space:nowrap;">📝 AI Resume Builder</a>
