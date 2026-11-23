@@ -1198,6 +1198,57 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* AI Usage tab: switcher between the Self-Checker and Employer
+           Bulk-Upload breakdown tables. Deliberately NOT reusing the
+           .mgmt-tab-view/.nav-item classes used by the page's top-level
+           sidebar tabs -- switchMgmtTab() above does a blanket
+           document.querySelectorAll('.mgmt-tab-view') to clear 'active'
+           on every top-level view when the admin navigates to a
+           different tab, which would also silently clear these nested
+           sub-panels and leave both hidden on return. Separate class
+           names keep the two switchers fully independent. */
+        .ai-usage-subtab-bar {
+            display: inline-flex;
+            gap: 4px;
+            padding: 4px;
+            background: var(--bg-page);
+            border: 1px solid var(--border-color);
+            border-radius: 11px;
+            margin-bottom: 16px;
+        }
+
+        .ai-usage-subtab-btn {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            border-radius: 8px;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+
+        .ai-usage-subtab-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .ai-usage-subtab-btn.active {
+            background: var(--bg-card);
+            color: var(--accent-green);
+            box-shadow: var(--shadow-card);
+        }
+
+        .ai-usage-subview {
+            display: none;
+            animation: fadeIn 0.2s ease-in-out;
+        }
+
+        .ai-usage-subview.active {
+            display: block;
+        }
+
         .data-table-container {
             background: #FFFFFF;
             border: 1px solid var(--border-color);
@@ -1998,89 +2049,98 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                 </table>
             </div>
 
-            <div class="data-table-container">
-                <div style="padding:16px 20px; font-weight:800; font-size:15px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                    <span>Per-Resume AI Token Consumption Breakdown</span>
-                    <span style="font-size:12px; font-weight:700; color:var(--accent-green); background:var(--accent-green-light); padding:5px 12px; border-radius:6px; border:1px solid rgba(34, 100, 53, 0.2);">
-                        ⚡ Average: <?= $avg_tokens_per_resume_formatted ?> tokens / resume
-                    </span>
-                </div>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Review ID</th>
-                            <th>Resume Document</th>
-                            <th>Input Tokens (Prompt & Text)</th>
-                            <th>Output Tokens (Evaluation)</th>
-                            <th>Total AI Tokens</th>
-                            <th>Est. Compute Cost</th>
-                            <th>Evaluation Date</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if(empty($resume_reviews_tokens)): ?>
-                            <tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">No resume evaluations logged</td></tr>
-                        <?php else: ?>
-                            <?php foreach($resume_reviews_tokens as $rt): ?>
-                                <?php $rt_cost = round(($rt['in_tokens'] * 0.00000035) + ($rt['out_tokens'] * 0.00000105), 4); ?>
-                                <tr>
-                                    <td>#<?= $rt['id'] ?></td>
-                                    <td style="font-weight:700;">📄 <?= htmlspecialchars($rt['filename']) ?></td>
-                                    <td><?= number_format($rt['in_tokens']) ?> tokens</td>
-                                    <td><?= number_format($rt['out_tokens']) ?> tokens</td>
-                                    <td>
-                                        <span style="font-weight:800; color:#16A34A; background:rgba(34, 100, 53, 0.08); padding:3px 8px; border-radius:6px;">
-                                            <?= number_format($rt['total_tokens']) ?> tokens
-                                        </span>
-                                    </td>
-                                    <td>RM <?= number_format($rt_cost, 4) ?></td>
-                                    <td><?= date('M j, Y - h:i A', strtotime($rt['created_at'])) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+            <div class="ai-usage-subtab-bar" role="tablist">
+                <button type="button" class="ai-usage-subtab-btn active" onclick="switchAiUsageSubtab('self', this)">👤 Self-Checker Reviews (<?= count($resume_reviews_tokens) ?>)</button>
+                <button type="button" class="ai-usage-subtab-btn" onclick="switchAiUsageSubtab('employer', this)">🏢 Employer Bulk-Uploads (<?= count($employer_upload_tokens) ?>)</button>
             </div>
 
-            <div class="data-table-container">
-                <div style="padding:16px 20px; font-weight:800; font-size:15px; border-bottom:1px solid var(--border-color);">
-                    Employer Bulk-Upload AI Screening Breakdown
+            <div id="ai-usage-subview-self" class="ai-usage-subview active">
+                <div class="data-table-container">
+                    <div style="padding:16px 20px; font-weight:800; font-size:15px; border-bottom:1px solid var(--border-color); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <span>Per-Resume AI Token Consumption Breakdown</span>
+                        <span style="font-size:12px; font-weight:700; color:var(--accent-green); background:var(--accent-green-light); padding:5px 12px; border-radius:6px; border:1px solid rgba(34, 100, 53, 0.2);">
+                            ⚡ Average: <?= $avg_tokens_per_resume_formatted ?> tokens / resume
+                        </span>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Review ID</th>
+                                <th>Resume Document</th>
+                                <th>Input Tokens (Prompt & Text)</th>
+                                <th>Output Tokens (Evaluation)</th>
+                                <th>Total AI Tokens</th>
+                                <th>Est. Compute Cost</th>
+                                <th>Evaluation Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if(empty($resume_reviews_tokens)): ?>
+                                <tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">No resume evaluations logged</td></tr>
+                            <?php else: ?>
+                                <?php foreach($resume_reviews_tokens as $rt): ?>
+                                    <?php $rt_cost = round(($rt['in_tokens'] * 0.00000035) + ($rt['out_tokens'] * 0.00000105), 4); ?>
+                                    <tr>
+                                        <td>#<?= $rt['id'] ?></td>
+                                        <td style="font-weight:700;">📄 <?= htmlspecialchars($rt['filename']) ?></td>
+                                        <td><?= number_format($rt['in_tokens']) ?> tokens</td>
+                                        <td><?= number_format($rt['out_tokens']) ?> tokens</td>
+                                        <td>
+                                            <span style="font-weight:800; color:#16A34A; background:rgba(34, 100, 53, 0.08); padding:3px 8px; border-radius:6px;">
+                                                <?= number_format($rt['total_tokens']) ?> tokens
+                                            </span>
+                                        </td>
+                                        <td>RM <?= number_format($rt_cost, 4) ?></td>
+                                        <td><?= date('M j, Y - h:i A', strtotime($rt['created_at'])) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
                 </div>
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Candidate ID</th>
-                            <th>Resume Document</th>
-                            <th>Input Tokens (Prompt & Text)</th>
-                            <th>Output Tokens (Evaluation)</th>
-                            <th>Total AI Tokens</th>
-                            <th>Est. Compute Cost</th>
-                            <th>Screened Date</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if(empty($employer_upload_tokens)): ?>
-                            <tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">No employer bulk-upload screenings logged</td></tr>
-                        <?php else: ?>
-                            <?php foreach($employer_upload_tokens as $et): ?>
-                                <?php $et_cost = round(($et['in_tokens'] * 0.00000035) + ($et['out_tokens'] * 0.00000105), 4); ?>
-                                <tr>
-                                    <td>#<?= htmlspecialchars($et['id']) ?></td>
-                                    <td style="font-weight:700;">📄 <?= htmlspecialchars($et['filename']) ?></td>
-                                    <td><?= number_format($et['in_tokens']) ?> tokens</td>
-                                    <td><?= number_format($et['out_tokens']) ?> tokens</td>
-                                    <td>
-                                        <span style="font-weight:800; color:#16A34A; background:rgba(34, 100, 53, 0.08); padding:3px 8px; border-radius:6px;">
-                                            <?= number_format($et['total_tokens']) ?> tokens
-                                        </span>
-                                    </td>
-                                    <td>RM <?= number_format($et_cost, 4) ?></td>
-                                    <td><?= date('M j, Y - h:i A', strtotime($et['created_at'])) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+            </div>
+
+            <div id="ai-usage-subview-employer" class="ai-usage-subview">
+                <div class="data-table-container">
+                    <div style="padding:16px 20px; font-weight:800; font-size:15px; border-bottom:1px solid var(--border-color);">
+                        Employer Bulk-Upload AI Screening Breakdown
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Candidate ID</th>
+                                <th>Resume Document</th>
+                                <th>Input Tokens (Prompt & Text)</th>
+                                <th>Output Tokens (Evaluation)</th>
+                                <th>Total AI Tokens</th>
+                                <th>Est. Compute Cost</th>
+                                <th>Screened Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if(empty($employer_upload_tokens)): ?>
+                                <tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">No employer bulk-upload screenings logged</td></tr>
+                            <?php else: ?>
+                                <?php foreach($employer_upload_tokens as $et): ?>
+                                    <?php $et_cost = round(($et['in_tokens'] * 0.00000035) + ($et['out_tokens'] * 0.00000105), 4); ?>
+                                    <tr>
+                                        <td>#<?= htmlspecialchars($et['id']) ?></td>
+                                        <td style="font-weight:700;">📄 <?= htmlspecialchars($et['filename']) ?></td>
+                                        <td><?= number_format($et['in_tokens']) ?> tokens</td>
+                                        <td><?= number_format($et['out_tokens']) ?> tokens</td>
+                                        <td>
+                                            <span style="font-weight:800; color:#16A34A; background:rgba(34, 100, 53, 0.08); padding:3px 8px; border-radius:6px;">
+                                                <?= number_format($et['total_tokens']) ?> tokens
+                                            </span>
+                                        </td>
+                                        <td>RM <?= number_format($et_cost, 4) ?></td>
+                                        <td><?= date('M j, Y - h:i A', strtotime($et['created_at'])) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -2243,6 +2303,25 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                 window.history.replaceState(null, null, '#' + tabId);
             }
             window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // AI Usage tab only: toggles between the Self-Checker and Employer
+        // Bulk-Upload breakdown tables. Kept separate from switchMgmtTab()
+        // above on purpose -- that function clears 'active' from every
+        // .mgmt-tab-view on the page whenever the admin changes top-level
+        // tabs, which would otherwise hide both of these sub-panels and
+        // never show either one again on return.
+        function switchAiUsageSubtab(key, btn) {
+            document.querySelectorAll('.ai-usage-subview').forEach(function(el) {
+                el.classList.remove('active');
+            });
+            document.querySelectorAll('.ai-usage-subtab-btn').forEach(function(b) {
+                b.classList.remove('active');
+            });
+
+            var target = document.getElementById('ai-usage-subview-' + key);
+            if (target) target.classList.add('active');
+            if (btn) btn.classList.add('active');
         }
 
         function setPeriodFilter(period, btn) {
