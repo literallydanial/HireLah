@@ -48,9 +48,9 @@ function ev_normalize_ssm($ssm) {
     return strtoupper(preg_replace('/\s+/', '', trim((string)$ssm)));
 }
 
-// Accepts the formats SSM issues: the new 12-digit number (e.g. 202301012345)
+// Accepts the formats SSM issues: the new 12-digit number (e.g. xxxxxxx12345)
 // or the old format of 5-7 digits plus 1-2 letters, with an optional dash
-// (e.g. 1234567-X). Format check only -- the real check is the admin's lookup
+// (e.g. xxxx12-X). Format check only -- the real check is the admin's lookup
 // on SSM e-Info.
 function ev_valid_ssm_format($ssm) {
     return (bool)preg_match('/^(\d{12}|\d{5,7}-?[A-Z]{1,2})$/', ev_normalize_ssm($ssm));
@@ -98,14 +98,14 @@ function ev_compute_flags($email, $website = '') {
 // ---------- company status ----------
 
 function ev_company_status($pdo, $company_id) {
-    if (!$company_id) return 'approved'; // legacy employers with no company row keep working
+    if (!$company_id) return 'pending';
     try {
         $st = $pdo->prepare("SELECT verification_status FROM companies WHERE id = ?");
         $st->execute([(int)$company_id]);
         $v = $st->fetchColumn();
-        return $v === false || $v === null ? 'approved' : $v;
+        return $v === false || $v === null ? 'pending' : $v;
     } catch (\Throwable $e) {
-        return 'approved'; // column missing -> never block on a schema problem
+        return 'pending';
     }
 }
 

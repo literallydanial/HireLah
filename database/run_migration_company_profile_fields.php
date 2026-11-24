@@ -44,7 +44,7 @@ try {
 
     // Populate realistic default SSM / company details for existing seed company 1 (Gajah Kapitalan) if empty
     $pdo->exec("UPDATE companies SET 
-        ssm_number = COALESCE(NULLIF(ssm_number, ''), '202301012345 (1234567-X)'),
+        ssm_number = COALESCE(NULLIF(ssm_number, ''), 'xxxxxxx12345 (xxxx12-x)'),
         business_type = COALESCE(NULLIF(business_type, ''), 'Private Limited (Sdn. Bhd.)'),
         industry = COALESCE(NULLIF(industry, ''), 'Information Technology'),
         contact_number = COALESCE(NULLIF(contact_number, ''), '+60 3-1234 5678'),

@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <span>🏢 SSM Registration Number <span style="color:var(--red);">* (Compulsory)</span></span>
                     <span style="font-size:11px; font-weight:700; color:#B45309;">Required for verification</span>
                 </label>
-                <input type="text" name="ssm_number" value="<?= htmlspecialchars($curr_ssm) ?>" placeholder="e.g. 202301012345 (1234567-X)" required>
+                <input type="text" name="ssm_number" value="<?= htmlspecialchars($curr_ssm) ?>" placeholder="e.g. xxxxxxx12345 (xxxx12-x)" required>
                 <div style="font-size:11px; color:var(--mut); margin-top:4px;">Official SSM registration number is compulsory before posting.</div>
             </div>
             

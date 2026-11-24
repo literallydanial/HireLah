@@ -183,13 +183,25 @@ try {
     }
 
     // Auto-verify employer verification columns (self-healing migration on deploy).
-    // Existing companies default to 'approved' so no active employer is locked out;
-    // new self-registered employers are inserted as 'pending' by verify_otp.php.
+    // Companies default to 'pending' until approved by internal team review.
     try {
         $pdo->query("SELECT verification_status FROM companies LIMIT 1");
+        // Ensure default is 'pending' and unreviewed companies are not auto-verified
+        try {
+            $pdo->exec("ALTER TABLE companies MODIFY COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending'");
+        } catch (\Throwable $migErr) {}
+        try {
+            $pdo->exec("UPDATE companies SET verification_status = 'pending' WHERE (reviewed_by IS NULL OR reviewed_at IS NULL) AND verification_status = 'approved'");
+        } catch (\Throwable $migErr) {}
+        try {
+            $pdo->exec("UPDATE companies SET name = 'Company Abc Sdn Bhd' WHERE name IN ('ABC Technology Sdn. Bhd.', 'Acme Corporation Sdn Bhd')");
+            $pdo->exec("UPDATE companies SET ssm_number = 'xxxxxxx12345 (xxxx12-x)' WHERE ssm_number IN ('202301012345 (1234567-X)', '201201012345 (1012345-X)', '202301012345', '201201012345')");
+            $pdo->exec("UPDATE users SET company_name = 'Company Abc Sdn Bhd' WHERE company_name IN ('ABC Technology Sdn. Bhd.', 'Acme Corporation Sdn Bhd')");
+            $pdo->exec("UPDATE users SET ssm_number = 'xxxxxxx12345 (xxxx12-x)' WHERE ssm_number IN ('202301012345 (1234567-X)', '201201012345 (1012345-X)', '202301012345', '201201012345')");
+        } catch (\Throwable $migErr) {}
     } catch (\Throwable $e) {
         foreach ([
-            "ALTER TABLE companies ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'approved'",
+            "ALTER TABLE companies ADD COLUMN verification_status VARCHAR(20) NOT NULL DEFAULT 'pending'",
             "ALTER TABLE companies ADD COLUMN verification_flags VARCHAR(255) NULL",
             "ALTER TABLE companies ADD COLUMN submitted_at DATETIME NULL",
             "ALTER TABLE companies ADD COLUMN claimed_by INT NULL",

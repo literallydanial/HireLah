@@ -146,6 +146,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 AND (claimed_by IS NULL OR claimed_by = ? OR claimed_at < (NOW() - INTERVAL 30 MINUTE))");
             $u->execute([$new_status, $admin_id, ($note !== '' ? $note : null), $cid, $admin_id]);
             if ($u->rowCount()) {
+                if ($approve && !empty($co['created_by'])) {
+                    $pdo->prepare("UPDATE users SET is_verified = 1 WHERE id = ?")->execute([$co['created_by']]);
+                }
                 log_admin_action($pdo, $admin_id, $admin_name, $approve ? 'employer_approve' : 'employer_reject', 'company', $cid,
                     ($approve ? "Approved" : "Rejected") . " employer '{$co['name']}' (SSM {$co['ssm_number']})" . ($note !== '' ? " - note: $note" : ''));
                 if (!empty($co['owner_email'])) {
@@ -167,10 +170,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("UPDATE users SET is_verified = CASE WHEN is_verified = 1 THEN 0 ELSE 1 END WHERE id = ?");
             $stmt->execute([$target_id]);
 
-            $u_stmt = $pdo->prepare("SELECT name, email, is_verified FROM users WHERE id = ?");
+            $u_stmt = $pdo->prepare("SELECT name, email, role, is_verified FROM users WHERE id = ?");
             $u_stmt->execute([$target_id]);
             $target_user = $u_stmt->fetch();
             $ver_status = $target_user['is_verified'] ? 'Verified' : 'Unverified';
+
+            // If user is employer, sync their company's verification status
+            if (($target_user['role'] ?? '') === 'employer') {
+                try {
+                    if ($target_user['is_verified']) {
+                        $pdo->prepare("UPDATE companies SET verification_status = 'approved', reviewed_by = ?, reviewed_at = NOW() WHERE created_by = ? OR id IN (SELECT company_id FROM company_members WHERE user_id = ?)")->execute([$admin_id, $target_id, $target_id]);
+                    } else {
+                        $pdo->prepare("UPDATE companies SET verification_status = 'pending', reviewed_by = NULL, reviewed_at = NULL WHERE created_by = ? OR id IN (SELECT company_id FROM company_members WHERE user_id = ?)")->execute([$target_id, $target_id]);
+                    }
+                } catch (\Throwable $t) {}
+            }
 
             log_admin_action($pdo, $admin_id, $admin_name, 'toggle_verify', 'user', $target_id, "Toggled verification for '{$target_user['name']}' to $ver_status");
             $_SESSION['toast'] = "User verification status updated.";
@@ -323,11 +337,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ");
                             $c_chk->execute([$target_id]);
                             $c_id = $c_chk->fetchColumn();
+                            if (!$c_id) {
+                                $c_chk2 = $pdo->prepare("SELECT id FROM companies WHERE created_by = ? LIMIT 1");
+                                $c_chk2->execute([$target_id]);
+                                $c_id = $c_chk2->fetchColumn();
+                            }
                             if ($c_id) {
                                 if ($employer_company !== '') {
                                     $pdo->prepare("UPDATE companies SET name = ?, ssm_number = ? WHERE id = ?")->execute([$employer_company, $employer_ssm, $c_id]);
                                 } else {
                                     $pdo->prepare("UPDATE companies SET ssm_number = ? WHERE id = ?")->execute([$employer_ssm, $c_id]);
+                                }
+                                if ($is_verified) {
+                                    $pdo->prepare("UPDATE companies SET verification_status = 'approved', reviewed_by = ?, reviewed_at = NOW() WHERE id = ?")->execute([$admin_id, $c_id]);
+                                } else {
+                                    $pdo->prepare("UPDATE companies SET verification_status = 'pending', reviewed_by = NULL, reviewed_at = NULL WHERE id = ?")->execute([$c_id]);
                                 }
                             }
                         } catch (\Throwable $t) {}
@@ -1907,7 +1931,7 @@ $jobs_list = $pdo->query("
                     </div>
                     <div style="margin-bottom:6px;">
                         <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">SSM / Registration Number</label>
-                        <input type="text" name="ssm_number" id="addUserInstitutionSsm" placeholder="e.g. 201201012345 (1012345-X)" style="padding:10px 14px; font-size:13px;">
+                        <input type="text" name="ssm_number" id="addUserInstitutionSsm" placeholder="e.g. xxxxxxx12345 (xxxx12-x)" style="padding:10px 14px; font-size:13px;">
                     </div>
                     <div style="font-size:10.5px; color:var(--mut); margin-top:4px;">The institution icon can be uploaded after creation via Edit Account.</div>
                 </div>
@@ -1915,11 +1939,11 @@ $jobs_list = $pdo->query("
                 <div id="addUserEmployerField" style="display:none; margin-bottom:16px;">
                     <div style="margin-bottom:12px;">
                         <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company Name</label>
-                        <input type="text" name="company_name" id="addUserEmployerName" placeholder="e.g. Acme Corporation Sdn Bhd" style="padding:10px 14px; font-size:13px;">
+                        <input type="text" name="company_name" id="addUserEmployerName" placeholder="e.g. Company Abc Sdn Bhd" style="padding:10px 14px; font-size:13px;">
                     </div>
                     <div style="margin-bottom:6px;">
                         <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company SSM Registration Number</label>
-                        <input type="text" name="ssm_number" id="addUserEmployerSsm" placeholder="e.g. 201201012345 (1012345-X)" style="padding:10px 14px; font-size:13px;">
+                        <input type="text" name="ssm_number" id="addUserEmployerSsm" placeholder="e.g. xxxxxxx12345 (xxxx12-x)" style="padding:10px 14px; font-size:13px;">
                     </div>
                 </div>
 
@@ -1990,11 +2014,11 @@ $jobs_list = $pdo->query("
                 <div id="editUserEmployerBlock" style="display:none;">
                     <div style="margin-bottom:14px;">
                         <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company Name</label>
-                        <input type="text" name="company_name" id="editEmployerCompanyName" placeholder="e.g. Acme Corporation Sdn Bhd" style="padding:10px 14px; font-size:13px;">
+                        <input type="text" name="company_name" id="editEmployerCompanyName" placeholder="e.g. Company Abc Sdn Bhd" style="padding:10px 14px; font-size:13px;">
                     </div>
                     <div style="margin-bottom:14px;">
                         <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">Company SSM Registration Number</label>
-                        <input type="text" name="ssm_number" id="editEmployerSsm" placeholder="e.g. 201201012345 (1012345-X)" style="padding:10px 14px; font-size:13px;">
+                        <input type="text" name="ssm_number" id="editEmployerSsm" placeholder="e.g. xxxxxxx12345 (xxxx12-x)" style="padding:10px 14px; font-size:13px;">
                     </div>
                 </div>
 
@@ -2012,7 +2036,7 @@ $jobs_list = $pdo->query("
                     </div>
                     <div style="margin-bottom:14px;">
                         <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:700;">SSM / Registration Number</label>
-                        <input type="text" name="ssm_number" id="editInstitutionSsm" placeholder="e.g. 201201012345 (1012345-X) or DU001(B)" style="padding:10px 14px; font-size:13px;">
+                        <input type="text" name="ssm_number" id="editInstitutionSsm" placeholder="e.g. xxxxxxx12345 (xxxx12-x) or DU001(B)" style="padding:10px 14px; font-size:13px;">
                     </div>
 
                     <div style="margin-bottom:14px;">

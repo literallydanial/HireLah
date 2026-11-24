@@ -1441,11 +1441,11 @@ if ($user['role'] === 'candidate') {
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:18px;">
                             <div>
                                 <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">Company Name <span style="color:var(--red);">*</span></label>
-                                <input type="text" name="company_name" placeholder="Acme Corporation Sdn Bhd" value="<?= htmlspecialchars($active_company['name'] ?? '') ?>" required>
+                                <input type="text" name="company_name" placeholder="Company Abc Sdn Bhd" value="<?= htmlspecialchars($active_company['name'] ?? '') ?>" required>
                             </div>
                             <div>
                                 <label style="display:block; font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px;">SSM Registration Number <span style="color:var(--red);">* (Compulsory for job postings)</span></label>
-                                <input type="text" name="ssm_number" placeholder="e.g. 202301012345 (1234567-X)" value="<?= htmlspecialchars($active_company['ssm_number'] ?? $user['ssm_number'] ?? '') ?>" required>
+                                <input type="text" name="ssm_number" placeholder="e.g. xxxxxxx12345 (xxxx12-x)" value="<?= htmlspecialchars($active_company['ssm_number'] ?? $user['ssm_number'] ?? '') ?>" required>
                             </div>
                         </div>
 

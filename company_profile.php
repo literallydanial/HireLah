@@ -38,8 +38,8 @@ if (!$company) {
     // Graceful fallback dummy company matching design mockup
     $company = [
         'id' => null,
-        'name' => 'ABC Technology Sdn. Bhd.',
-        'ssm_number' => '202301012345 (1234567-X)',
+        'name' => 'Company Abc Sdn Bhd',
+        'ssm_number' => 'xxxxxxx12345 (xxxx12-x)',
         'business_type' => 'Private Limited (Sdn. Bhd.)',
         'industry' => 'Information Technology',
         'website' => 'https://www.example.com',
@@ -48,13 +48,14 @@ if (!$company) {
         'address' => 'Cyberjaya, Selangor, Malaysia',
         'company_size' => '11-50 employees',
         'logo' => null,
-        'is_verified' => 1
+        'is_verified' => 0,
+        'verification_status' => 'pending'
     ];
 }
 
 // Normalise defaults for any missing company fields so the profile is always complete
-$comp_name = !empty($company['name']) ? $company['name'] : 'ABC Technology Sdn. Bhd.';
-$comp_ssm = !empty($company['ssm_number']) ? $company['ssm_number'] : '202301012345 (1234567-X)';
+$comp_name = !empty($company['name']) ? $company['name'] : 'Company Abc Sdn Bhd';
+$comp_ssm = !empty($company['ssm_number']) ? $company['ssm_number'] : 'xxxxxxx12345 (xxxx12-x)';
 $comp_biz_type = !empty($company['business_type']) ? $company['business_type'] : 'Private Limited (Sdn. Bhd.)';
 $comp_industry = !empty($company['industry']) ? $company['industry'] : 'Information Technology';
 $comp_website = !empty($company['website']) ? $company['website'] : 'www.example.com';
@@ -63,7 +64,9 @@ $comp_phone = !empty($company['contact_number']) ? $company['contact_number'] : 
 $comp_address = !empty($company['address']) ? $company['address'] : 'Cyberjaya, Selangor, Malaysia';
 $comp_size = !empty($company['company_size']) ? $company['company_size'] : '11-50 employees';
 $comp_logo = !empty($company['logo']) ? $company['logo'] : null;
-$comp_is_verified = ($company['verification_status'] ?? null) === 'approved';
+
+// Company verification is enabled ONLY after internal team review and approval
+$comp_is_verified = (($company['verification_status'] ?? '') === 'approved') && (!empty($company['reviewed_by']) || !empty($company['reviewed_at']));
 
 // Clean website url for display
 $clean_website_display = preg_replace('#^https?://#i', '', rtrim($comp_website, '/'));
@@ -355,17 +358,6 @@ $page_title = htmlspecialchars($comp_name) . " — Employer Company Profile | Ke
             text-decoration: underline;
         }
 
-        /* Disclaimer Footer Note */
-        .company-disclaimer-note {
-            font-size: 11px;
-            color: var(--mut, #9CA3AF);
-            margin-top: 24px;
-            padding-top: 18px;
-            border-top: 1px solid var(--bdr, #E5E7EB);
-            line-height: 1.5;
-            font-style: italic;
-        }
-
         /* Active Openings Section */
         .jobs-section-heading {
             font-size: 18px;
@@ -518,6 +510,10 @@ $page_title = htmlspecialchars($comp_name) . " — Employer Company Profile | Ke
                             </svg>
                             Verified Employer
                         </span>
+                        <?php elseif (($company['verification_status'] ?? '') === 'pending'): ?>
+                        <span style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:600; padding:4px 10px; border-radius:20px; background:#FEF3C7; color:#92400E; border:1px solid #FCD34D;">
+                            <span>⏳</span> Verification Pending
+                        </span>
                         <?php endif; ?>
                         <span class="industry-label-chip"><?= htmlspecialchars($comp_industry) ?></span>
                     </div>
@@ -577,11 +573,6 @@ $page_title = htmlspecialchars($comp_name) . " — Employer Company Profile | Ke
                     </tr>
                 </tbody>
             </table>
-
-            <!-- Illustrative verification note -->
-            <div class="company-disclaimer-note">
-                Illustrative company details only. Verification badge is a design example, not an actual verification.
-            </div>
 
         </div>
 
@@ -655,8 +646,7 @@ $page_title = htmlspecialchars($comp_name) . " — Employer Company Profile | Ke
 
     <!-- Footer -->
     <footer style="margin-top:auto; background:var(--card-solid); border-top:1px solid var(--bdr); padding:24px 20px; text-align:center; font-size:13px; color:var(--mut);">
-        <p style="margin:0 0 6px 0;">&copy; <?= date('Y') ?> Keria &bull; Connecting talent with verified Malaysian employers.</p>
-        <p style="margin:0; font-size:12px; opacity:0.8;">Illustrative company details only. Verification badge is a design example, not an actual verification.</p>
+        <p style="margin:0;">&copy; <?= date('Y') ?> Keria &bull; Connecting talent with verified Malaysian employers.</p>
     </footer>
 
     <script src="theme.js"></script>

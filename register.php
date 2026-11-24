@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($employer_company_name === '' || mb_strlen($employer_company_name) < 2) {
             $error = "Please enter your registered company name.";
         } elseif (!ev_valid_ssm_format($employer_ssm)) {
-            $error = "Please enter a valid SSM registration number (e.g. 202301012345 or 1234567-X).";
+            $error = "Please enter a valid SSM registration number (e.g. xxxxxxx12345 or xxxx12-x).";
         } elseif (ev_is_disposable_email($email)) {
             $error = "Temporary or disposable email addresses can't be used for employer accounts. Please use your company or personal email.";
         } elseif (ev_ssm_in_use($pdo, $employer_ssm)) {
@@ -710,7 +710,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                         <div class="auth-input-wrap">
                             <span class="auth-input-icon">📄</span>
-                            <input type="text" name="ssm_number" id="registerSsmNumber" placeholder="SSM registration no. (e.g. 202301012345)" value="<?= htmlspecialchars($_POST['ssm_number'] ?? '') ?>">
+                            <input type="text" name="ssm_number" id="registerSsmNumber" placeholder="SSM registration no. (e.g. xxxxxxx12345)" value="<?= htmlspecialchars($_POST['ssm_number'] ?? '') ?>">
                         </div>
                         <div style="font-size:11px; color:var(--mut); margin-top:-6px; margin-bottom:14px; text-align:left;">To keep job seekers safe, we check every new employer against SSM records. It usually takes less than one working day, and you can set up your company profile while you wait.</div>
                     </div>

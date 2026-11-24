@@ -661,7 +661,7 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
                         <span>🏢 Company SSM Registration Number <span style="color:var(--red, #EF4444);">* (Compulsory)</span></span>
                         <span style="font-size:11px; font-weight:700; color:#B45309;">Required before posting</span>
                     </label>
-                    <input type="text" name="ssm_number" id="modal_ssm_number" value="<?= htmlspecialchars($curr_company_ssm) ?>" placeholder="e.g. 202301012345 (1234567-X)" required style="padding:10px 14px; font-size:13.5px; border-radius:8px; border:1.5px solid <?= empty($curr_company_ssm) ? '#EF4444' : 'var(--bdr)' ?>; background:var(--card-solid); width:100%; box-sizing:border-box;">
+                    <input type="text" name="ssm_number" id="modal_ssm_number" value="<?= htmlspecialchars($curr_company_ssm) ?>" placeholder="e.g. xxxxxxx12345 (xxxx12-x)" required style="padding:10px 14px; font-size:13.5px; border-radius:8px; border:1.5px solid <?= empty($curr_company_ssm) ? '#EF4444' : 'var(--bdr)' ?>; background:var(--card-solid); width:100%; box-sizing:border-box;">
                     <div style="font-size:11.5px; color:var(--mut); margin-top:5px; line-height:1.4;">
                         Official SSM registration number is compulsory for all employers before publishing a vacancy. It is displayed to candidates to ensure employer legitimacy.
                     </div>

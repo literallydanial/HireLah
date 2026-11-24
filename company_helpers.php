@@ -84,7 +84,8 @@ function resolve_company_profile($pdo, $company_id = null, $employer_id = null, 
                     'industry' => $u_row['industry'] ?? 'Information Technology',
                     'contact_number' => $u_row['contact_number'] ?? '',
                     'company_size' => $u_row['company_size'] ?? '11-50 employees',
-                    'is_verified' => $u_row['is_verified'] ?? 1,
+                    'is_verified' => $u_row['is_verified'] ?? 0,
+                    'verification_status' => 'pending',
                     'created_by' => $u_row['id']
                 ];
             }
@@ -157,7 +158,7 @@ function create_company_for_new_employer($pdo, $user) {
     $token = bin2hex(random_bytes(20));
 
     try {
-        $ins = $pdo->prepare("INSERT INTO companies (name, website, address, ssm_number, logo, contact_email, invite_token, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $ins = $pdo->prepare("INSERT INTO companies (name, website, address, ssm_number, logo, contact_email, invite_token, created_by, verification_status, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())");
         $ins->execute([
             $company_name,
             $user['company_website'] ?? null,
@@ -169,7 +170,7 @@ function create_company_for_new_employer($pdo, $user) {
             $user['id'],
         ]);
     } catch (\Throwable $t) {
-        $ins = $pdo->prepare("INSERT INTO companies (name, website, address, logo, contact_email, invite_token, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $ins = $pdo->prepare("INSERT INTO companies (name, website, address, logo, contact_email, invite_token, created_by, verification_status, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', NOW())");
         $ins->execute([
             $company_name,
             $user['company_website'] ?? null,
