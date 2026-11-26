@@ -366,6 +366,11 @@ main {
   border-color: var(--acc);
   background: rgba(107, 138, 0, 0.04);
 }
+.dropzone.drag-active {
+  border-color: var(--acc);
+  background: rgba(107, 138, 0, 0.08);
+  transform: scale(1.01);
+}
 
 .stat-box {
   background: var(--card);

@@ -628,13 +628,32 @@ $admin_job_funnels = $pdo->query("
 // ----------------------------------------------------
 // 3. FETCH USERS & JOBS LIST FOR TABLES
 // ----------------------------------------------------
+// Employer rows: u.company_name/u.ssm_number are only ever populated on the
+// account that originally registered and created the company. A teammate who
+// joined an existing company later (via company_members, see
+// company_helpers.php) has no company_name/ssm_number of their own -- so
+// without this fallback they'd wrongly show "No Company Set"/"No SSM" here
+// even though their company is fully set up (and possibly verified) on the
+// live/public side. Same lookup pattern already used by the Edit Account
+// save handler above (search "Sync with companies table if employer belongs
+// to one").
 $users_list = $pdo->query("
-    SELECT u.*, 
+    SELECT u.*,
            un.type as university_type,
-           u.company_name as company_display_name,
-           COALESCE(NULLIF(u.ssm_number, ''), NULLIF(un.ssm_number, '')) as ssm_display
-    FROM users u 
-    LEFT JOIN universities un ON u.university_id = un.id 
+           COALESCE(NULLIF(u.company_name, ''),
+               (SELECT c.name FROM company_members cm JOIN companies c ON c.id = cm.company_id WHERE cm.user_id = u.id ORDER BY cm.joined_at ASC LIMIT 1),
+               (SELECT c.name FROM companies c WHERE c.created_by = u.id LIMIT 1)
+           ) as company_display_name,
+           COALESCE(NULLIF(u.ssm_number, ''), NULLIF(un.ssm_number, ''),
+               (SELECT c.ssm_number FROM company_members cm JOIN companies c ON c.id = cm.company_id WHERE cm.user_id = u.id ORDER BY cm.joined_at ASC LIMIT 1),
+               (SELECT c.ssm_number FROM companies c WHERE c.created_by = u.id LIMIT 1)
+           ) as ssm_display,
+           COALESCE(
+               (SELECT c.verification_status FROM company_members cm JOIN companies c ON c.id = cm.company_id WHERE cm.user_id = u.id ORDER BY cm.joined_at ASC LIMIT 1),
+               (SELECT c.verification_status FROM companies c WHERE c.created_by = u.id LIMIT 1)
+           ) as company_verification_status
+    FROM users u
+    LEFT JOIN universities un ON u.university_id = un.id
     ORDER BY u.created_at DESC
 ")->fetchAll();
 $university_users_list = $pdo->query("
@@ -1353,6 +1372,22 @@ $jobs_list = $pdo->query("
                                             <span class="chip" style="font-size:9.5px; padding:1px 7px; border-radius:5px; border:1px solid rgba(239, 68, 68, 0.25); background:rgba(239, 68, 68, 0.08); color:#EF4444; font-weight:600; display:inline-flex; align-items:center; gap:3px;" title="Company SSM has not been filled yet">
                                                 <span>⚠️ No SSM</span>
                                             </span>
+                                        <?php endif; ?>
+                                        <?php
+                                            // This is the company's own verification_status (what the "Verified
+                                            // Employer" badge on the public company profile is driven by) -- a
+                                            // completely separate thing from the "Pending OTP"/"Verified" status
+                                            // shown in this row's own column, which is only about this one
+                                            // account's email/OTP confirmation. Shown here so the two don't look
+                                            // contradictory side by side.
+                                            $cvs = $u['company_verification_status'] ?? null;
+                                        ?>
+                                        <?php if ($cvs === 'approved'): ?>
+                                            <span class="chip" style="font-size:9.5px; padding:1px 7px; border-radius:5px; border:1px solid rgba(16, 185, 129, 0.3); background:rgba(16, 185, 129, 0.1); color:var(--grn); font-weight:700;" title="Company has been reviewed and approved by the internal team">✅ Company Verified</span>
+                                        <?php elseif ($cvs === 'pending'): ?>
+                                            <span class="chip" style="font-size:9.5px; padding:1px 7px; border-radius:5px; border:1px solid rgba(245, 158, 11, 0.3); background:rgba(245, 158, 11, 0.1); color:var(--gold); font-weight:700;" title="Company is awaiting internal team review">⏳ Company Pending</span>
+                                        <?php elseif ($cvs === 'rejected'): ?>
+                                            <span class="chip" style="font-size:9.5px; padding:1px 7px; border-radius:5px; border:1px solid rgba(239, 68, 68, 0.3); background:rgba(239, 68, 68, 0.1); color:#EF4444; font-weight:700;" title="Company verification was rejected by the internal team">❌ Company Rejected</span>
                                         <?php endif; ?>
                                     </div>
                                 <?php elseif($u['role'] === 'university' && !empty($u['ssm_display'])): ?>

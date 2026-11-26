@@ -573,7 +573,7 @@ foreach ($jobs as $j) {
                 <div class="tr th">
                     <div>Rank</div><div>👤 Candidate</div><div>🔧 Top Skills</div>
                     <div style="text-align:center">📊 Score</div>
-                    <div>🤖 Claude Verdict</div><div>📋 HR Status</div>
+                    <div>🤖 AI Verdict</div><div>📋 HR Status</div>
                     <div>📅 Applied</div><div style="text-align:center">⚙ Actions</div>
                 </div>
                 

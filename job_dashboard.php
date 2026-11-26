@@ -648,6 +648,11 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
             </div>
             <p style="font-size:13px; color:var(--mut); margin-bottom:24px;">Create a new role for candidates to apply to and enable automated AI resume screening.</p>
 
+            <div id="jdDraftRestoredNotice" style="display:none; align-items:center; gap:8px; background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:10px; padding:10px 14px; margin-bottom:16px; font-size:12.5px; font-weight:600; color:var(--grn);">
+                <span>📝</span> We restored your unsaved draft from last time.
+                <button type="button" onclick="jdDiscardDraftAndReset()" style="margin-left:auto; background:none; border:none; color:var(--mut); font-size:11px; font-weight:700; cursor:pointer; text-decoration:underline;">Discard &amp; start fresh</button>
+            </div>
+
             <form method="POST" id="postJobForm" onsubmit="return jdValidateBeforeSubmit('modal_jd_sections','modal_description_hidden')">
                 <input type="hidden" name="action" value="post_job">
 
@@ -879,6 +884,7 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
         document.getElementById('jobPreviewModal').style.display = 'none';
     }
     function closePostJobModal() {
+        jdFlushDraftNow();
         document.getElementById('postJobModal').style.display = 'none';
     }
 
@@ -1048,7 +1054,132 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
             alert('Please fill in at least one job description section before publishing.');
             return false;
         }
+        // Job is actually being submitted now -- the draft would just be stale
+        // leftovers from this point on, so clear it before the page navigates away.
+        jdClearDraft();
         return true;
+    }
+
+    // Draft autosave for the "Post a New Job" form -- an accidental click
+    // outside the modal, a browser back/forward swipe, or a tab close used to
+    // wipe out everything the employer had typed, since the modal's fields
+    // live only in that one page load and nothing persisted them anywhere.
+    // Saved to localStorage (per logged-in user, this browser only) and
+    // restored the next time this page loads, until the job is actually
+    // published or the employer explicitly discards it.
+    var JD_DRAFT_KEY = 'keria_job_draft_<?= (int)($_SESSION['user_id'] ?? 0) ?>';
+
+    function jdCollectDraft() {
+        var form = document.getElementById('postJobForm');
+        var sections = [];
+        document.querySelectorAll('#modal_jd_sections .jd-section-card').forEach(function(card) {
+            sections.push({
+                title: card.querySelector('.jd-section-title').value,
+                content: card.querySelector('.jd-section-content').value
+            });
+        });
+        return {
+            job_title: form.job_title.value,
+            department: form.department.value,
+            employment_type: form.employment_type.value,
+            work_mode: form.work_mode.value,
+            location: form.location.value,
+            salary_rate_type: form.salary_rate_type.value,
+            salary_min: form.salary_min.value,
+            salary_max: form.salary_max.value,
+            require_video: form.require_video.checked,
+            sections: sections
+        };
+    }
+
+    function jdDraftIsEmpty(d) {
+        if (!d) return true;
+        if ((d.job_title || '').trim() || (d.department || '').trim() || (d.salary_min || '').trim() || (d.salary_max || '').trim()) return false;
+        // Only a section's CONTENT counts as real input here -- every fresh
+        // or just-discarded form always seeds one section pre-titled "Job
+        // Requirements" with no body text, and that leftover default title
+        // was wrongly counting as "the user wrote something", so an
+        // untouched or just-discarded form kept getting silently re-saved
+        // as a draft and popping back up anyway.
+        for (var i = 0; i < (d.sections || []).length; i++) {
+            if ((d.sections[i].content || '').trim()) return false;
+        }
+        return true;
+    }
+
+    var jdDraftSaveTimer = null;
+    function jdWriteDraftNow() {
+        try {
+            var draft = jdCollectDraft();
+            if (jdDraftIsEmpty(draft)) {
+                localStorage.removeItem(JD_DRAFT_KEY);
+            } else {
+                localStorage.setItem(JD_DRAFT_KEY, JSON.stringify(draft));
+            }
+        } catch (e) {}
+    }
+    function jdSaveDraft() {
+        clearTimeout(jdDraftSaveTimer);
+        jdDraftSaveTimer = setTimeout(jdWriteDraftNow, 400);
+    }
+    // Bypasses the debounce so the very latest keystroke is never lost to a
+    // click outside the modal, a back/forward swipe, or a closed tab landing
+    // inside that 400ms window before the debounced save would have fired.
+    function jdFlushDraftNow() {
+        clearTimeout(jdDraftSaveTimer);
+        jdWriteDraftNow();
+    }
+
+    function jdClearDraft() {
+        try { localStorage.removeItem(JD_DRAFT_KEY); } catch (e) {}
+    }
+
+    // Rebuilds the form from a saved draft (if any) instead of always seeding
+    // one blank "Job Requirements" section on every page load.
+    function jdRestoreDraftIfAny() {
+        var raw = null;
+        try { raw = localStorage.getItem(JD_DRAFT_KEY); } catch (e) {}
+
+        var draft = null;
+        if (raw) {
+            try { draft = JSON.parse(raw); } catch (e) { draft = null; }
+        }
+
+        if (!draft || jdDraftIsEmpty(draft)) {
+            jdAddSection('modal_jd_sections', 'modal_description_hidden', 'Job Requirements');
+            return;
+        }
+
+        var form = document.getElementById('postJobForm');
+        form.job_title.value = draft.job_title || '';
+        form.department.value = draft.department || '';
+        if (draft.employment_type) form.employment_type.value = draft.employment_type;
+        if (draft.work_mode) form.work_mode.value = draft.work_mode;
+        if (draft.location) form.location.value = draft.location;
+        if (draft.salary_rate_type) form.salary_rate_type.value = draft.salary_rate_type;
+        form.salary_min.value = draft.salary_min || '';
+        form.salary_max.value = draft.salary_max || '';
+        form.require_video.checked = !!draft.require_video;
+        updateSalaryRateLabels('modal_salary_rate_type', 'modal_min_salary_label', 'modal_max_salary_label');
+
+        var sections = (draft.sections && draft.sections.length) ? draft.sections : [{ title: 'Job Requirements', content: '' }];
+        sections.forEach(function(s) {
+            jdAddSection('modal_jd_sections', 'modal_description_hidden', s.title, s.content);
+        });
+
+        var notice = document.getElementById('jdDraftRestoredNotice');
+        if (notice) notice.style.display = 'flex';
+        openPostJobModal();
+    }
+
+    function jdDiscardDraftAndReset() {
+        jdClearDraft();
+        document.getElementById('postJobForm').reset();
+        document.getElementById('modal_jd_sections').innerHTML = '';
+        jdAddSection('modal_jd_sections', 'modal_description_hidden', 'Job Requirements');
+        updateSalaryRateLabels('modal_salary_rate_type', 'modal_min_salary_label', 'modal_max_salary_label');
+        var notice = document.getElementById('jdDraftRestoredNotice');
+        if (notice) notice.style.display = 'none';
     }
 
     // Close on ESC key or clicking outside content box
@@ -1065,13 +1196,28 @@ $avg_per_job = $total_jobs > 0 ? round($total_applicants / $total_jobs, 1) : 0;
         if (e.target === this) closeJobPreview();
     });
 
+    // Autosave every edit (debounced) so the draft survives an accidental
+    // click outside the modal, a back/forward navigation, or a closed tab.
+    // Bubbles up from the dynamically-added section title/content fields too,
+    // since they're children of this form.
+    document.getElementById('postJobForm').addEventListener('input', jdSaveDraft);
+    document.getElementById('postJobForm').addEventListener('change', jdSaveDraft);
+
+    // Covers a back/forward swipe or closed tab, which can fire before the
+    // debounced autosave above would have run -- 'pagehide' is the one that
+    // reliably fires on mobile swipe gestures and bfcache navigations;
+    // 'beforeunload' is the desktop-browser fallback.
+    window.addEventListener('pagehide', jdFlushDraftNow);
+    window.addEventListener('beforeunload', jdFlushDraftNow);
+
     // Auto-open modal if URL contains ?open_post=1
     if (window.location.search.indexOf('open_post=1') > -1) {
         openPostJobModal();
     }
 
-    // Seed the description builder with one starting section so it's never empty.
-    jdAddSection('modal_jd_sections', 'modal_description_hidden', 'Job Requirements');
+    // Seed the description builder -- restores a saved draft if one exists,
+    // otherwise starts with one blank "Job Requirements" section as before.
+    jdRestoreDraftIfAny();
 
     let currentStatusFilter = 'all';
 

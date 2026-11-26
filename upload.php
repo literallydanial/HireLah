@@ -20,122 +20,6 @@ $jobs = $stmt->fetchAll();
 $job_ids_allowed = array_column($jobs, 'id');
 
 $preselect_job_id = $_GET['job_id'] ?? '';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $job_id = $_POST['job_id'] ?? null;
-    $api_key = get_api_key();
-
-    if (!$job_id || !in_array($job_id, $job_ids_allowed)) {
-        $_SESSION['error'] = "Please select one of your own job postings.";
-        header("Location: upload.php");
-        exit;
-    }
-
-    // Fetch job description for AI evaluation
-    $stmt = $pdo->prepare("SELECT description FROM jobs WHERE id = ?");
-    $stmt->execute([$job_id]);
-    $job_desc = $stmt->fetchColumn();
-
-    $files = $_FILES['resumes'] ?? null;
-
-    if (!$files || empty($files['name'][0])) {
-        $_SESSION['error'] = "No files uploaded.";
-        header("Location: upload.php?job_id=$job_id");
-        exit;
-    }
-
-    $upload_dir = 'uploads/';
-    if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-
-    // Duplicate guard: skip any resume whose exact file content was already
-    // uploaded for this job (whether in an earlier request or elsewhere in
-    // this same batch), e.g. from an accidental double-submit of the form.
-    $dupe_stmt = $pdo->prepare("SELECT resume_hash FROM candidates WHERE job_id = ? AND resume_hash IS NOT NULL");
-    $dupe_stmt->execute([$job_id]);
-    $seen_hashes = array_flip($dupe_stmt->fetchAll(PDO::FETCH_COLUMN));
-
-    $success_count = 0;
-    $duplicate_count = 0;
-
-    for ($i = 0; $i < count($files['name']); $i++) {
-        if ($files['error'][$i] === UPLOAD_ERR_OK) {
-            $tmp_name = $files['tmp_name'][$i];
-            $name = basename($files['name'][$i]);
-
-            $hash = hash_file('sha256', $tmp_name);
-            if ($hash !== false && isset($seen_hashes[$hash])) {
-                $duplicate_count++;
-                continue;
-            }
-
-            $path = $upload_dir . uniqid() . '_' . $name;
-
-            if (move_uploaded_file($tmp_name, $path)) {
-                try {
-                    $text = extract_text_from_pdf($path);
-                    $stripped = strip_pii($text);
-
-                    $candidate_id = 'cnd_' . substr(md5(uniqid()), 0, 8);
-
-                    $ai_data = null;
-                    if ($api_key) {
-                        try {
-                            $ai_data = generate_snapshot($api_key, $stripped, $job_desc, 'bulk_upload');
-                        } catch (Exception $e) {
-                            $_SESSION['error'] = "AI Screening Notice: " . $e->getMessage();
-                            error_log("AI Error: " . $e->getMessage());
-                        }
-                    }
-
-                    $stmt = $pdo->prepare("INSERT INTO candidates (
-                        id, job_id, name, email, filename, full_text, stripped_text,
-                        recommendation, overall_score, skills_match, exp_match, edu_match,
-                        summary, education, experience, skills, strengths, gaps,
-                        relevance_label, note, suggested_question, screened, resume_path, resume_hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-
-                    $stmt->execute([
-                        $candidate_id,
-                        $job_id,
-                        $ai_data['name'] ?? 'Unknown',
-                        null,
-                        $name,
-                        $text,
-                        $stripped,
-                        $ai_data['relevance_label'] ?? 'Pending',
-                        $ai_data['overall_score'] ?? 0,
-                        $ai_data['skills_match'] ?? 0,
-                        $ai_data['exp_match'] ?? 0,
-                        $ai_data['edu_match'] ?? 0,
-                        $ai_data['summary'] ?? null,
-                        $ai_data['education'] ?? null,
-                        $ai_data['experience'] ?? null,
-                        json_encode($ai_data['skills'] ?? []),
-                        json_encode($ai_data['strengths'] ?? []),
-                        json_encode($ai_data['gaps'] ?? []),
-                        $ai_data['relevance_label'] ?? null,
-                        $ai_data['note'] ?? null,
-                        $ai_data['suggested_question'] ?? null,
-                        $ai_data ? 1 : 0,
-                        $path,
-                        $hash ?: null
-                    ]);
-
-                    if ($hash !== false) $seen_hashes[$hash] = true;
-                    $success_count++;
-                } catch (Exception $e) {
-                    error_log("Upload Error ($name): " . $e->getMessage());
-                }
-            }
-        }
-    }
-
-    $_SESSION['toast'] = "Successfully processed $success_count resume(s)."
-        . ($duplicate_count > 0 ? " Skipped $duplicate_count duplicate resume(s) already on this job." : "")
-        . " They now appear in this job's applicant list and comparison matrix.";
-    header("Location: employer_dashboard.php?job_id=$job_id");
-    exit;
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -224,11 +108,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div style="font-size:15px; font-weight:700; color:var(--txt); margin-bottom:8px;">Drag & drop resumes here</div>
                             <div style="font-size:12px; color:var(--mut); margin-bottom:20px;">PDF supported • Multiple files at once</div>
                             <div class="btn-secondary">📂 Browse Files</div>
-                            <input type="file" name="resumes[]" id="fileInput" multiple accept=".pdf" style="display:none" onchange="submitUploadForm()">
+                            <input type="file" name="resumes[]" id="fileInput" multiple accept=".pdf" style="display:none" onchange="renderSelectedFiles()">
                         </div>
 
-                        <button type="submit" class="btn-primary" style="margin-top:16px;">Upload & Screen Resumes</button>
+                        <div id="selectedFilesList" style="margin-top:12px; display:none;"></div>
+
+                        <button type="button" id="uploadSubmitBtn" class="btn-primary" style="margin-top:16px;" onclick="startBulkUpload()" disabled>Upload & Screen Resumes</button>
                     </form>
+
+                    <div id="uploadProgressPanel" style="display:none; margin-top:18px;">
+                        <div style="font-size:12.5px; font-weight:700; color:var(--mut); margin-bottom:8px;">Screening progress</div>
+                        <div id="uploadProgressList"></div>
+                        <div id="uploadProgressSummary" style="margin-top:14px; display:none;"></div>
+                    </div>
                 <?php endif; ?>
             </div>
 
@@ -253,28 +145,210 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </main>
 <script>
-(function() {
+// Resumes are screened one at a time via separate small requests (one fetch
+// per file) instead of one big form submit carrying the whole batch. A
+// single request trying to screen 10-18 resumes sequentially could run long
+// enough for a gateway/proxy in front of PHP to give up and show a 504, even
+// though the backend kept working and finished successfully regardless --
+// this way no single request is ever that slow, and HR sees live progress
+// instead of a blank page with no idea whether anything is happening.
+async function startBulkUpload() {
     var form = document.getElementById('uploadForm');
-    if (!form) return;
-    var submitting = false;
-    form.addEventListener('submit', function(e) {
-        if (submitting) { e.preventDefault(); return; }
-        submitting = true;
-        var btn = form.querySelector('button[type="submit"]');
-        if (btn) { btn.disabled = true; btn.textContent = 'Uploading...'; }
-        var dz = document.getElementById('dropzone');
-        if (dz) dz.style.pointerEvents = 'none';
+    var jobSelect = form.querySelector('select[name="job_id"]');
+    var fileInput = document.getElementById('fileInput');
+    var files = Array.prototype.slice.call(fileInput.files || []);
+
+    if (!jobSelect.value) {
+        alert('Please select a job posting first.');
+        return;
+    }
+    if (!files.length) {
+        alert('Please select or drop at least one resume.');
+        return;
+    }
+
+    var submitBtn = document.getElementById('uploadSubmitBtn');
+    var dz = document.getElementById('dropzone');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Screening in progress...';
+    jobSelect.disabled = true;
+    if (dz) dz.style.pointerEvents = 'none';
+
+    var progressPanel = document.getElementById('uploadProgressPanel');
+    var progressList = document.getElementById('uploadProgressList');
+    var summaryEl = document.getElementById('uploadProgressSummary');
+    progressPanel.style.display = 'block';
+    summaryEl.style.display = 'none';
+    progressList.innerHTML = '';
+
+    var rowEls = files.map(function(f) {
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid var(--bdr); border-radius:8px; margin-bottom:6px; background:var(--card-solid, #fff); font-size:12.5px;';
+        row.innerHTML = '<span class="upload-row-icon">⬜</span>' +
+            '<span style="flex:1; font-weight:600; color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + f.name.replace(/</g, '&lt;') + '</span>' +
+            '<span class="upload-row-status" style="color:var(--mut);">Waiting...</span>';
+        progressList.appendChild(row);
+        return row;
+    });
+
+    var successCount = 0, duplicateCount = 0, errorCount = 0;
+
+    for (var i = 0; i < files.length; i++) {
+        var row = rowEls[i];
+        var icon = row.querySelector('.upload-row-icon');
+        var status = row.querySelector('.upload-row-status');
+        icon.textContent = '⏳';
+        status.textContent = 'Processing...';
+        status.style.color = 'var(--acc)';
+
+        try {
+            var fd = new FormData();
+            fd.append('job_id', jobSelect.value);
+            fd.append('resume', files[i]);
+
+            var res = await fetch('upload_process_one.php', { method: 'POST', body: fd });
+            var data = await res.json();
+
+            if (data.success && data.duplicate) {
+                icon.textContent = '⚠️';
+                status.textContent = 'Skipped (duplicate)';
+                status.style.color = 'var(--org)';
+                duplicateCount++;
+            } else if (data.success) {
+                icon.textContent = '✅';
+                status.textContent = (data.score !== null && data.score !== undefined) ? ('Screened (Score: ' + data.score + ')') : 'Processed';
+                status.style.color = 'var(--grn)';
+                successCount++;
+            } else {
+                icon.textContent = '❌';
+                status.textContent = data.error || 'Failed';
+                status.style.color = 'var(--red)';
+                errorCount++;
+            }
+        } catch (err) {
+            icon.textContent = '❌';
+            status.textContent = 'Network error';
+            status.style.color = 'var(--red)';
+            errorCount++;
+        }
+    }
+
+    submitBtn.textContent = 'All Done';
+    var jobId = jobSelect.value;
+    summaryEl.style.display = 'block';
+    summaryEl.innerHTML = '<div style="font-size:12.5px; color:var(--txt); margin-bottom:10px;">' +
+        '✅ ' + successCount + ' screened' +
+        (duplicateCount ? ', ⚠️ ' + duplicateCount + ' duplicate(s) skipped' : '') +
+        (errorCount ? ', ❌ ' + errorCount + ' failed' : '') +
+        '</div>' +
+        '<a href="employer_dashboard.php?job_id=' + encodeURIComponent(jobId) + '" class="btn-primary" style="text-decoration:none; display:inline-block;">View Applicants</a>';
+}
+
+function formatFileSize(bytes) {
+    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
+
+// Removes one file from the pending selection (by index) without submitting
+// -- lets HR back out of an accidental drop/pick before any AI screening (and
+// the API cost that comes with it) is spent on a file they didn't mean to add.
+function removeSelectedFile(index) {
+    var fileInput = document.getElementById('fileInput');
+    var remaining = Array.prototype.slice.call(fileInput.files).filter(function(_, i) { return i !== index; });
+    var dt = new DataTransfer();
+    remaining.forEach(function(f) { dt.items.add(f); });
+    fileInput.files = dt.files;
+    renderSelectedFiles();
+}
+
+// Selecting or dropping files only ever stages them here -- nothing is
+// uploaded or sent for AI screening until HR reviews the list and explicitly
+// clicks "Upload & Screen Resumes". Previously the file input auto-submitted
+// the instant files were picked, so an accidental selection (wrong files,
+// or dropping onto the box by mistake) went straight to paid AI screening
+// with no chance to back out.
+function renderSelectedFiles() {
+    var fileInput = document.getElementById('fileInput');
+    var listEl = document.getElementById('selectedFilesList');
+    var submitBtn = document.getElementById('uploadSubmitBtn');
+    var files = Array.prototype.slice.call(fileInput.files || []);
+
+    if (!files.length) {
+        listEl.style.display = 'none';
+        listEl.innerHTML = '';
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Upload & Screen Resumes';
+        return;
+    }
+
+    var rows = files.map(function(f, i) {
+        return '<div style="display:flex; align-items:center; gap:10px; padding:8px 12px; border:1px solid var(--bdr); border-radius:8px; margin-bottom:6px; background:var(--card-solid, #fff);">' +
+            '<span style="font-size:16px;">📄</span>' +
+            '<span style="flex:1; font-size:12.5px; font-weight:600; color:var(--txt); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + f.name.replace(/</g, '&lt;') + '</span>' +
+            '<span style="font-size:11px; color:var(--mut);">' + formatFileSize(f.size) + '</span>' +
+            '<button type="button" onclick="removeSelectedFile(' + i + ')" title="Remove this file" style="background:none; border:none; color:var(--red); font-size:15px; cursor:pointer; line-height:1; padding:2px 4px;">✕</button>' +
+            '</div>';
+    });
+
+    listEl.innerHTML = '<div style="font-size:11.5px; font-weight:700; color:var(--mut); margin-bottom:6px;">' + files.length + ' file' + (files.length > 1 ? 's' : '') + ' ready for review:</div>' + rows.join('');
+    listEl.style.display = 'block';
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Upload & Screen ' + files.length + ' Resume' + (files.length > 1 ? 's' : '');
+}
+
+// Actual drag & drop wiring -- the box was only ever styled and labelled like
+// a dropzone; clicking it to browse worked, but nothing handled a real
+// dragover/drop, so dropping a file just did the browser's default thing
+// (usually opening the PDF in a new tab) instead of uploading it.
+(function() {
+    var dropzone = document.getElementById('dropzone');
+    var fileInput = document.getElementById('fileInput');
+    if (!dropzone || !fileInput) return;
+
+    ['dragenter', 'dragover'].forEach(function(evt) {
+        dropzone.addEventListener(evt, function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add('drag-active');
+        });
+    });
+
+    ['dragleave', 'dragend'].forEach(function(evt) {
+        dropzone.addEventListener(evt, function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            // A dragleave also fires when the pointer passes over a child
+            // element (the icon/text/button inside the box) -- only clear
+            // the highlight once the pointer has actually left the dropzone.
+            if (e.target === dropzone && !dropzone.contains(e.relatedTarget)) {
+                dropzone.classList.remove('drag-active');
+            }
+        });
+    });
+
+    dropzone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzone.classList.remove('drag-active');
+
+        var dropped = Array.prototype.slice.call(e.dataTransfer.files || []);
+        if (!dropped.length) return;
+
+        var pdfs = dropped.filter(function(f) { return /\.pdf$/i.test(f.name); });
+        if (pdfs.length < dropped.length) {
+            alert('Only PDF resumes are supported -- ' + (dropped.length - pdfs.length) + ' non-PDF file(s) were ignored.');
+        }
+        if (!pdfs.length) return;
+
+        // Drag-and-drop file lists are read-only; a DataTransfer is the
+        // documented way to build a FileList the input will actually accept.
+        var dt = new DataTransfer();
+        pdfs.forEach(function(f) { dt.items.add(f); });
+        fileInput.files = dt.files;
+
+        renderSelectedFiles();
     });
 })();
-function submitUploadForm() {
-    var form = document.getElementById('uploadForm');
-    if (!form) return;
-    if (typeof form.requestSubmit === 'function') {
-        form.requestSubmit();
-    } else {
-        form.submit();
-    }
-}
 </script>
 <script src="theme.js"></script></body>
 </html>

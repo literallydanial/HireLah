@@ -155,6 +155,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php endif; ?>
 
+        <div id="jdEditDraftRestoredNotice" style="display:none; align-items:center; gap:8px; background:rgba(16, 185, 129, 0.1); border:1px solid rgba(16, 185, 129, 0.3); border-radius:10px; padding:10px 14px; margin-bottom:16px; font-size:12.5px; font-weight:600; color:var(--grn);">
+            <span>📝</span> We restored your unsaved edits from last time.
+            <button type="button" onclick="jdDiscardEditDraftAndReset()" style="margin-left:auto; background:none; border:none; color:var(--mut); font-size:11px; font-weight:700; cursor:pointer; text-decoration:underline;">Discard &amp; revert</button>
+        </div>
+
         <form method="POST" id="editJobForm" onsubmit="return jdValidateBeforeSubmit('edit_jd_sections','edit_description_hidden')">
             <div style="margin-bottom:14px;">
                 <label style="display:block; font-size:12px; color:var(--mut); margin-bottom:6px; font-weight:600;">Job Title</label>
@@ -436,14 +441,144 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             alert('Please fill in at least one job description section before saving.');
             return false;
         }
+        // Job is actually being saved now -- the draft would just be stale
+        // leftovers from this point on, so clear it before the page navigates away.
+        jdClearEditDraft();
         return true;
     }
 
-    // Keep the hidden field in sync with the server-rendered cards right away
-    // (covers the case where the employer submits without touching anything).
+    // Draft autosave for this edit form -- same pattern as the "Post a New
+    // Job" modal in job_dashboard.php: an accidental click on Back/Cancel, a
+    // browser back/forward swipe, or a closed tab used to wipe out whatever
+    // the employer had just changed, since nothing persisted it anywhere.
+    // Saved to localStorage (per logged-in user AND this specific job, this
+    // browser only) and restored the next time this page loads, until the
+    // edit is actually saved or the employer explicitly discards it.
+    var JD_EDIT_DRAFT_KEY = 'keria_job_edit_draft_<?= (int)($_SESSION['user_id'] ?? 0) ?>_<?= (int)$job_id ?>';
+
+    function jdCollectEditDraft() {
+        var form = document.getElementById('editJobForm');
+        var sections = [];
+        document.querySelectorAll('#edit_jd_sections .jd-section-card').forEach(function(card) {
+            sections.push({
+                title: card.querySelector('.jd-section-title').value,
+                content: card.querySelector('.jd-section-content').value
+            });
+        });
+        return {
+            job_title: form.job_title.value,
+            department: form.department.value,
+            location: form.location.value,
+            employment_type: form.employment_type.value,
+            work_mode: form.work_mode.value,
+            status: form.status.value,
+            salary_rate_type: form.salary_rate_type.value,
+            salary_min: form.salary_min.value,
+            salary_max: form.salary_max.value,
+            require_video: form.require_video.checked,
+            sections: sections
+        };
+    }
+
+    // Snapshot of what the server actually loaded for this job, taken once on
+    // page load -- lets us tell "a real edit" apart from "draft identical to
+    // the current data", so opening the page without changing anything never
+    // pops a restore notice on the next visit.
+    var jdEditOriginalSnapshot = null;
+    function jdEditDraftEqualsOriginal(d) {
+        return !!jdEditOriginalSnapshot && JSON.stringify(d) === JSON.stringify(jdEditOriginalSnapshot);
+    }
+
+    var jdEditDraftSaveTimer = null;
+    function jdWriteEditDraftNow() {
+        try {
+            var draft = jdCollectEditDraft();
+            if (jdEditDraftEqualsOriginal(draft)) {
+                localStorage.removeItem(JD_EDIT_DRAFT_KEY);
+            } else {
+                localStorage.setItem(JD_EDIT_DRAFT_KEY, JSON.stringify(draft));
+            }
+        } catch (e) {}
+    }
+    function jdSaveEditDraft() {
+        clearTimeout(jdEditDraftSaveTimer);
+        jdEditDraftSaveTimer = setTimeout(jdWriteEditDraftNow, 400);
+    }
+    // Bypasses the debounce so the very latest keystroke is never lost to a
+    // click outside, a back/forward swipe, or a closed tab landing inside
+    // that 400ms window before the debounced save would have fired.
+    function jdFlushEditDraftNow() {
+        clearTimeout(jdEditDraftSaveTimer);
+        jdWriteEditDraftNow();
+    }
+    function jdClearEditDraft() {
+        try { localStorage.removeItem(JD_EDIT_DRAFT_KEY); } catch (e) {}
+    }
+
+    function jdApplyEditDraft(draft) {
+        var form = document.getElementById('editJobForm');
+        form.job_title.value = draft.job_title || '';
+        form.department.value = draft.department || '';
+        if (draft.location) form.location.value = draft.location;
+        if (draft.employment_type) form.employment_type.value = draft.employment_type;
+        if (draft.work_mode) form.work_mode.value = draft.work_mode;
+        if (draft.status) form.status.value = draft.status;
+        if (draft.salary_rate_type) form.salary_rate_type.value = draft.salary_rate_type;
+        form.salary_min.value = draft.salary_min || '';
+        form.salary_max.value = draft.salary_max || '';
+        form.require_video.checked = !!draft.require_video;
+        updateSalaryRateLabels('edit_salary_rate_type', 'edit_min_salary_label', 'edit_max_salary_label');
+
+        document.getElementById('edit_jd_sections').innerHTML = '';
+        (draft.sections || []).forEach(function(s) {
+            jdAddSection('edit_jd_sections', 'edit_description_hidden', s.title, s.content);
+        });
+        jdSyncDescription('edit_jd_sections', 'edit_description_hidden');
+    }
+
+    function jdRestoreEditDraftIfAny() {
+        jdEditOriginalSnapshot = jdCollectEditDraft();
+
+        var raw = null;
+        try { raw = localStorage.getItem(JD_EDIT_DRAFT_KEY); } catch (e) {}
+        if (!raw) return;
+
+        var draft = null;
+        try { draft = JSON.parse(raw); } catch (e) { draft = null; }
+        if (!draft || jdEditDraftEqualsOriginal(draft)) {
+            jdClearEditDraft();
+            return;
+        }
+
+        jdApplyEditDraft(draft);
+        var notice = document.getElementById('jdEditDraftRestoredNotice');
+        if (notice) notice.style.display = 'flex';
+    }
+
+    function jdDiscardEditDraftAndReset() {
+        jdClearEditDraft();
+        jdApplyEditDraft(jdEditOriginalSnapshot);
+        var notice = document.getElementById('jdEditDraftRestoredNotice');
+        if (notice) notice.style.display = 'none';
+    }
+
+    // Keep the hidden field in sync with the server-rendered cards right away,
+    // then restore any unsaved draft for this job over top of it.
     document.addEventListener('DOMContentLoaded', function () {
         jdSyncDescription('edit_jd_sections', 'edit_description_hidden');
+        jdRestoreEditDraftIfAny();
     });
+
+    var editJobForm = document.getElementById('editJobForm');
+    editJobForm.addEventListener('input', jdSaveEditDraft);
+    editJobForm.addEventListener('change', jdSaveEditDraft);
+
+    // Covers a back/forward swipe or closed tab, which can fire before the
+    // debounced autosave above would have run -- 'pagehide' is the one that
+    // reliably fires on mobile swipe gestures and bfcache navigations;
+    // 'beforeunload' is the desktop-browser fallback.
+    window.addEventListener('pagehide', jdFlushEditDraftNow);
+    window.addEventListener('beforeunload', jdFlushEditDraftNow);
     </script>
     <script src="theme.js"></script>
 </body>

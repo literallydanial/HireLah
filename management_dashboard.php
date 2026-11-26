@@ -122,9 +122,23 @@ $employer_screened_count = (int)$employer_token_stats['cnt'];
 $real_input_tokens += $employer_input_tokens;
 $real_output_tokens += $employer_output_tokens;
 
-// Add builder tokens (approx 1,800 tokens per build)
-$builder_tokens = $build_count * 1800;
-$total_real_tokens = $real_input_tokens + $real_output_tokens + $builder_tokens;
+// AI Resume Builder usage: resume_builder.php's generate_resume_document() turns a
+// candidate's raw notes (`raw_input`) into polished resume content (`generated_content`),
+// both stored in `resume_builds`. 400 tokens covers the fixed instruction text in
+// build_resume_prompt() (shorter than the self-checker/employer prompts -- no job
+// description or full resume text involved).
+$builder_tokens_stmt = $pdo->query("SELECT
+    COALESCE(SUM(ROUND(LENGTH(raw_input) / 4) + 400), 0) as input_tokens,
+    COALESCE(SUM(ROUND(LENGTH(generated_content) / 4)), 0) as output_tokens
+FROM resume_builds");
+$builder_token_stats = $builder_tokens_stmt->fetch();
+$builder_input_tokens = (int)$builder_token_stats['input_tokens'];
+$builder_output_tokens = (int)$builder_token_stats['output_tokens'];
+
+$real_input_tokens += $builder_input_tokens;
+$real_output_tokens += $builder_output_tokens;
+$builder_tokens = $builder_input_tokens + $builder_output_tokens;
+$total_real_tokens = $real_input_tokens + $real_output_tokens;
 
 if ($total_real_tokens >= 1000000) {
     $ai_tokens_formatted = number_format($total_real_tokens / 1000000, 2) . 'M';
@@ -135,7 +149,7 @@ if ($total_real_tokens >= 1000000) {
 }
 
 // Real cost in RM based on Gemini Flash pricing (RM 0.35/1M input, RM 1.05/1M output)
-$real_cost_rm = round(($real_input_tokens * 0.00000035) + ($real_output_tokens * 0.00000105) + ($builder_tokens * 0.0000005), 3);
+$real_cost_rm = round(($real_input_tokens * 0.00000035) + ($real_output_tokens * 0.00000105), 3);
 $real_cost_formatted = 'RM ' . number_format($real_cost_rm, 2);
 
 // Real Per-Resume AI Token Breakdown and Average Calculation
@@ -166,6 +180,20 @@ ORDER BY c.created_at DESC")->fetchAll();
 $total_employer_tokens_sum = 0;
 foreach ($employer_upload_tokens as $et) {
     $total_employer_tokens_sum += (int)$et['total_tokens'];
+}
+
+// AI Resume Builder breakdown (same estimate method, applied to resume_builds)
+$resume_builds_tokens = $pdo->query("SELECT
+    id, target_title,
+    ROUND(LENGTH(raw_input) / 4 + 400) as in_tokens,
+    ROUND(LENGTH(generated_content) / 4) as out_tokens,
+    ROUND(LENGTH(raw_input) / 4 + 400 + LENGTH(generated_content) / 4) as total_tokens,
+    created_at
+FROM resume_builds ORDER BY created_at DESC")->fetchAll();
+
+$total_builder_tokens_sum = 0;
+foreach ($resume_builds_tokens as $bt) {
+    $total_builder_tokens_sum += (int)$bt['total_tokens'];
 }
 
 $total_ai_evaluations_count = $review_count + $employer_screened_count;
@@ -1198,8 +1226,8 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* AI Usage tab: switcher between the Self-Checker and Employer
-           Bulk-Upload breakdown tables. Deliberately NOT reusing the
+        /* AI Usage tab: switcher between the Self-Checker, Employer
+           Bulk-Upload, and AI Resume Builder breakdown tables. Deliberately NOT reusing the
            .mgmt-tab-view/.nav-item classes used by the page's top-level
            sidebar tabs -- switchMgmtTab() above does a blanket
            document.querySelectorAll('.mgmt-tab-view') to clear 'active'
@@ -2052,6 +2080,7 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
             <div class="ai-usage-subtab-bar" role="tablist">
                 <button type="button" class="ai-usage-subtab-btn active" onclick="switchAiUsageSubtab('self', this)">👤 Self-Checker Reviews (<?= count($resume_reviews_tokens) ?>)</button>
                 <button type="button" class="ai-usage-subtab-btn" onclick="switchAiUsageSubtab('employer', this)">🏢 Employer Bulk-Uploads (<?= count($employer_upload_tokens) ?>)</button>
+                <button type="button" class="ai-usage-subtab-btn" onclick="switchAiUsageSubtab('builder', this)">🧠 AI Resume Builds (<?= count($resume_builds_tokens) ?>)</button>
             </div>
 
             <div id="ai-usage-subview-self" class="ai-usage-subview active">
@@ -2135,6 +2164,49 @@ $all_reviews = $pdo->query("SELECT id, filename, overall_score, rating_label, cr
                                         </td>
                                         <td>RM <?= number_format($et_cost, 4) ?></td>
                                         <td><?= date('M j, Y - h:i A', strtotime($et['created_at'])) ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="ai-usage-subview-builder" class="ai-usage-subview">
+                <div class="data-table-container">
+                    <div style="padding:16px 20px; font-weight:800; font-size:15px; border-bottom:1px solid var(--border-color);">
+                        AI Resume Builder Token Breakdown
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Build ID</th>
+                                <th>Target Title</th>
+                                <th>Input Tokens (Prompt & Notes)</th>
+                                <th>Output Tokens (Generated Resume)</th>
+                                <th>Total AI Tokens</th>
+                                <th>Est. Compute Cost</th>
+                                <th>Built Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if(empty($resume_builds_tokens)): ?>
+                                <tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">No AI resume builds logged</td></tr>
+                            <?php else: ?>
+                                <?php foreach($resume_builds_tokens as $bt): ?>
+                                    <?php $bt_cost = round(($bt['in_tokens'] * 0.00000035) + ($bt['out_tokens'] * 0.00000105), 4); ?>
+                                    <tr>
+                                        <td>#<?= (int)$bt['id'] ?></td>
+                                        <td style="font-weight:700;">🧠 <?= htmlspecialchars($bt['target_title'] ?: 'Untitled') ?></td>
+                                        <td><?= number_format($bt['in_tokens']) ?> tokens</td>
+                                        <td><?= number_format($bt['out_tokens']) ?> tokens</td>
+                                        <td>
+                                            <span style="font-weight:800; color:#16A34A; background:rgba(34, 100, 53, 0.08); padding:3px 8px; border-radius:6px;">
+                                                <?= number_format($bt['total_tokens']) ?> tokens
+                                            </span>
+                                        </td>
+                                        <td>RM <?= number_format($bt_cost, 4) ?></td>
+                                        <td><?= date('M j, Y - h:i A', strtotime($bt['created_at'])) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
